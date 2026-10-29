@@ -25,6 +25,15 @@ final class ParserTests: XCTestCase {
         XCTAssertTrue(untracked.isUntracked)
     }
 
+    func testPorcelainRenameWithSpacesAndUnicode() {
+        let sample = "2 R. N... 100644 100644 100644 aaa bbb R100 notas/cañón archivo.txt\0viejo nombre.txt\0"
+        let entry = PorcelainParser.parse(sample).entries[0]
+        XCTAssertEqual(entry.path, "notas/cañón archivo.txt")
+        XCTAssertEqual(entry.originalPath, "viejo nombre.txt")
+        XCTAssertEqual(entry.indexStatus, .renamed)
+        XCTAssertFalse(entry.path.contains("\0"))
+    }
+
     func testPorcelainRenameAndConflict() {
         let rename = "2 RM N... 100644 100644 100644 aaa bbb R100 renamed.txt\0file.txt\0"
         let renamed = PorcelainParser.parse(rename).entries[0]
@@ -95,6 +104,23 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(files.count, 1)
         XCTAssertEqual(files[0].hunks.count, 2)
         XCTAssertEqual(files[0].hunks[0].lines.first(where: { $0.kind == .addition })?.text, "CHANGED\r")
+    }
+
+    func testDiffParserBinaryPathWithSpacesDoesNotSwallowTheOtherSide() throws {
+        let raw = """
+        diff --git a/notas/cañón archivo.txt b/notas/cañón archivo.txt
+        Binary files a/notas/cañón archivo.txt and b/notas/cañón archivo.txt differ
+        """
+        let file = try XCTUnwrap(DiffParser.parse(raw).first)
+        XCTAssertEqual(file.path, "notas/cañón archivo.txt")
+        XCTAssertNil(file.oldPath)
+        XCTAssertTrue(file.isBinary)
+        XCTAssertFalse(file.path.contains(" b/"))
+
+        let rename = "diff --git a/viejo nombre.txt b/nuevo nombre.txt\n"
+        let renamed = try XCTUnwrap(DiffParser.parse(rename).first)
+        XCTAssertEqual(renamed.oldPath, "viejo nombre.txt")
+        XCTAssertEqual(renamed.path, "nuevo nombre.txt")
     }
 
     func testDiffParserTrimsTabAfterSpacedPath() {

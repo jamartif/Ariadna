@@ -10,6 +10,8 @@ public enum GitError: Error, Sendable, Equatable, LocalizedError {
     case emptyCommitMessage
     /// HEAD detached. El commit no se hace hasta que el usuario confirme.
     case detachedHeadCommit
+    /// `git switch` se negó porque pisaría cambios locales.
+    case localChangesBlockCheckout(detail: String)
     case invalidReference(String)
     case hunkNotFound(path: String)
     case noIntegrationInProgress
@@ -37,6 +39,12 @@ public enum GitError: Error, Sendable, Equatable, LocalizedError {
             return "El mensaje de commit está vacío."
         case .detachedHeadCommit:
             return "HEAD no está en una rama. El commit quedaría suelto. Confírmalo o crea una rama antes."
+        case .localChangesBlockCheckout(let detail):
+            let extra = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+            if extra.isEmpty {
+                return "Hay cambios locales que impedirían el cambio de rama. Haz commit, descártalos o guárdalos antes."
+            }
+            return "Hay cambios locales que impedirían el cambio de rama. Haz commit, descártalos o guárdalos antes.\n\(extra)"
         case .invalidReference(let name):
             return "La referencia «\(name)» no es válida."
         case .hunkNotFound(let path):

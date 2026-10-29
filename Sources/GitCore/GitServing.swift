@@ -19,6 +19,8 @@ public protocol GitServing: Sendable {
     func log(in repository: Repository, limit: Int) async throws -> [Commit]
     func diff(scope: DiffScope, paths: [String], in repository: Repository) async throws -> [FileDiff]
     func branches(in repository: Repository) async throws -> [Branch]
+    /// Ramas de seguimiento (`origin/main`). No incluye `origin/HEAD`.
+    func remoteTrackingBranches(in repository: Repository) async throws -> [Branch]
     func createBranch(name: String, from startPoint: String?, in repository: Repository) async throws
     func renameBranch(from oldName: String, to newName: String, in repository: Repository) async throws
     func checkout(ref: String, in repository: Repository) async throws

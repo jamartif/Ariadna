@@ -35,6 +35,16 @@ struct BranchSidebar: View {
                     }
                 }
             }
+            Section("Seguimiento remoto") {
+                if model.remoteBranches.isEmpty {
+                    Text("Sin ramas remotas").foregroundStyle(.secondary)
+                }
+                ForEach(model.remoteBranches) { branch in
+                    Text(branch.name)
+                        .tag(branch.name)
+                        .help("Crea o reutiliza la rama local con seguimiento")
+                }
+            }
             Section("Remotos") {
                 if model.remotes.isEmpty {
                     Text("Sin remotos").foregroundStyle(.secondary)

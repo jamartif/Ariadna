@@ -184,12 +184,69 @@ enum DiffParser {
         return (start, count)
     }
 
+    /// Separa `diff --git a/<viejo> b/<nuevo>`.
+    /// El lado `a/` no puede ir hasta el final de la línea: si el path tiene espacios,
+    /// eso se comería también ` b/...` (diffs binarios o de modo, sin `---`/`+++`).
     private static func pathFromGitLine(_ line: String, side: String) -> String? {
-        // diff --git a/old b/new. Buscamos el lado " b/" para no romper paths con espacios.
-        let marker = " \(side)/"
-        guard let range = line.range(of: marker, options: .backwards) else { return nil }
-        let raw = String(line[range.upperBound...])
-        return raw.isEmpty ? nil : raw
+        let paths = pathsFromGitHeader(line)
+        let chosen = side == "a" ? paths.old : paths.new
+        guard let chosen, !chosen.isEmpty else { return nil }
+        return chosen
+    }
+
+    private static func pathsFromGitHeader(_ line: String) -> (old: String?, new: String?) {
+        let prefix = "diff --git "
+        guard line.hasPrefix(prefix) else { return (nil, nil) }
+        let rest = String(line.dropFirst(prefix.count))
+        if rest.hasPrefix("\"") {
+            let quoted = quotedTokens(in: rest)
+            if quoted.count >= 2 {
+                return (stripDiffSide(quoted[0]), stripDiffSide(quoted[1]))
+            }
+        }
+        // Primer ` b/`: es el separador. Un ` b/` más a la derecha partiría mal el lado a.
+        guard let marker = rest.range(of: " b/") else { return (nil, nil) }
+        let left = String(rest[..<marker.lowerBound])
+        let right = String(rest[marker.upperBound...])
+        return (stripDiffSide(left), right.trimmingCharacters(in: CharacterSet(charactersIn: "\t\r")))
+    }
+
+    private static func stripDiffSide(_ raw: String) -> String? {
+        var text = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\t\r"))
+        if text.hasPrefix("a/") || text.hasPrefix("b/") {
+            text = String(text.dropFirst(2))
+        }
+        return text.isEmpty ? nil : text
+    }
+
+    private static func quotedTokens(in text: String) -> [String] {
+        var tokens: [String] = []
+        var current = ""
+        var inside = false
+        var escaped = false
+        for character in text {
+            if escaped {
+                current.append(character)
+                escaped = false
+                continue
+            }
+            if character == "\\" && inside {
+                escaped = true
+                continue
+            }
+            if character == "\"" {
+                if inside {
+                    tokens.append(current)
+                    current = ""
+                }
+                inside.toggle()
+                continue
+            }
+            if inside {
+                current.append(character)
+            }
+        }
+        return tokens
     }
 
     private static func decodeDiffPath(_ raw: String) -> String? {

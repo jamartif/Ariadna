@@ -393,6 +393,171 @@ final class GitCLIEngineTests: XCTestCase {
         XCTAssertTrue(subjects.contains("remoto"))
     }
 
+    func testOpeningRepoActivatesVersionedHooks() async throws {
+        let root = try makeRepo()
+        let hooks = root.appendingPathComponent(".githooks")
+        try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        let hook = hooks.appendingPathComponent("pre-commit")
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: hook)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: hook.path)
+        try TempGit.run(["config", "--unset", "core.hooksPath"], at: root)
+        let repo = try await engine.openRepository(at: root.path)
+        XCTAssertEqual(repo.path, root.path)
+        let configured = try TempGit.output(["config", "--local", "--get", "core.hooksPath"], at: root)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(configured, ".githooks")
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: hook.path))
+    }
+
+    func testCheckoutRemoteTrackingCreatesLocalBranch() async throws {
+        let originRoot = try makeRepo()
+        try write("base\n", name: "a.txt", in: originRoot)
+        let origin = try await engine.openRepository(at: originRoot.path)
+        try await engine.stage(paths: ["a.txt"], in: origin)
+        _ = try await engine.commit(message: "base", in: origin)
+        try await engine.createBranch(name: "feature", from: nil, in: origin)
+        try await engine.checkout(ref: "feature", in: origin)
+        try write("feature\n", name: "b.txt", in: originRoot)
+        try await engine.stage(paths: ["b.txt"], in: origin)
+        _ = try await engine.commit(message: "en feature", in: origin)
+        try await engine.checkout(ref: "main", in: origin)
+
+        let bare = FileManager.default.temporaryDirectory.appendingPathComponent("ariadna-track-\(UUID().uuidString)", isDirectory: true)
+        roots.append(bare)
+        try TempGit.run(["init", "-b", "main", "--bare", bare.path], at: originRoot)
+        try await engine.addRemote(name: "origin", url: bare.path, in: origin)
+        try await engine.push(remote: "origin", refspec: "main", setUpstream: true, in: origin)
+        try await engine.push(remote: "origin", refspec: "feature", setUpstream: true, in: origin)
+
+        let clone = FileManager.default.temporaryDirectory.appendingPathComponent("ariadna-track-clone-\(UUID().uuidString)", isDirectory: true)
+        roots.append(clone)
+        try TempGit.run(["clone", bare.path, clone.path], at: originRoot)
+        let second = try await engine.openRepository(at: clone.path)
+        let before = try await engine.branches(in: second).map(\.name)
+        XCTAssertFalse(before.contains("feature"))
+
+        try await engine.checkout(ref: "origin/feature", in: second)
+        let status = try await engine.status(in: second, includeIgnored: false)
+        XCTAssertFalse(status.isDetached)
+        XCTAssertEqual(status.branchName, "feature")
+        let feature = try await engine.branches(in: second).first { $0.name == "feature" }
+        XCTAssertEqual(feature?.upstream, "origin/feature")
+        XCTAssertEqual(feature?.isHead, true)
+    }
+
+    func testCheckoutDirtyTreeExplainsInSpanish() async throws {
+        let root = try makeRepo()
+        try write("uno\n", name: "a.txt", in: root)
+        let repo = try await engine.openRepository(at: root.path)
+        try await engine.stage(paths: ["a.txt"], in: repo)
+        _ = try await engine.commit(message: "base", in: repo)
+        try await engine.createBranch(name: "otra", from: nil, in: repo)
+        try await engine.checkout(ref: "otra", in: repo)
+        try write("desde-otra\n", name: "a.txt", in: root)
+        try await engine.stage(paths: ["a.txt"], in: repo)
+        _ = try await engine.commit(message: "otra", in: repo)
+        try await engine.checkout(ref: "main", in: repo)
+        try write("sucio\n", name: "a.txt", in: root)
+
+        do {
+            try await engine.checkout(ref: "otra", in: repo)
+            XCTFail("el checkout tenía que negarse")
+        } catch let error as GitError {
+            guard case .localChangesBlockCheckout(let detail) = error else {
+                return XCTFail("esperaba un aviso en español, llegó \(error)")
+            }
+            let message = error.errorDescription ?? ""
+            XCTAssertTrue(message.contains("cambios locales"))
+            XCTAssertTrue(message.contains("cambio de rama"))
+            XCTAssertFalse(detail.isEmpty)
+        }
+        let status = try await engine.status(in: repo, includeIgnored: false)
+        XCTAssertEqual(status.branchName, "main")
+        let text = try String(contentsOf: root.appendingPathComponent("a.txt"), encoding: .utf8)
+        XCTAssertEqual(text, "sucio\n")
+    }
+
+    func testStageHunkOfUntrackedFile() async throws {
+        let root = try makeRepo()
+        try write("linea1\nlinea2\nlinea3\n", name: "nuevo.txt", in: root)
+        let repo = try await engine.openRepository(at: root.path)
+        let preview = try await engine.diff(scope: .unstaged, paths: ["nuevo.txt"], in: repo)
+        let hunk = try XCTUnwrap(preview.first?.hunks.first)
+        try await engine.stageHunk(hunk, path: "nuevo.txt", in: repo)
+        let status = try await engine.status(in: repo, includeIgnored: false)
+        let entry = try XCTUnwrap(status.entries.first { $0.path == "nuevo.txt" })
+        XCTAssertFalse(entry.isUntracked)
+        XCTAssertTrue(entry.isStaged)
+        let staged = try await engine.diff(scope: .staged, paths: ["nuevo.txt"], in: repo)
+        XCTAssertTrue(staged.map(\.raw).joined().contains("linea2"))
+    }
+
+    func testPullRebaseConflictAbortAndContinue() async throws {
+        let originRoot = try makeRepo()
+        try write("line1\nline2\nline3\n", name: "file.txt", in: originRoot)
+        let origin = try await engine.openRepository(at: originRoot.path)
+        try await engine.stage(paths: ["file.txt"], in: origin)
+        _ = try await engine.commit(message: "base", in: origin)
+        let bare = FileManager.default.temporaryDirectory.appendingPathComponent("ariadna-rebase-\(UUID().uuidString)", isDirectory: true)
+        roots.append(bare)
+        try TempGit.run(["init", "-b", "main", "--bare", bare.path], at: originRoot)
+        try await engine.addRemote(name: "origin", url: bare.path, in: origin)
+        try await engine.push(remote: "origin", refspec: "main", setUpstream: true, in: origin)
+
+        let clone = FileManager.default.temporaryDirectory.appendingPathComponent("ariadna-rebase-clone-\(UUID().uuidString)", isDirectory: true)
+        roots.append(clone)
+        try TempGit.run(["clone", bare.path, clone.path], at: originRoot)
+        try TempGit.run(["config", "user.email", "test@gitforge.local"], at: clone)
+        try TempGit.run(["config", "user.name", "Ariadna Test"], at: clone)
+        try TempGit.run(["config", "commit.gpgsign", "false"], at: clone)
+        try TempGit.run(["config", "core.hooksPath", "/dev/null"], at: clone)
+
+        try write("line1\nfrom-origin\nline3\n", name: "file.txt", in: originRoot)
+        try await engine.stage(paths: ["file.txt"], in: origin)
+        _ = try await engine.commit(message: "origin", in: origin)
+        try await engine.push(remote: "origin", refspec: "main", setUpstream: false, in: origin)
+
+        let second = try await engine.openRepository(at: clone.path)
+        try write("line1\nfrom-clone\nline3\n", name: "file.txt", in: clone)
+        try await engine.stage(paths: ["file.txt"], in: second)
+        _ = try await engine.commit(message: "clone", in: second)
+
+        let conflicted = try await engine.pull(remote: "origin", refspec: "main", rebase: true, in: second)
+        guard case .conflicts(let paths) = conflicted else {
+            return XCTFail("esperaba conflicto de rebase, llegó \(conflicted)")
+        }
+        XCTAssertEqual(paths, ["file.txt"])
+        let state = try await engine.integrationState(in: second)
+        XCTAssertEqual(state, .rebasing)
+
+        try await engine.abortIntegration(in: second)
+        let aborted = try await engine.integrationState(in: second)
+        XCTAssertEqual(aborted, .none)
+        let clean = try await engine.status(in: second, includeIgnored: false)
+        XCTAssertTrue(clean.conflicted.isEmpty)
+        XCTAssertEqual(clean.branchName, "main")
+
+        let again = try await engine.pull(remote: "origin", refspec: "main", rebase: true, in: second)
+        guard case .conflicts = again else {
+            return XCTFail("el segundo rebase también tenía que chocar, llegó \(again)")
+        }
+        try await engine.writeWorkingTreeFile(
+            relativePath: "file.txt",
+            contents: "line1\nresuelto\nline3\n",
+            in: second,
+            confirmed: true
+        )
+        try await engine.markResolved(path: "file.txt", in: second)
+        try await engine.continueIntegration(in: second)
+        let finished = try await engine.integrationState(in: second)
+        XCTAssertEqual(finished, .none)
+        let text = try String(contentsOf: clone.appendingPathComponent("file.txt"), encoding: .utf8)
+        XCTAssertEqual(text, "line1\nresuelto\nline3\n")
+        let subjects = try await engine.log(in: second, limit: 5).map(\.subject)
+        XCTAssertTrue(subjects.contains("clone"))
+        XCTAssertTrue(subjects.contains("origin"))
+    }
+
     private func stageFirstOfTwo(file: String, gap: Int, lineEnding: String, trailingNewline: Bool) async throws {
         let root = try makeRepo()
         var lines = (1...30).map { "line\($0)" }
@@ -495,7 +660,8 @@ final class GitCLIEngineTests: XCTestCase {
 }
 
 enum TempGit {
-    static func run(_ arguments: [String], at root: URL) throws {
+    @discardableResult
+    static func run(_ arguments: [String], at root: URL) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = arguments
@@ -529,6 +695,11 @@ enum TempGit {
                 userInfo: [NSLocalizedDescriptionKey: "git \(arguments.joined(separator: " "))\n\(text)"]
             )
         }
+        return String(decoding: outBox.data, as: UTF8.self)
+    }
+
+    static func output(_ arguments: [String], at root: URL) throws -> String {
+        try run(arguments, at: root)
     }
 }
 

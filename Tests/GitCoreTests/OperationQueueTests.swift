@@ -77,6 +77,17 @@ final class OperationQueueTests: XCTestCase {
         XCTAssertEqual(environment["PATH"], "/opt/ariadna-bin:/usr/bin")
     }
 
+    func testInstallScriptConfiguresHooksPath() throws {
+        let script = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("scripts/install-git-hooks.sh")
+        let text = try String(contentsOf: script, encoding: .utf8)
+        XCTAssertTrue(text.contains("git -C \"$root\" config --local core.hooksPath .githooks"))
+        XCTAssertTrue(text.contains("config --local --get core.hooksPath"))
+    }
+
     func testBundleIdentifier() {
         XCTAssertEqual(AriadnaIdentity.bundleIdentifier, "es.javiermartinez.ariadna")
         XCTAssertEqual(AriadnaIdentity.productName, "Ariadna")

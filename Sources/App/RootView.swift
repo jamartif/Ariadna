@@ -62,7 +62,11 @@ struct WelcomeView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Ariadna")
                 .font(.largeTitle.bold())
+            #if ARIADNA_AI
             Text("Cliente Git para el día a día. Las propuestas de Copilot y Codex se revisan antes de tocar el repositorio.")
+            #else
+            Text("Cliente Git para el día a día: estado, ramas, merge y conflictos en un solo sitio.")
+            #endif
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

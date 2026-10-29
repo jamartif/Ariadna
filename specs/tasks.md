@@ -42,7 +42,8 @@ Se mantienen en el núcleo, no se mueven a otra fase.
 - [x] Escribir el archivo solo con confirmación
 - [x] Marcar resuelto, continuar y abortar
 - [x] Editor de tres vías en la UI
-- [ ] Tests de rebase y cherry-pick con conflicto (el código de abort/continue está; el fixture no)
+- [x] Test de `pull --rebase` con conflicto, abort y continue
+- [ ] Test de cherry-pick con conflicto
 
 ## Fase 3 — IA (código presente, build apagado)
 

@@ -25,6 +25,20 @@ ARIADNA_AI=1 swift test
 
 Sin esa variable, `swift build` y `swift test` no la enlazan.
 
+## Obligatorio justo después de clonar
+
+Git no usa `.githooks` hasta que `core.hooksPath` apunta ahí. Un `git clone` **no** lo configura solo: sin este paso, un commit local no pasa por gitleaks (CI sí lo haría después).
+
+```bash
+cd <carpeta-del-clon>
+sh scripts/install-git-hooks.sh
+brew install gitleaks
+```
+
+El script ejecuta `git config --local core.hooksPath .githooks` y comprueba que quedó así. Solo afecta a este clon.
+
+Si abres el repo con Ariadna y existe `.githooks/pre-commit`, la app hace esa misma config local cuando `core.hooksPath` aún no está definido. No pisa un valor distinto que ya hubieras puesto. Aun así, instala el hook **antes del primer commit**, no esperes a abrir la app.
+
 ## Probarlo en un Mac
 
 Hace falta macOS 15 o posterior y Xcode 16 o posterior (Swift 6).
@@ -32,7 +46,7 @@ Hace falta macOS 15 o posterior y Xcode 16 o posterior (Swift 6).
 ```bash
 git clone <url-del-repo>
 cd <carpeta>
-git config core.hooksPath .githooks
+sh scripts/install-git-hooks.sh
 brew install gitleaks
 swift test
 open Package.swift
@@ -80,7 +94,7 @@ El repo va a ser público. `.gitignore` excluye `.env*`, certificados y claves. 
 sh scripts/install-git-hooks.sh
 ```
 
-Ese script hace `git config core.hooksPath .githooks` solo en este clon. CI (`.github/workflows/ci.yml`) vuelve a pasar gitleaks sobre todo el historial y, en un runner `macos-15`, hace `swift build` y `swift test` de la Fase 1 y otra vez con `ARIADNA_AI=1`.
+Sin ese script, o sin abrir el repo en Ariadna, el pre-commit no corre. CI (`.github/workflows/ci.yml`) sí pasa gitleaks sobre todo el historial y, en un runner `macos-15`, hace `swift build` y `swift test` de la Fase 1 y otra vez con `ARIADNA_AI=1`.
 
 ## Qué no se pudo comprobar aquí
 

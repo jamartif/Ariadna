@@ -67,7 +67,9 @@ public final class GitCLIEngine: GitServing, Sendable {
             in: URL(fileURLWithPath: toplevel, isDirectory: true),
             arguments: ["rev-parse", "--absolute-git-dir"]
         )
-        return Repository(path: toplevel, gitDir: trim(gitDir.stdoutString))
+        let repository = Repository(path: toplevel, gitDir: trim(gitDir.stdoutString))
+        try await activateVersionedHooks(in: repository)
+        return repository
     }
 
     public func status(in repository: Repository, includeIgnored: Bool) async throws -> GitStatus {
@@ -162,8 +164,12 @@ public final class GitCLIEngine: GitServing, Sendable {
             try PathSafety.validateRef(head)
             arguments = ["diff", "--unified=3", base, head, "--"] + paths
         }
-        let output = try await run(in: repository, arguments: arguments)
-        return DiffParser.parse(output.stdoutString)
+        let output = try await run(in: repository, arguments: arguments, allowNonZero: false)
+        var parsed = DiffParser.parse(output.stdoutString)
+        if case .unstaged = scope {
+            parsed = try await appendingUntrackedDiffs(parsed, paths: paths, in: repository)
+        }
+        return parsed
     }
 
     public func branches(in repository: Repository) async throws -> [Branch] {
@@ -173,6 +179,15 @@ public final class GitCLIEngine: GitServing, Sendable {
             arguments: ["for-each-ref", "--format=\(format)", "refs/heads"]
         )
         return BranchListParser.parse(output.stdoutString)
+    }
+
+    public func remoteTrackingBranches(in repository: Repository) async throws -> [Branch] {
+        let format = "%(refname:short)%00%(objectname)%00%(HEAD)%00%(upstream:short)%00%(upstream:track)"
+        let output = try await run(
+            in: repository,
+            arguments: ["for-each-ref", "--format=\(format)", "refs/remotes"]
+        )
+        return BranchListParser.parse(output.stdoutString).filter { !$0.name.hasSuffix("/HEAD") }
     }
 
     public func createBranch(name: String, from startPoint: String?, in repository: Repository) async throws {
@@ -195,10 +210,22 @@ public final class GitCLIEngine: GitServing, Sendable {
         try PathSafety.validateRef(ref)
         let locals = try await branches(in: repository)
         if locals.contains(where: { $0.name == ref }) {
-            try await run(in: repository, arguments: ["switch", "--", ref])
-        } else {
-            try await run(in: repository, arguments: ["switch", "--detach", "--", ref])
+            try await switchRef(["switch", "--", ref], in: repository)
+            return
         }
+        // origin/main no deja HEAD detached: crea (o reutiliza) la rama local con seguimiento.
+        if !ref.hasSuffix("/HEAD"), try await isRemoteTracking(ref, in: repository) {
+            let remoteNames = try await listRemotes(in: repository).map(\.name)
+            let localName = localBranchName(forRemoteTracking: ref, remotes: remoteNames)
+            try PathSafety.validateRef(localName)
+            if locals.contains(where: { $0.name == localName }) {
+                try await switchRef(["switch", "--", localName], in: repository)
+            } else {
+                try await switchRef(["switch", "-c", localName, "--track", ref], in: repository)
+            }
+            return
+        }
+        try await switchRef(["switch", "--detach", "--", ref], in: repository)
     }
 
     public func deleteBranch(name: String, force: Bool, in repository: Repository) async throws {
@@ -388,6 +415,94 @@ public final class GitCLIEngine: GitServing, Sendable {
 
     // MARK: - Privado
 
+    private func activateVersionedHooks(in repository: Repository) async throws {
+        let hook = URL(fileURLWithPath: repository.path).appendingPathComponent(".githooks/pre-commit")
+        guard FileManager.default.fileExists(atPath: hook.path) else {
+            return
+        }
+        if !FileManager.default.isExecutableFile(atPath: hook.path) {
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+        }
+        let current = try await run(
+            in: repository,
+            arguments: ["config", "--local", "--get", "core.hooksPath"],
+            allowNonZero: true
+        )
+        if trim(current.stdoutString) == ".githooks" {
+            return
+        }
+        // No pisamos un hooksPath distinto que el usuario haya elegido.
+        if current.exitCode == 0, !trim(current.stdoutString).isEmpty {
+            return
+        }
+        try await run(in: repository, arguments: ["config", "--local", "core.hooksPath", ".githooks"])
+    }
+
+    private func appendingUntrackedDiffs(_ parsed: [FileDiff], paths: [String], in repository: Repository) async throws -> [FileDiff] {
+        guard !paths.isEmpty else { return parsed }
+        let already = Set(parsed.filter { !$0.hunks.isEmpty }.map(\.path))
+        let current = try await status(in: repository, includeIgnored: false)
+        let missing = paths.filter { path in
+            !already.contains(path) && current.entries.contains { $0.path == path && $0.isUntracked }
+        }
+        guard !missing.isEmpty else { return parsed }
+        var extra: [FileDiff] = []
+        for path in missing {
+            // Exit 1 es lo normal: hay diferencias contra /dev/null.
+            let output = try await run(
+                in: repository,
+                arguments: ["diff", "--no-index", "--unified=3", "--", "/dev/null", path],
+                allowNonZero: true
+            )
+            guard output.exitCode == 0 || output.exitCode == 1 else {
+                throw failed(output, arguments: ["diff", "--no-index", path])
+            }
+            extra.append(contentsOf: DiffParser.parse(output.stdoutString))
+        }
+        return parsed + extra
+    }
+
+    private func switchRef(_ arguments: [String], in repository: Repository) async throws {
+        do {
+            try await run(in: repository, arguments: arguments)
+        } catch let error as GitError {
+            if case .commandFailed(_, _, let stderr) = error, Self.blocksBranchSwitch(stderr) {
+                throw GitError.localChangesBlockCheckout(detail: GitError.truncate(stderr))
+            }
+            throw error
+        }
+    }
+
+    private func isRemoteTracking(_ ref: String, in repository: Repository) async throws -> Bool {
+        let output = try await run(
+            in: repository,
+            arguments: ["rev-parse", "-q", "--verify", "refs/remotes/\(ref)"],
+            allowNonZero: true
+        )
+        return output.exitCode == 0
+    }
+
+    private func localBranchName(forRemoteTracking ref: String, remotes: [String]) -> String {
+        let ordered = remotes.sorted { $0.count > $1.count }
+        for remote in ordered {
+            let prefix = remote + "/"
+            if ref.hasPrefix(prefix) {
+                return String(ref.dropFirst(prefix.count))
+            }
+        }
+        if let slash = ref.firstIndex(of: "/") {
+            return String(ref[ref.index(after: slash)...])
+        }
+        return ref
+    }
+
+    private static func blocksBranchSwitch(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        return lowered.contains("would be overwritten")
+            || lowered.contains("local changes")
+            || lowered.contains("please commit your changes or stash")
+    }
+
     private var nonInteractiveGit: [String: String] {
         [
             "GIT_MERGE_AUTOEDIT": "no",
@@ -404,6 +519,13 @@ public final class GitCLIEngine: GitServing, Sendable {
         in repository: Repository
     ) async throws {
         try PathSafety.validateGitPath(path)
+        if !reverse, case .unstaged = scope {
+            let current = try await status(in: repository, includeIgnored: false)
+            if current.entries.contains(where: { $0.path == path && $0.isUntracked }) {
+                // Sin esto, `git diff` no ve el archivo y el hunk no existe.
+                try await run(in: repository, arguments: ["add", "-N", "--", path])
+            }
+        }
         let files = try await diff(scope: scope, paths: [path], in: repository)
         guard let file = files.first(where: { $0.path == path || $0.oldPath == path }) else {
             throw GitError.hunkNotFound(path: path)

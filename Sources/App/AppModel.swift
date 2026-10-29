@@ -45,6 +45,7 @@ final class AppModel {
     var repository: Repository?
     var status: GitStatus = .empty
     var branches: [Branch] = []
+    var remoteBranches: [Branch] = []
     var remotes: [Remote] = []
     var conflicts: [ConflictFile] = []
     var integration: IntegrationState = .none
@@ -557,6 +558,7 @@ final class AppModel {
     private func pull(from session: RepositorySession) async throws {
         status = await session.status
         branches = await session.branches
+        remoteBranches = await session.remoteBranches
         remotes = await session.remotes
         conflicts = await session.conflicts
         integration = await session.integration

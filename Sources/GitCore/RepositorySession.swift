@@ -10,6 +10,7 @@ public actor RepositorySession {
 
     public private(set) var status: GitStatus
     public private(set) var branches: [Branch]
+    public private(set) var remoteBranches: [Branch]
     public private(set) var remotes: [Remote]
     public private(set) var conflicts: [ConflictFile]
     public private(set) var integration: IntegrationState
@@ -21,6 +22,7 @@ public actor RepositorySession {
         self.engine = engine
         self.status = .empty
         self.branches = []
+        self.remoteBranches = []
         self.remotes = []
         self.conflicts = []
         self.integration = .none
@@ -35,6 +37,9 @@ public actor RepositorySession {
         let nextBranches = try await engine.branches(in: repository)
         try Task.checkCancellation()
         try ensureCurrent(generation)
+        let nextRemoteBranches = try await engine.remoteTrackingBranches(in: repository)
+        try Task.checkCancellation()
+        try ensureCurrent(generation)
         let nextRemotes = try await engine.listRemotes(in: repository)
         try Task.checkCancellation()
         try ensureCurrent(generation)
@@ -46,6 +51,7 @@ public actor RepositorySession {
         try ensureCurrent(generation)
         status = nextStatus
         branches = nextBranches
+        remoteBranches = nextRemoteBranches
         remotes = nextRemotes
         integration = nextIntegration
         conflicts = nextConflicts
