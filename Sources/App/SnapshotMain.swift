@@ -1,6 +1,7 @@
 #if os(macOS) && SNAPSHOTS && ARIADNA_AI
 import AppKit
 import AriadnaAI
+import ScreenCaptureKit
 import SwiftUI
 
 /// Genera PNG de las vistas principales con un repositorio de ejemplo.
@@ -43,7 +44,7 @@ private struct SnapshotSession {
         }
 
         let workspace = CGSize(width: 1440, height: 900)
-        try await write("staging.png", WorkspaceView(model: model), size: workspace, to: output)
+        try await write("staging.png", SnapshotWorkspace(model: model), size: workspace, to: output)
         try await write("diff.png", ChangesDetail(model: model).background(Color(nsColor: .windowBackgroundColor)), size: CGSize(width: 1100, height: 800), to: output)
         try await write("ramas.png", BranchSidebar(model: model).background(Color(nsColor: .windowBackgroundColor)), size: CGSize(width: 420, height: 780), to: output)
 
@@ -57,7 +58,7 @@ private struct SnapshotSession {
         if model.commitDiff.isEmpty {
             throw SnapshotFailure.message("el commit elegido no tiene diff")
         }
-        try await write("historial.png", WorkspaceView(model: model), size: workspace, to: output)
+        try await write("historial.png", SnapshotWorkspace(model: model), size: workspace, to: output)
 
         model.settings.gitBinary = "/usr/bin/git"
         model.settings.pullUsesRebase = true
@@ -117,6 +118,9 @@ private struct SnapshotSession {
         let windowPNG = await captureWindow(framed, size: size)
         let rendererPNG = captureRenderer(framed, size: size)
         let layerPNG = captureLayer(framed, size: size)
+        note(name, "ventana", windowPNG)
+        note(name, "renderer", rendererPNG)
+        note(name, "capa", layerPNG)
         let candidates = [windowPNG, rendererPNG, layerPNG].compactMap { $0 }
         guard let best = candidates.max(by: { colorVariety($0) < colorVariety($1) }) else {
             throw SnapshotFailure.message("\(name): no se pudo rasterizar la vista")
@@ -147,16 +151,53 @@ private struct SnapshotSession {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         hosting.layoutSubtreeIfNeeded()
-        await pump(1.2)
+        pump(1.6)
         window.displayIfNeeded()
-        let bounds = hosting.bounds
-        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: bounds) else {
-            window.orderOut(nil)
+        let cached = cacheDisplayData(hosting)
+        let shot = await captureScreen(window)
+        window.orderOut(nil)
+        return richer(cached, shot)
+    }
+
+    private func cacheDisplayData(_ view: NSView) -> Data? {
+        let bounds = view.bounds
+        guard bounds.width > 1, bounds.height > 1, let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else { return nil }
+        view.cacheDisplay(in: bounds, to: rep)
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    private func richer(_ first: Data?, _ second: Data?) -> Data? {
+        [first, second].compactMap { $0 }.max { colorVariety($0) < colorVariety($1) }
+    }
+
+    private func captureScreen(_ window: NSWindow) async -> Data? {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            let windowID = CGWindowID(window.windowNumber)
+            guard let match = content.windows.first(where: { $0.windowID == windowID }) else {
+                fputs("sck: la ventana \(windowID) no está en pantalla (\(content.windows.count) ventanas)\n", stderr)
+                return nil
+            }
+            let filter = SCContentFilter(desktopIndependentWindow: match)
+            let config = SCStreamConfiguration()
+            config.width = max(1, Int(match.frame.width * 2))
+            config.height = max(1, Int(match.frame.height * 2))
+            config.showsCursor = false
+            config.scalesToFit = true
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        } catch {
+            fputs("sck: \(error)\n", stderr)
             return nil
         }
-        hosting.cacheDisplay(in: bounds, to: rep)
-        window.orderOut(nil)
-        return rep.representation(using: .png, properties: [:])
+    }
+
+    private func note(_ name: String, _ method: String, _ data: Data?) {
+        if let data {
+            fputs("\(name) \(method): \(data.count) bytes, variedad \(colorVariety(data))\n", stderr)
+        } else {
+            fputs("\(name) \(method): nil\n", stderr)
+        }
     }
 
     private func captureRenderer<V: View>(_ view: V, size: CGSize) -> Data? {
@@ -211,8 +252,52 @@ private struct SnapshotSession {
         return seen.count
     }
 
-    private func pump(_ seconds: TimeInterval) async {
-        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+    private func pump(_ seconds: TimeInterval) {
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+        }
+    }
+}
+
+private struct SnapshotWorkspace: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            BranchSidebar(model: model)
+                .frame(width: 280)
+            Divider()
+            VStack(spacing: 0) {
+                Picker("Sección", selection: $model.section) {
+                    ForEach(WorkspaceSection.allCases) { section in
+                        Text(section.title).tag(section)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(8)
+                switch model.section {
+                case .changes:
+                    ChangesList(model: model)
+                    CommitBar(model: model)
+                case .history:
+                    HistoryList(model: model)
+                case .conflicts:
+                    ConflictList(model: model)
+                }
+            }
+            .frame(width: 420)
+            Divider()
+            switch model.section {
+            case .changes:
+                ChangesDetail(model: model)
+            case .history:
+                HistoryDetail(model: model)
+            case .conflicts:
+                Color.clear
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
