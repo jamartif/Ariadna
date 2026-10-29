@@ -1,7 +1,7 @@
 #if os(macOS) && SNAPSHOTS && ARIADNA_AI
 import AppKit
 import AriadnaAI
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 import SwiftUI
 
 /// Genera PNG de las vistas principales con un repositorio de ejemplo.
