@@ -145,6 +145,25 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(renamed.path, "docs/a b/new.txt")
     }
 
+    func testGitCStyleAndOctalPathEscapes() throws {
+        XCTAssertEqual(DiffParser.unescapeGitPath(#""caf\303\251""#), "café")
+        XCTAssertEqual(DiffParser.unescapeGitPath(#""a\t b\\c""#), "a\t b\\c")
+
+        let header = "diff --git \"a/caf\\303\\251.txt\" \"b/caf\\303\\251.txt\"\n"
+        let file = try XCTUnwrap(DiffParser.parse(header).first)
+        XCTAssertEqual(file.path, "café.txt")
+        XCTAssertNil(file.oldPath)
+
+        let rename = """
+        diff --git "a/viejo\\tnombre.txt" "b/nuevo\\tnombre.txt"
+        rename from "viejo\\tnombre.txt"
+        rename to "nuevo\\tnombre.txt"
+        """
+        let renamed = try XCTUnwrap(DiffParser.parse(rename).first)
+        XCTAssertEqual(renamed.oldPath, "viejo\tnombre.txt")
+        XCTAssertEqual(renamed.path, "nuevo\tnombre.txt")
+    }
+
     func testDiffParserTrimsTabAfterSpacedPath() {
         let raw = "diff --git a/notas/cañón archivo.txt b/notas/cañón archivo.txt\n--- a/notas/cañón archivo.txt\t\n+++ b/notas/cañón archivo.txt\t\n@@ -1,2 +1,2 @@\n line1\n-line2\n+LINE2\n"
         let files = DiffParser.parse(raw)

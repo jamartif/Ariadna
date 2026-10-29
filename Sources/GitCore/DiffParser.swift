@@ -56,11 +56,13 @@ enum DiffParser {
             } else if line.hasPrefix("deleted file mode") {
                 isDeleted = true
             } else if line.hasPrefix("rename from ") {
-                oldPath = String(line.dropFirst("rename from ".count))
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "\t\r"))
+                if let decoded = decodeDiffPath(String(line.dropFirst("rename from ".count))) {
+                    oldPath = decoded
+                }
             } else if line.hasPrefix("rename to ") {
-                newPath = String(line.dropFirst("rename to ".count))
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "\t\r"))
+                if let decoded = decodeDiffPath(String(line.dropFirst("rename to ".count))) {
+                    newPath = decoded
+                }
             } else if line.hasPrefix("Binary files ") || line.hasPrefix("GIT binary patch") {
                 binary = true
             }
@@ -240,13 +242,16 @@ enum DiffParser {
     }
 
     private static func stripDiffSide(_ raw: String) -> String? {
-        var text = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\t\r"))
+        var text = unescapeGitPath(raw).trimmingCharacters(in: CharacterSet(charactersIn: "\t\r"))
+        if text == "/dev/null" { return nil }
         if text.hasPrefix("a/") || text.hasPrefix("b/") {
             text = String(text.dropFirst(2))
         }
         return text.isEmpty ? nil : text
     }
 
+    /// Conserva las barras invertidas. Las comillas escapadas no cierran el token.
+    /// La decodificación (octales, `\t`, `\\`) la hace `unescapeGitPath`.
     private static func quotedTokens(in text: String) -> [String] {
         var tokens: [String] = []
         var current = ""
@@ -254,6 +259,7 @@ enum DiffParser {
         var escaped = false
         for character in text {
             if escaped {
+                current.append("\\")
                 current.append(character)
                 escaped = false
                 continue
@@ -278,18 +284,63 @@ enum DiffParser {
     }
 
     private static func decodeDiffPath(_ raw: String) -> String? {
-        var text = raw
-        if text == "/dev/null" { return nil }
-        if text.hasPrefix("\"") && text.hasSuffix("\"") && text.count >= 2 {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed == "/dev/null" { return nil }
+        return stripDiffSide(trimmed)
+    }
+
+    /// Escapes de estilo C que escribe git al citar paths: `\t`, `\n`, `\\`, `\"` y octales `\303`.
+    static func unescapeGitPath(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: CharacterSet(charactersIn: " \t\r"))
+        if text.count >= 2, text.hasPrefix("\""), text.hasSuffix("\"") {
             text = String(text.dropFirst().dropLast())
-            text = text.replacingOccurrences(of: "\\\"", with: "\"")
-            text = text.replacingOccurrences(of: "\\\\", with: "\\")
         }
-        if text.hasPrefix("a/") || text.hasPrefix("b/") {
-            text = String(text.dropFirst(2))
+        var bytes: [UInt8] = []
+        let scalars = Array(text.unicodeScalars)
+        var index = 0
+        while index < scalars.count {
+            let scalar = scalars[index]
+            if scalar == "\\", index + 1 < scalars.count {
+                let next = scalars[index + 1]
+                switch next {
+                case "n": bytes.append(0x0A); index += 2; continue
+                case "t": bytes.append(0x09); index += 2; continue
+                case "r": bytes.append(0x0D); index += 2; continue
+                case "\\": bytes.append(0x5C); index += 2; continue
+                case "\"": bytes.append(0x22); index += 2; continue
+                case "a": bytes.append(0x07); index += 2; continue
+                case "b": bytes.append(0x08); index += 2; continue
+                case "f": bytes.append(0x0C); index += 2; continue
+                case "v": bytes.append(0x0B); index += 2; continue
+                default:
+                    if isOctal(next) {
+                        var value = 0
+                        var consumed = 0
+                        var cursor = index + 1
+                        while cursor < scalars.count, consumed < 3, isOctal(scalars[cursor]) {
+                            value = value * 8 + Int(scalars[cursor].value - Unicode.Scalar("0").value)
+                            consumed += 1
+                            cursor += 1
+                        }
+                        if consumed > 0, value <= 255 {
+                            bytes.append(UInt8(value))
+                            index = cursor
+                            continue
+                        }
+                    }
+                    bytes.append(contentsOf: Array(String(next).utf8))
+                    index += 2
+                    continue
+                }
+            }
+            bytes.append(contentsOf: Array(String(scalar).utf8))
+            index += 1
         }
-        // git añade un tabulador al final de rutas con espacios.
-        return text.trimmingCharacters(in: CharacterSet(charactersIn: "\t\r"))
+        return String(decoding: bytes, as: UTF8.self)
+    }
+
+    private static func isOctal(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.value >= Unicode.Scalar("0").value && scalar.value <= Unicode.Scalar("7").value
     }
 
     private static func splitLines(_ text: String) -> [String] {

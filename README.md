@@ -44,8 +44,8 @@ Ariadna no escribe `core.hooksPath` ni ningún otro ajuste de git en los reposit
 Hace falta macOS 15 o posterior y Xcode 16 o posterior (Swift 6).
 
 ```bash
-git clone <url-del-repo>
-cd <carpeta>
+git clone https://github.com/jamartif/ariadna.git
+cd ariadna
 sh scripts/install-git-hooks.sh
 brew install gitleaks
 swift test
@@ -62,7 +62,42 @@ swift run Ariadna
 
 Recientes: `~/Library/Application Support/Ariadna/recents.json`.
 
-El identificador del bundle está en `Sources/App/Info.plist` y en `AriadnaIdentity.bundleIdentifier`. SwiftPM no empaqueta un `.app` firmado; el plist queda listo para cuando se arme el bundle.
+El identificador del bundle está en `Sources/App/Info.plist` y en `AriadnaIdentity.bundleIdentifier`.
+
+## Publicar una versión
+
+El remoto público previsto es [github.com/jamartif/ariadna](https://github.com/jamartif/ariadna). Cada push a `main` y cada ejecución manual del workflow **Release** generan `Ariadna.app`, un `.dmg` y un `.zip` como artefactos. Para publicar una release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+El tag tiene que coincidir con `vX.Y.Z` (la `v` es obligatoria). El workflow, en un runner `macos-15`, compila en Release un binario universal (arm64 y x86_64), arma `Ariadna.app` con el bundle `es.javiermartinez.ariadna` y la versión del tag, firma ad-hoc (`codesign -s -`) y adjunta `Ariadna-X.Y.Z.dmg` y `.zip` a la GitHub Release.
+
+En local, en un Mac con Xcode:
+
+```bash
+sh scripts/build-app.sh
+```
+
+Los ficheros quedan en `dist/`. Si el commit no tiene tag `v*`, la versión es `0.0.0-` más el SHA corto.
+
+Javier no tiene cuenta de Apple Developer. La firma Developer ID y la notarización están en el script, pero **no se ejecutan** salvo que existan a la vez estas variables (en GitHub, como secrets del repo, nunca en el código): `APPLE_CERT_P12` (el `.p12` en base64), `APPLE_CERT_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID` y `APPLE_APP_PASSWORD`.
+
+### Abrir la app sin notarizar en macOS 15
+
+macOS marca lo descargado con cuarentena. Sin notarización, la primera apertura puede bloquearse.
+
+1. Mueve `Ariadna.app` a `/Applications`.
+2. Ábrela. Si macOS la rechaza: **Ajustes del Sistema > Privacidad y seguridad** y pulsa **Abrir igualmente**.
+3. O, en Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Ariadna.app
+```
+
+En Apple Silicon un binario sin firmar no arranca. El `.dmg` de la release ya lleva firma ad-hoc; el paso de arriba solo quita la cuarentena.
 
 ## Login de los CLI (solo con el flag de IA)
 

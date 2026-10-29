@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Empaquetar Ariadna.app
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compilar, firmar ad-hoc y empaquetar
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: bash scripts/build-app.sh
+
+      - name: Subir artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ariadna-${{ github.sha }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+
+      - name: Publicar GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            dist/Ariadna-${version}.dmg \
+            dist/Ariadna-${version}.zip \
+            --title "Ariadna ${version}" \
+            --notes "Binario universal (arm64 y x86_64) para macOS 15, con firma ad-hoc. Javier no tiene cuenta de Apple Developer: no está notarizado salvo que el workflow tuviera los secrets APPLE_* configurados.
+
+Para abrirlo en macOS 15: Ajustes del Sistema > Privacidad y seguridad > Abrir igualmente.
+
+O, en Terminal: \`xattr -dr com.apple.quarantine /Applications/Ariadna.app\`"
