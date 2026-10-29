@@ -123,6 +123,28 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(renamed.path, "nuevo nombre.txt")
     }
 
+    func testDiffParserPathContainingBSlashWithoutPlusHeaders() throws {
+        let raw = """
+        diff --git a/docs/a b/readme.txt b/docs/a b/readme.txt
+        old mode 100644
+        new mode 100755
+        """
+        let file = try XCTUnwrap(DiffParser.parse(raw).first)
+        XCTAssertEqual(file.path, "docs/a b/readme.txt")
+        XCTAssertNil(file.oldPath)
+        XCTAssertFalse(file.path.contains("readme.txt b/"))
+
+        let rename = """
+        diff --git a/docs/a b/old.txt b/docs/a b/new.txt
+        similarity index 90%
+        rename from docs/a b/old.txt
+        rename to docs/a b/new.txt
+        """
+        let renamed = try XCTUnwrap(DiffParser.parse(rename).first)
+        XCTAssertEqual(renamed.oldPath, "docs/a b/old.txt")
+        XCTAssertEqual(renamed.path, "docs/a b/new.txt")
+    }
+
     func testDiffParserTrimsTabAfterSpacedPath() {
         let raw = "diff --git a/notas/cañón archivo.txt b/notas/cañón archivo.txt\n--- a/notas/cañón archivo.txt\t\n+++ b/notas/cañón archivo.txt\t\n@@ -1,2 +1,2 @@\n line1\n-line2\n+LINE2\n"
         let files = DiffParser.parse(raw)

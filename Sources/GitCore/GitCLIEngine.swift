@@ -67,9 +67,7 @@ public final class GitCLIEngine: GitServing, Sendable {
             in: URL(fileURLWithPath: toplevel, isDirectory: true),
             arguments: ["rev-parse", "--absolute-git-dir"]
         )
-        let repository = Repository(path: toplevel, gitDir: trim(gitDir.stdoutString))
-        try await activateVersionedHooks(in: repository)
-        return repository
+        return Repository(path: toplevel, gitDir: trim(gitDir.stdoutString))
     }
 
     public func status(in repository: Repository, includeIgnored: Bool) async throws -> GitStatus {
@@ -206,7 +204,7 @@ public final class GitCLIEngine: GitServing, Sendable {
         try await run(in: repository, arguments: ["branch", "-m", "--", oldName, newName])
     }
 
-    public func checkout(ref: String, in repository: Repository) async throws {
+    public func checkout(ref: String, in repository: Repository, allowDivergedLocal: Bool) async throws {
         try PathSafety.validateRef(ref)
         let locals = try await branches(in: repository)
         if locals.contains(where: { $0.name == ref }) {
@@ -218,7 +216,14 @@ public final class GitCLIEngine: GitServing, Sendable {
             let remoteNames = try await listRemotes(in: repository).map(\.name)
             let localName = localBranchName(forRemoteTracking: ref, remotes: remoteNames)
             try PathSafety.validateRef(localName)
-            if locals.contains(where: { $0.name == localName }) {
+            if let local = locals.first(where: { $0.name == localName }) {
+                let remoteOID = try await requireRevision("refs/remotes/\(ref)", in: repository)
+                let tracksAnotherBranch = local.upstream != nil && local.upstream != ref
+                if local.oid != remoteOID || tracksAnotherBranch {
+                    guard allowDivergedLocal else {
+                        throw GitError.divergedLocalBranch(local: localName, remote: ref)
+                    }
+                }
                 try await switchRef(["switch", "--", localName], in: repository)
             } else {
                 try await switchRef(["switch", "-c", localName, "--track", ref], in: repository)
@@ -415,29 +420,6 @@ public final class GitCLIEngine: GitServing, Sendable {
 
     // MARK: - Privado
 
-    private func activateVersionedHooks(in repository: Repository) async throws {
-        let hook = URL(fileURLWithPath: repository.path).appendingPathComponent(".githooks/pre-commit")
-        guard FileManager.default.fileExists(atPath: hook.path) else {
-            return
-        }
-        if !FileManager.default.isExecutableFile(atPath: hook.path) {
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
-        }
-        let current = try await run(
-            in: repository,
-            arguments: ["config", "--local", "--get", "core.hooksPath"],
-            allowNonZero: true
-        )
-        if trim(current.stdoutString) == ".githooks" {
-            return
-        }
-        // No pisamos un hooksPath distinto que el usuario haya elegido.
-        if current.exitCode == 0, !trim(current.stdoutString).isEmpty {
-            return
-        }
-        try await run(in: repository, arguments: ["config", "--local", "core.hooksPath", ".githooks"])
-    }
-
     private func appendingUntrackedDiffs(_ parsed: [FileDiff], paths: [String], in repository: Repository) async throws -> [FileDiff] {
         guard !paths.isEmpty else { return parsed }
         let already = Set(parsed.filter { !$0.hunks.isEmpty }.map(\.path))
@@ -519,24 +501,48 @@ public final class GitCLIEngine: GitServing, Sendable {
         in repository: Repository
     ) async throws {
         try PathSafety.validateGitPath(path)
+        var intentToAdd = false
         if !reverse, case .unstaged = scope {
             let current = try await status(in: repository, includeIgnored: false)
             if current.entries.contains(where: { $0.path == path && $0.isUntracked }) {
                 // Sin esto, `git diff` no ve el archivo y el hunk no existe.
                 try await run(in: repository, arguments: ["add", "-N", "--", path])
+                intentToAdd = true
             }
         }
-        let files = try await diff(scope: scope, paths: [path], in: repository)
-        guard let file = files.first(where: { $0.path == path || $0.oldPath == path }) else {
-            throw GitError.hunkNotFound(path: path)
+        do {
+            try Task.checkCancellation()
+            let files = try await diff(scope: scope, paths: [path], in: repository)
+            guard let file = files.first(where: { $0.path == path || $0.oldPath == path }) else {
+                throw GitError.hunkNotFound(path: path)
+            }
+            guard let match = file.hunks.first(where: { $0.matchesRange(of: hunk) }) else {
+                throw GitError.hunkNotFound(path: path)
+            }
+            var arguments = ["apply", "--whitespace=nowarn", "--cached"]
+            if reverse { arguments.append("--reverse") }
+            arguments.append("-")
+            try await run(in: repository, arguments: arguments, stdin: Data(file.patch(selecting: match).utf8))
+        } catch {
+            if intentToAdd {
+                await undoIntentToAdd(path: path, in: repository)
+            }
+            throw error
         }
-        guard let match = file.hunks.first(where: { $0.matchesRange(of: hunk) }) else {
-            throw GitError.hunkNotFound(path: path)
+    }
+
+    /// Quita un `git add -N` si el stage del hunk no llegó a completarse.
+    private func undoIntentToAdd(path: String, in repository: Repository) async {
+        do {
+            try await run(in: repository, arguments: ["restore", "--staged", "--", path], allowNonZero: true)
+            let status = try await self.status(in: repository, includeIgnored: false)
+            let stillIndexed = status.entries.contains { $0.path == path && !$0.isUntracked }
+            if stillIndexed {
+                try await run(in: repository, arguments: ["reset", "-q", "--", path], allowNonZero: true)
+            }
+        } catch {
+            // El índice puede quedar con el intent-to-add si git no responde; no tapamos el error original.
         }
-        var arguments = ["apply", "--whitespace=nowarn", "--cached"]
-        if reverse { arguments.append("--reverse") }
-        arguments.append("-")
-        try await run(in: repository, arguments: arguments, stdin: Data(file.patch(selecting: match).utf8))
     }
 
     private func mutatePaths(_ prefix: [String], paths: [String], in repository: Repository) async throws {
@@ -570,6 +576,11 @@ public final class GitCLIEngine: GitServing, Sendable {
             return .conflicts(paths: paths)
         }
         throw failed(output, arguments: arguments)
+    }
+
+    private func requireRevision(_ revision: String, in repository: Repository) async throws -> String {
+        let output = try await run(in: repository, arguments: ["rev-parse", revision])
+        return trim(output.stdoutString)
     }
 
     private func requireHEAD(in repository: Repository) async throws -> String {

@@ -35,9 +35,9 @@ sh scripts/install-git-hooks.sh
 brew install gitleaks
 ```
 
-El script ejecuta `git config --local core.hooksPath .githooks` y comprueba que quedó así. Solo afecta a este clon.
+El script ejecuta `git config --local core.hooksPath .githooks` y comprueba que quedó así. Solo afecta al clon de Ariadna, no a los repos que abras con la app.
 
-Si abres el repo con Ariadna y existe `.githooks/pre-commit`, la app hace esa misma config local cuando `core.hooksPath` aún no está definido. No pisa un valor distinto que ya hubieras puesto. Aun así, instala el hook **antes del primer commit**, no esperes a abrir la app.
+Ariadna no escribe `core.hooksPath` ni ningún otro ajuste de git en los repositorios que abres. Si omites el script, el pre-commit no corre en local.
 
 ## Probarlo en un Mac
 
@@ -94,7 +94,7 @@ El repo va a ser público. `.gitignore` excluye `.env*`, certificados y claves. 
 sh scripts/install-git-hooks.sh
 ```
 
-Sin ese script, o sin abrir el repo en Ariadna, el pre-commit no corre. CI (`.github/workflows/ci.yml`) sí pasa gitleaks sobre todo el historial y, en un runner `macos-15`, hace `swift build` y `swift test` de la Fase 1 y otra vez con `ARIADNA_AI=1`.
+Sin ese script el pre-commit no corre. La app no lo activa por ti. CI (`.github/workflows/ci.yml`) sí pasa gitleaks sobre todo el historial y, en un runner `macos-15`, hace `swift build` y `swift test` de la Fase 1 y otra vez con `ARIADNA_AI=1`.
 
 ## Qué no se pudo comprobar aquí
 

@@ -29,6 +29,24 @@ struct RootView: View {
         }
         #endif
         .confirmationDialog(
+            "La rama local no coincide con el remoto",
+            isPresented: Binding(
+                get: { model.pendingDivergedCheckout != nil },
+                set: { if !$0 { model.pendingDivergedCheckout = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Cambiar a la rama local") {
+                if let ref = model.pendingDivergedCheckout {
+                    model.pendingDivergedCheckout = nil
+                    Task { await model.checkout(ref: ref, allowDivergedLocal: true) }
+                }
+            }
+            Button("Cancelar", role: .cancel) { model.pendingDivergedCheckout = nil }
+        } message: {
+            Text(model.divergedCheckoutMessage)
+        }
+        .confirmationDialog(
             "Commit fuera de una rama",
             isPresented: $model.confirmDetachedCommit,
             titleVisibility: .visible

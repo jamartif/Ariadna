@@ -77,6 +77,9 @@ final class AppModel {
     var pathsPendingRestore: [String]?
     var confirmAbort = false
     var confirmDetachedCommit = false
+    /// Ref remota (`origin/x`) cuyo checkout pide confirmación porque la local no coincide.
+    var pendingDivergedCheckout: String?
+    var divergedCheckoutMessage = ""
 
     private let runner: FoundationProcessRunner
     private var engine: GitCLIEngine
@@ -224,10 +227,20 @@ final class AppModel {
         }
     }
 
-    func checkout(ref: String) async {
+    func checkout(ref: String, allowDivergedLocal: Bool = false) async {
         await perform {
             guard let session = self.session else { return }
-            try await session.checkout(ref: ref)
+            do {
+                try await session.checkout(ref: ref, allowDivergedLocal: allowDivergedLocal)
+            } catch let error as GitError {
+                if case .divergedLocalBranch(let local, let remote) = error, !allowDivergedLocal {
+                    self.pendingDivergedCheckout = ref
+                    self.divergedCheckoutMessage = "La rama local «\(local)» no coincide con \(remote). Si continúas, cambias a la local, no al commit remoto."
+                    return
+                }
+                throw error
+            }
+            self.pendingDivergedCheckout = nil
             try await self.pull(from: session)
             await self.reloadSelectedDiff()
         }

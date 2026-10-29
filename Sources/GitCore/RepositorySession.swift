@@ -99,8 +99,8 @@ public actor RepositorySession {
         try await refresh()
     }
 
-    public func checkout(ref: String) async throws {
-        try await engine.checkout(ref: ref, in: repository)
+    public func checkout(ref: String, allowDivergedLocal: Bool = false) async throws {
+        try await engine.checkout(ref: ref, in: repository, allowDivergedLocal: allowDivergedLocal)
         try await refresh()
     }
 

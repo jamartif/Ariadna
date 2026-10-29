@@ -55,6 +55,12 @@ enum DiffParser {
                 isNew = true
             } else if line.hasPrefix("deleted file mode") {
                 isDeleted = true
+            } else if line.hasPrefix("rename from ") {
+                oldPath = String(line.dropFirst("rename from ".count))
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\t\r"))
+            } else if line.hasPrefix("rename to ") {
+                newPath = String(line.dropFirst("rename to ".count))
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\t\r"))
             } else if line.hasPrefix("Binary files ") || line.hasPrefix("GIT binary patch") {
                 binary = true
             }
@@ -204,11 +210,33 @@ enum DiffParser {
                 return (stripDiffSide(quoted[0]), stripDiffSide(quoted[1]))
             }
         }
-        // Primer ` b/`: es el separador. Un ` b/` más a la derecha partiría mal el lado a.
-        guard let marker = rest.range(of: " b/") else { return (nil, nil) }
-        let left = String(rest[..<marker.lowerBound])
-        let right = String(rest[marker.upperBound...])
-        return (stripDiffSide(left), right.trimmingCharacters(in: CharacterSet(charactersIn: "\t\r")))
+        // Cada ` b/` es un corte posible. Si las dos mitades coinciden, el path
+        // contiene literalmente " b/" (p. ej. `docs/a b/readme.txt`) y el primer corte miente.
+        let candidates = headerSplits(rest)
+        if let identical = candidates.first(where: { $0.old == $0.new }) {
+            return identical
+        }
+        if candidates.count == 1 {
+            return candidates[0]
+        }
+        return (nil, nil)
+    }
+
+    private static func headerSplits(_ rest: String) -> [(old: String?, new: String?)] {
+        var splits: [(old: String?, new: String?)] = []
+        var search = rest.startIndex
+        while let marker = rest.range(of: " b/", range: search..<rest.endIndex) {
+            let left = String(rest[..<marker.lowerBound])
+            guard left.hasPrefix("a/") else {
+                search = marker.upperBound
+                continue
+            }
+            let right = String(rest[marker.upperBound...])
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\t\r"))
+            splits.append((stripDiffSide(left), right.isEmpty ? nil : right))
+            search = rest.index(after: marker.lowerBound)
+        }
+        return splits
     }
 
     private static func stripDiffSide(_ raw: String) -> String? {

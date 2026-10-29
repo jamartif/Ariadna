@@ -42,7 +42,7 @@ struct BranchSidebar: View {
                 ForEach(model.remoteBranches) { branch in
                     Text(branch.name)
                         .tag(branch.name)
-                        .help("Crea o reutiliza la rama local con seguimiento")
+                        .help("Crea la rama local con seguimiento. Si ya existe y no coincide, Ariadna pregunta.")
                 }
             }
             Section("Remotos") {

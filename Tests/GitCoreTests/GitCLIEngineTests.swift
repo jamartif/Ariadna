@@ -393,7 +393,7 @@ final class GitCLIEngineTests: XCTestCase {
         XCTAssertTrue(subjects.contains("remoto"))
     }
 
-    func testOpeningRepoActivatesVersionedHooks() async throws {
+    func testOpeningRepoDoesNotWriteHooksPath() async throws {
         let root = try makeRepo()
         let hooks = root.appendingPathComponent(".githooks")
         try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
@@ -401,12 +401,14 @@ final class GitCLIEngineTests: XCTestCase {
         try Data("#!/bin/sh\nexit 0\n".utf8).write(to: hook)
         try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: hook.path)
         try TempGit.run(["config", "--unset", "core.hooksPath"], at: root)
-        let repo = try await engine.openRepository(at: root.path)
-        XCTAssertEqual(repo.path, root.path)
-        let configured = try TempGit.output(["config", "--local", "--get", "core.hooksPath"], at: root)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertEqual(configured, ".githooks")
-        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: hook.path))
+        _ = try await engine.openRepository(at: root.path)
+        do {
+            _ = try TempGit.output(["config", "--local", "--get", "core.hooksPath"], at: root)
+            XCTFail("abrir el repo no debe escribir core.hooksPath")
+        } catch {
+            // git config --get termina mal si la clave no existe: es lo esperado.
+        }
+        XCTAssertFalse(FileManager.default.isExecutableFile(atPath: hook.path))
     }
 
     func testCheckoutRemoteTrackingCreatesLocalBranch() async throws {
@@ -490,6 +492,71 @@ final class GitCLIEngineTests: XCTestCase {
         XCTAssertTrue(entry.isStaged)
         let staged = try await engine.diff(scope: .staged, paths: ["nuevo.txt"], in: repo)
         XCTAssertTrue(staged.map(\.raw).joined().contains("linea2"))
+    }
+
+    func testFailedUntrackedHunkDoesNotLeaveIntentToAdd() async throws {
+        let root = try makeRepo()
+        try write("linea1\nlinea2\n", name: "nuevo.txt", in: root)
+        let repo = try await engine.openRepository(at: root.path)
+        let bogus = DiffHunk(
+            id: "no-esta",
+            oldStart: 40,
+            oldCount: 1,
+            newStart: 40,
+            newCount: 1,
+            heading: "",
+            lines: [],
+            unifiedText: "@@ -40 +40 @@\n"
+        )
+        do {
+            try await engine.stageHunk(bogus, path: "nuevo.txt", in: repo)
+            XCTFail("ese hunk no existe")
+        } catch let error as GitError {
+            guard case .hunkNotFound = error else { throw error }
+        }
+        let status = try await engine.status(in: repo, includeIgnored: false)
+        let entry = try XCTUnwrap(status.entries.first { $0.path == "nuevo.txt" })
+        XCTAssertTrue(entry.isUntracked)
+        XCTAssertFalse(entry.isStaged)
+    }
+
+    func testCheckoutRemoteDoesNotSwitchDivergedLocal() async throws {
+        let root = try makeRepo()
+        try write("base\n", name: "a.txt", in: root)
+        let repo = try await engine.openRepository(at: root.path)
+        try await engine.stage(paths: ["a.txt"], in: repo)
+        let base = try await engine.commit(message: "base", in: repo)
+        try await engine.createBranch(name: "feature", from: nil, in: repo)
+        let bare = FileManager.default.temporaryDirectory.appendingPathComponent("ariadna-div-\(UUID().uuidString)", isDirectory: true)
+        roots.append(bare)
+        try TempGit.run(["init", "-b", "main", "--bare", bare.path], at: root)
+        try await engine.addRemote(name: "origin", url: bare.path, in: repo)
+        try await engine.push(remote: "origin", refspec: "main", setUpstream: true, in: repo)
+        try await engine.push(remote: "origin", refspec: "feature", setUpstream: false, in: repo)
+        try await engine.checkout(ref: "feature", in: repo)
+        try write("local\n", name: "b.txt", in: root)
+        try await engine.stage(paths: ["b.txt"], in: repo)
+        _ = try await engine.commit(message: "solo-local", in: repo)
+        try await engine.checkout(ref: "main", in: repo)
+
+        do {
+            try await engine.checkout(ref: "origin/feature", in: repo)
+            XCTFail("no debía cambiar a la local desincronizada")
+        } catch let error as GitError {
+            guard case .divergedLocalBranch(let local, let remote) = error else { throw error }
+            XCTAssertEqual(local, "feature")
+            XCTAssertEqual(remote, "origin/feature")
+            let message = error.errorDescription ?? ""
+            XCTAssertTrue(message.contains("no coincide"))
+        }
+        let stayed = try await engine.status(in: repo, includeIgnored: false)
+        XCTAssertEqual(stayed.branchName, "main")
+        XCTAssertFalse(stayed.isDetached)
+
+        try await engine.checkout(ref: "origin/feature", in: repo, allowDivergedLocal: true)
+        let moved = try await engine.status(in: repo, includeIgnored: false)
+        XCTAssertEqual(moved.branchName, "feature")
+        XCTAssertNotEqual(moved.headOID, base)
     }
 
     func testPullRebaseConflictAbortAndContinue() async throws {

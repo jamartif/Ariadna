@@ -14,6 +14,6 @@ if [ "$actual" != ".githooks" ]; then
     echo "core.hooksPath no quedó en .githooks (vale: ${actual:-vacío})." >&2
     exit 1
 fi
-echo "core.hooksPath=.githooks en este clon."
-echo "Cada commit local pasa por gitleaks. Si no lo tienes: brew install gitleaks"
-echo "Abrir este repo en Ariadna también fija core.hooksPath si aún no está puesto."
+echo "core.hooksPath=.githooks en el clon de Ariadna."
+echo "Cada commit de este repo pasa por gitleaks. Si no lo tienes: brew install gitleaks"
+echo "Ariadna no toca la config de los demás repositorios que abras."

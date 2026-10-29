@@ -23,7 +23,7 @@ public protocol GitServing: Sendable {
     func remoteTrackingBranches(in repository: Repository) async throws -> [Branch]
     func createBranch(name: String, from startPoint: String?, in repository: Repository) async throws
     func renameBranch(from oldName: String, to newName: String, in repository: Repository) async throws
-    func checkout(ref: String, in repository: Repository) async throws
+    func checkout(ref: String, in repository: Repository, allowDivergedLocal: Bool) async throws
     func deleteBranch(name: String, force: Bool, in repository: Repository) async throws
     func merge(branch: String, fastForward: MergeFastForward, in repository: Repository) async throws -> MergeResult
     func integrationState(in repository: Repository) async throws -> IntegrationState
@@ -44,5 +44,9 @@ public protocol GitServing: Sendable {
 public extension GitServing {
     func commit(message: String, in repository: Repository) async throws -> String {
         try await commit(message: message, in: repository, allowDetached: false)
+    }
+
+    func checkout(ref: String, in repository: Repository) async throws {
+        try await checkout(ref: ref, in: repository, allowDivergedLocal: false)
     }
 }
