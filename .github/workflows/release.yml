@@ -48,6 +48,6 @@ jobs:
             --title "Ariadna ${version}" \
             --notes "Binario universal (arm64 y x86_64) para macOS 15, con firma ad-hoc. Javier no tiene cuenta de Apple Developer: no está notarizado salvo que el workflow tuviera los secrets APPLE_* configurados.
 
-Para abrirlo en macOS 15: Ajustes del Sistema > Privacidad y seguridad > Abrir igualmente.
+          Para abrirlo en macOS 15: Ajustes del Sistema > Privacidad y seguridad > Abrir igualmente.
 
-O, en Terminal: \`xattr -dr com.apple.quarantine /Applications/Ariadna.app\`"
+          O, en Terminal: \`xattr -dr com.apple.quarantine /Applications/Ariadna.app\`"

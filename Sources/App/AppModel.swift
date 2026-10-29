@@ -606,6 +606,7 @@ final class AppModel {
 }
 
 enum FolderPicker {
+    @MainActor
     static func choose() -> String? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
