@@ -18,7 +18,10 @@ final class GitCLIEngineTests: XCTestCase {
         let root = try makeRepo()
         try write("uno\n", name: "a.txt", in: root)
         let repo = try await engine.openRepository(at: root.appendingPathComponent("a.txt").path)
-        XCTAssertEqual(repo.path, root.path)
+        XCTAssertEqual(
+            URL(fileURLWithPath: repo.path).resolvingSymlinksInPath().path,
+            root.resolvingSymlinksInPath().path
+        )
 
         var status = try await engine.status(in: repo, includeIgnored: false)
         XCTAssertEqual(status.branchName, "main")
