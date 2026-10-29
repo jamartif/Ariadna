@@ -130,13 +130,23 @@ private struct SnapshotSession {
         note(name, "ventana", windowPNG)
         note(name, "renderer", rendererPNG)
         note(name, "capa", layerPNG)
-        let candidates = [windowPNG, rendererPNG, layerPNG].compactMap { $0 }
-        guard let best = candidates.max(by: { lhs, rhs in
+        let windowVariety = windowPNG.map(colorVariety) ?? 0
+        let candidates = [rendererPNG, layerPNG].compactMap { $0 }
+        let fallback = candidates.max { lhs, rhs in
             let left = colorVariety(lhs)
             let right = colorVariety(rhs)
             if left != right { return left < right }
             return lhs.count < rhs.count
-        }) else {
+        }
+        // La ventana de AppKit pinta las listas. ImageRenderer a veces gana en
+        // tamaño con una vista amarilla sin filas.
+        let best: Data?
+        if let windowPNG, windowVariety >= 6 {
+            best = windowPNG
+        } else {
+            best = fallback ?? windowPNG
+        }
+        guard let best else {
             throw SnapshotFailure.message("\(name): no se pudo rasterizar la vista")
         }
         let variety = colorVariety(best)
