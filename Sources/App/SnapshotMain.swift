@@ -53,10 +53,19 @@ private struct SnapshotSession {
         guard model.commits.count >= 4 else {
             throw SnapshotFailure.message("historial corto: \(model.commits.map(\.subject))")
         }
-        let explained = model.commits.first { $0.subject == "Añade la altura del faro" } ?? model.commits[0]
+        var explained = model.commits.first { $0.subject == "Añade la altura del faro" } ?? model.commits[0]
         await model.selectCommit(explained.sha)
         if model.commitDiff.isEmpty {
-            throw SnapshotFailure.message("el commit elegido no tiene diff")
+            for commit in model.commits where commit.sha != explained.sha {
+                await model.selectCommit(commit.sha)
+                if !model.commitDiff.isEmpty {
+                    explained = commit
+                    break
+                }
+            }
+        }
+        if model.commitDiff.isEmpty {
+            throw SnapshotFailure.message("ningún commit tiene diff (\(explained.subject)) \(model.errorMessage ?? "")")
         }
         try await write("historial.png", SnapshotWorkspace(model: model), size: workspace, to: output)
 

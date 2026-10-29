@@ -151,7 +151,7 @@ public final class GitCLIEngine: GitServing, Sendable {
             arguments = ["diff", "--cached", "--unified=3", "--"] + paths
         case .commit(let revision):
             try PathSafety.validateRef(revision)
-            var show = ["show", "-m", "--first-parent", "--format=", "--unified=3", revision]
+            var show = ["show", "-m", "--first-parent", "--format=", "--patch", "--unified=3", revision]
             if !paths.isEmpty {
                 show.append("--")
                 show.append(contentsOf: paths)
