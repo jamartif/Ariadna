@@ -1,8 +1,10 @@
 #if os(macOS)
 import SwiftUI
 
+#if !SNAPSHOTS
 /// Punto de entrada en macOS. En Linux este archivo no se compila: el `#else`
 /// de abajo deja un ejecutable que explica que la UI es solo de Apple.
+/// Con `-D SNAPSHOTS` el ejecutable de capturas ocupa `@main`.
 @main
 struct AriadnaApp: SwiftUI.App {
     @State private var model = AppModel()
@@ -25,6 +27,7 @@ struct AriadnaApp: SwiftUI.App {
         }
     }
 }
+#endif
 #else
 import Foundation
 
