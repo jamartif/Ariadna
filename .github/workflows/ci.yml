@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gitleaks:
+    name: Secretos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz" | tar -xz -C /tmp gitleaks
+          sudo install -m 755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks detect --source . --redact --config .gitleaks.toml --verbose
+
+  macos:
+    name: macOS 15 build y tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fase 1 (sin IA)
+        run: |
+          swift build
+          swift test
+      - name: Capa de IA detrás del flag
+        run: |
+          ARIADNA_AI=1 swift build
+          ARIADNA_AI=1 swift test

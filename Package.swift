@@ -1,51 +1,65 @@
 // swift-tools-version: 6.0
 //
-// El manifiesto se evalúa en la máquina que compila.
-// En macOS fijamos el despliegue a macOS 14 (Sonoma), que es el objetivo del spec.
-// En Linux dejamos la lista vacía para que `swift build` / `swift test` no exijan SDK de Apple.
+// Ariadna. Destino de despliegue: macOS 15.
+// En Linux el manifiesto no fija plataformas: SwiftPM rechaza la lista vacía
+// y un destino solo-Apple a veces impide `swift test` del núcleo.
+//
+// La capa de IA (Copilot/Codex) es Fase 3. No entra en el build salvo que
+// se exporte ARIADNA_AI=1 antes de `swift build` / `swift test`.
 
 import PackageDescription
 
-let products: [Product] = [
-    .library(name: "GitForgeCore", targets: ["GitForgeCore"]),
-    .library(name: "GitForgeAI", targets: ["GitForgeAI"]),
-    .executable(name: "GitForge", targets: ["GitForgeApp"]),
+let enableAI = Context.environment["ARIADNA_AI"] == "1"
+
+var products: [Product] = [
+    .library(name: "GitCore", targets: ["GitCore"]),
+    .executable(name: "Ariadna", targets: ["App"]),
 ]
 
-let targets: [Target] = [
-    .target(name: "GitForgeCore", path: "Sources/GitForgeCore"),
-    .target(
-        name: "GitForgeAI",
-        dependencies: ["GitForgeCore"],
-        path: "Sources/GitForgeAI"
-    ),
+var targets: [Target] = [
+    .target(name: "GitCore", path: "Sources/GitCore"),
     .executableTarget(
-        name: "GitForgeApp",
-        dependencies: ["GitForgeCore", "GitForgeAI"],
-        path: "Sources/GitForgeApp"
+        name: "App",
+        dependencies: enableAI ? ["GitCore", "AriadnaAI"] : ["GitCore"],
+        path: "Sources/App",
+        exclude: ["Info.plist"],
+        swiftSettings: enableAI ? [.define("ARIADNA_AI")] : []
     ),
     .testTarget(
-        name: "GitForgeCoreTests",
-        dependencies: ["GitForgeCore"],
-        path: "Tests/GitForgeCoreTests"
-    ),
-    .testTarget(
-        name: "GitForgeAITests",
-        dependencies: ["GitForgeAI", "GitForgeCore"],
-        path: "Tests/GitForgeAITests"
+        name: "GitCoreTests",
+        dependencies: ["GitCore"],
+        path: "Tests/GitCoreTests"
     ),
 ]
+
+if enableAI {
+    products.append(.library(name: "AriadnaAI", targets: ["AriadnaAI"]))
+    targets.append(
+        .target(
+            name: "AriadnaAI",
+            dependencies: ["GitCore"],
+            path: "Sources/AriadnaAI"
+        )
+    )
+    targets.append(
+        .testTarget(
+            name: "AriadnaAITests",
+            dependencies: ["AriadnaAI", "GitCore"],
+            path: "Tests/AriadnaAITests"
+        )
+    )
+}
 
 #if os(macOS)
 let package = Package(
-    name: "GitForge",
-    platforms: [.macOS(.v14)],
+    name: "Ariadna",
+    platforms: [.macOS(.v15)],
     products: products,
     targets: targets
 )
 #else
 let package = Package(
-    name: "GitForge",
+    name: "Ariadna",
     products: products,
     targets: targets
 )

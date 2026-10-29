@@ -1,96 +1,91 @@
-# GitForge
+# Ariadna
 
-Cliente Git nativo para macOS, en Swift y SwiftUI, con propuestas de IA. La IA no escribe en el repositorio: propone un mensaje, un resumen o una resolución, y el usuario confirma.
+Cliente Git nativo para macOS, en Swift y SwiftUI. El núcleo llama al `git` del sistema. La ayuda de Copilot y Codex existe en el código, pero **no entra en el build de la Fase 1** salvo que pidas el flag.
 
-El núcleo llama al `git` del sistema (no a libgit2). Copilot y Codex se usan por sus CLI, con el login que ya tengas. No hay API keys.
+Bundle id: `es.javiermartinez.ariadna`. macOS mínimo: **15.0**.
 
-La especificación vive en [`specs/spec.md`](specs/spec.md). El plan y el estado de las tareas están en [`specs/plan.md`](specs/plan.md) y [`specs/tasks.md`](specs/tasks.md).
+La especificación está en [`specs/spec.md`](specs/spec.md). El plan y las tareas, en [`specs/plan.md`](specs/plan.md) y [`specs/tasks.md`](specs/tasks.md).
 
-## Qué hay hoy
+## Qué cubre la Fase 1
 
-Hecho y probado en Linux (el núcleo no depende de AppKit):
+- Abrir un repo (error claro si la carpeta no lo es), status porcelain v2, stage y unstage por archivo y por hunk.
+- Commit. Un mensaje vacío se rechaza. Si HEAD no está en una rama, la app avisa y no crea el commit hasta que lo confirmes.
+- Log y diff unificado.
+- Ramas: listar, crear, checkout y borrar. HEAD detached se ve en el modelo y en la barra de commit.
+- Fetch, pull (merge o rebase) y push con upstream.
+- Merge y editor de conflictos a tres vías (ours / base / theirs). Eso se queda: no es Fase 3.
+- Cola: las mutaciones de git van de una en una; un refresco de estado se puede cancelar y no publica un estado a medias.
+- `ProcessRunner` con timeout, cancelación y PATH del login shell (`$SHELL -l`).
 
-- Abrir un repo, status porcelain v2, stage y unstage por archivo y por hunk, commit, log y diff.
-- Ramas: crear, renombrar, checkout, borrar, HEAD detached.
-- Merge (fast-forward y `--no-ff`), conflictos a tres vías (ours / base / theirs), escribir la resolución solo con confirmación, marcar resuelto, continuar y abortar.
-- Fetch, pull y push.
-- Proveedores `copilot -p … -s` y `codex exec --json`, con un protocolo común. Las sugerencias nacen en `pending`. Aceptarlas no llama a git.
-- Tests: 24 de `GitForgeCore` y 8 de `GitForgeAI`.
-
-En la app SwiftUI (código listo, no ejecutado en esta máquina): bienvenida, cambios, historial, estudio de conflicto, ajustes y la hoja de propuesta.
-
-Pendiente: clone/init, amend, stash, tags, rebase interactivo, diff lado a lado, grafo, Copilot SDK, Codex app-server, icono y notarización. El detalle está en `specs/tasks.md`.
-
-## Compilar y ejecutar en macOS
-
-Hace falta macOS 14 o posterior y Xcode 16 o posterior (Swift 6).
+La capa de IA (protocolo, Copilot CLI, Codex CLI, hoja de propuesta) sigue en `Sources/AriadnaAI`. Para compilarla:
 
 ```bash
-git clone <este-repo>
-cd GitForge
+ARIADNA_AI=1 swift test
+```
+
+Sin esa variable, `swift build` y `swift test` no la enlazan.
+
+## Probarlo en un Mac
+
+Hace falta macOS 15 o posterior y Xcode 16 o posterior (Swift 6).
+
+```bash
+git clone <url-del-repo>
+cd <carpeta>
+git config core.hooksPath .githooks
+brew install gitleaks
+swift test
 open Package.swift
 ```
 
-En Xcode, elige el scheme **GitForge** y pulsa Run. También vale por terminal, con el toolchain de Xcode:
+En Xcode, scheme **Ariadna**, Run. También:
 
 ```bash
-swift test
-swift run GitForge
+swift run Ariadna
 ```
 
-`swift test` no necesita la UI. `swift run` abre la ventana.
+`swift test` no abre la ventana. `swift run Ariadna` sí, en tu Mac. En Linux el mismo ejecutable solo escribe que la interfaz es de macOS 15 y sale con código 64.
 
-La app no va a la Mac App Store. El sandbox de la tienda impide lanzar el `git`, `copilot` y `codex` del sistema y usar el agente SSH. La distribución prevista es fuera de la tienda (Developer ID), más adelante.
+Recientes: `~/Library/Application Support/Ariadna/recents.json`.
 
-Al abrir un repo, la app guarda recientes en `~/Library/Application Support/GitForge/`.
+El identificador del bundle está en `Sources/App/Info.plist` y en `AriadnaIdentity.bundleIdentifier`. SwiftPM no empaqueta un `.app` firmado; el plist queda listo para cuando se arme el bundle.
 
-## Linux (solo núcleo)
+## Login de los CLI (solo con el flag de IA)
 
-En Linux se compilan `GitForgeCore` y `GitForgeAI`, y pasa `swift test`. El ejecutable existe, pero la interfaz SwiftUI no: al lanzarlo sale un aviso y el código 64. Hace falta Swift 6.
-
-```bash
-swift test
-swift build
-```
-
-## Login de los CLI
-
-La app no pide claves. Usa la sesión que ya tengas.
-
-Copilot (suscripción GitHub Copilot):
+La app no pide API keys. Usa el login que ya tengas.
 
 ```bash
-# instalación: https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli
 copilot login
-copilot --version
-```
-
-Codex (cuenta ChatGPT, no una API key de OpenAI):
-
-```bash
-# instalación: https://developers.openai.com/codex/cli
 codex login
-codex --version
 ```
 
-En Ajustes se elige Automático, Copilot o Codex, y la ruta del binario si no está en el `PATH`. Si falta el login, el error dice qué comando ejecutar.
-
-Copilot se lanza como `copilot -p <prompt> -s --no-ask-user`, con `shell` y `write` denegados. Codex se lanza como `codex exec --json --sandbox read-only`. El diff viaja dentro del prompt. El proceso no usa el directorio del repo como cwd, para que un descuido del agente no edite archivos. Aun así, `ps` puede mostrar el prompt: es una limitación de `-p` y de `codex exec`, y la app no lo escribe en ningún log.
+Con `ARIADNA_AI=1`, en Ajustes aparecen el proveedor y las rutas de `copilot` y `codex`. Copilot se lanza como `copilot -p … -s` sin permiso de shell ni de escritura. Codex, como `codex exec --json --sandbox read-only`. Nada de eso se aplica al repo hasta que tú confirmas.
 
 ## Módulos
 
-| Target | Qué es |
-| --- | --- |
-| `GitForgeCore` | Modelos, procesos, parsers y `GitCLIEngine` |
-| `GitForgeAI` | `AIProviding`, Copilot, Codex, orquestador |
-| `GitForgeApp` | App SwiftUI. En Linux solo el aviso |
+| Target | Qué es | Build por defecto |
+| --- | --- | --- |
+| `GitCore` | Modelos, procesos, parsers, `GitCLIEngine` | Sí |
+| `GitCoreTests` | Tests del núcleo | Sí |
+| `App` | SwiftUI. Producto ejecutable `Ariadna` | Sí (la UI solo en macOS) |
+| `AriadnaAI` | Copilot y Codex | No. Hace falta `ARIADNA_AI=1` |
 
-Si vienes de C#: un `protocol` es una `interface`, un `actor` se parece a un objeto al que solo se entra con `await`, y `@MainActor` es el hilo de la UI.
+Si vienes de C#: un `protocol` es una `interface`, y `@MainActor` es el hilo de la UI.
+
+## Secretos
+
+El repo va a ser público. `.gitignore` excluye `.env*`, certificados y claves. El hook `.githooks/pre-commit` ejecuta `gitleaks protect --staged`. Actívalo con:
+
+```bash
+sh scripts/install-git-hooks.sh
+```
+
+Ese script hace `git config core.hooksPath .githooks` solo en este clon. CI (`.github/workflows/ci.yml`) vuelve a pasar gitleaks sobre todo el historial y, en un runner `macos-15`, hace `swift build` y `swift test` de la Fase 1 y otra vez con `ARIADNA_AI=1`.
 
 ## Qué no se pudo comprobar aquí
 
-El entorno de esta fundación es Linux, sin SDK de macOS y sin los CLI de Copilot y Codex.
+El entorno de esta entrega es Linux, sin SDK de macOS.
 
-- `swift build` y `swift test` sí se ejecutaron. Los 32 tests pasaron.
-- La app SwiftUI está en el target, pero el compilador de Linux no typechequea el código dentro de `#if os(macOS)`. Hay que abrir el paquete en Xcode y darle a Run.
-- Los proveedores de IA se probaron con un doble que graba los argumentos. No hubo una llamada real a `copilot` ni a `codex`.
+- `swift test` del núcleo sí corre aquí.
+- La app SwiftUI no se typechequea en Linux: el código está dentro de `#if os(macOS)`. El workflow de CI en `macos-15` es el que la compila.
+- Copilot y Codex no están instalados. Con el flag apagado ni siquiera se compilan. Con `ARIADNA_AI=1` los tests usan un doble, no los CLI reales.

@@ -1,8 +1,8 @@
-# GitForge — cliente Git nativo para macOS con IA
+# Ariadna — cliente Git nativo para macOS con IA
 
 Especificación de producto. Pensada para alimentar Spec-Driven Development y para que Javier (desarrollador C#, macOS, uso personal) pueda iterar sin redescubrir decisiones.
 
-Nombre provisional: **GitForge**. Bundle id provisional: `app.gitforge.macos` (todavía no hay `.app` empaquetada).
+Nombre: **Ariadna**. Bundle id: `es.javiermartinez.ariadna`. macOS mínimo: 15.0.
 
 ## 1. Visión y usuario
 
@@ -76,8 +76,8 @@ SwiftUI  →  AppModel / RepositorySession
                        └─ CodexExecProvider   →  codex
 ```
 
-- UI: SwiftUI, Observation, async/await. macOS 14+. AppKit solo para el panel de abrir carpeta.
-- Persistencia: JSON en Application Support (macOS) o `~/.config/gitforge` (Linux). Sin cuenta propia.
+- UI: SwiftUI, Observation, async/await. macOS 15+. AppKit solo para el panel de abrir carpeta. La capa de IA se compila solo con `ARIADNA_AI=1` (Fase 3). Merge y el editor a tres vías forman parte del núcleo y se compilan siempre.
+- Persistencia: JSON en Application Support (macOS) o `~/.config/ariadna` (Linux). Sin cuenta propia.
 - Git por CLI, no libgit2. Porcelain v2 (`git status --porcelain=v2 -z`), diff unificado, `git log` con separadores ASCII.
 - Las llamadas a `git` van en serie por motor para no pisar el índice. La IA no entra en esa cola.
 - Tests: XCTest, repos temporales de verdad para git, y un doble de `ProcessRunning` para los CLI.
@@ -127,8 +127,8 @@ Atajos: ⌘O volver a la bienvenida, ⌘↩ commit. La UI está en español. Los
 
 ## 11. Decisiones cerradas para esta entrega
 
-1. Nombre GitForge, hasta que se elija otro.
-2. macOS mínimo 14. Swift tools 6.0.
+1. Nombre Ariadna. Bundle id `es.javiermartinez.ariadna`.
+2. macOS mínimo 15. Swift tools 6.0.
 3. Una ventana, un repo. Los recientes se guardan.
 4. Sin clone ni init.
 5. No se embebe el binario de Copilot ni el de Codex.

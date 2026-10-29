@@ -1,73 +1,60 @@
-# Tareas del MVP
+# Tareas
 
-Estado real después de la fundación. `[x]` significa implementado y cubierto por tests en Linux, o presente en la UI SwiftUI (esa UI no se ha compilado en Mac).
+Estado después de alinear la Fase 1 con el PM. `[x]` significa hecho en el código. Los tests del núcleo se ejecutaron en Linux. La app SwiftUI no se ha ejecutado aquí.
 
 ## Fase 0 — Spec
 
-- [x] `specs/spec.md` como fuente de verdad
-- [x] `specs/plan.md` y esta lista
-- [x] Nombre provisional GitForge y macOS 14 documentados
-- [ ] Elegir nombre definitivo y bundle id
-- [ ] Inicializar github/spec-kit (`constitution` / `specify`) si se quiere el flujo completo
+- [x] `specs/spec.md`, `specs/plan.md` y esta lista
+- [x] Nombre **Ariadna**, bundle id `es.javiermartinez.ariadna`
+- [x] macOS mínimo 15.0
+- [ ] Flujo completo de github/spec-kit (`constitution` / `specify`) si se quiere el CLI de Spec Kit además de estos archivos
 
 ## Fase 1 — Núcleo Git
 
-- [x] Paquete Swift con módulos separados
-- [x] `ProcessRunner` con timeout, cancelación y entorno sin variables que parezcan tokens
-- [x] Abrir repo (también desde un archivo dentro del repo) y rechazar carpetas que no lo son
-- [x] `git status --porcelain=v2 -z` (preparado, sin preparar, sin seguimiento, ignorados, renombres, conflictos, detached, repo sin commits)
+- [x] Paquete: `GitCore`, `GitCoreTests`, `App` (ejecutable `Ariadna`)
+- [x] `ProcessRunner`: timeout, cancelación, entorno sin variables que parezcan tokens, PATH del login shell
+- [x] Abrir repo y error si no lo es
+- [x] `git status --porcelain=v2 -z`
 - [x] Stage y unstage por archivo
-- [x] Stage y unstage de un hunk (`git apply --cached`)
-- [x] Commit con mensaje multilínea; vacío y “nothing to commit” traducidos
-- [x] Log y diff unificado (worktree, índice, commit)
-- [x] Ramas: crear, renombrar, checkout, borrar, detached HEAD
-- [x] Fetch, pull y push (probado contra un remoto bare local)
-- [x] Recientes y favoritos en JSON
+- [x] Stage y unstage de hunk: aislado, contiguo, CRLF, sin salto final, ruta con espacios y Unicode
+- [x] Commit. Mensaje vacío rechazado. HEAD detached visible y aviso antes de commitear fuera de rama
+- [x] Log y diff unificado
+- [x] Ramas: listar, crear, checkout, borrar (también renombrar)
+- [x] Fetch, pull merge, pull rebase y push con upstream
+- [x] Cola serial de mutaciones git y refresco cancelable (no publica estado si se cancela)
+- [x] Recientes y favoritos
+- [x] `.gitignore` estricto y gitleaks en `.githooks/pre-commit` y en CI
+- [x] Workflow de CI en `macos-15`: `swift build` + `swift test`, y otra pasada con `ARIADNA_AI=1`
 - [ ] Stage por líneas sueltas
-- [ ] Amend seguro (solo HEAD propio y no pusheado)
-- [ ] Descartar archivos sin seguimiento (`git clean`) — a propósito no está, borra datos
-- [ ] Búsqueda de commits en todo el historial (la UI filtra solo los que ya cargó)
+- [ ] Amend seguro
+- [ ] `git clean` de no rastreados (a propósito no está)
+- [ ] Búsqueda en todo el historial (la UI filtra lo ya cargado)
 - [ ] Grafo de commits
+- [ ] Compilar la app en el Mac de Javier (CI lo intenta; este entorno no tiene SDK de Apple)
 
-## Fase 2 — Conflictos manuales
+## Merge y conflictos
+
+Se mantienen en el núcleo, no se mueven a otra fase.
 
 - [x] Merge ff, no-ff y “already up to date”
-- [x] Detección de conflictos y modelo ours / base / theirs desde el índice
+- [x] Modelo ours / base / theirs
 - [x] Marcadores, incluido diff3, y elección por hunk sin escribir disco
-- [x] Escribir el archivo solo con `confirmed: true` (la sesión también lo exige)
+- [x] Escribir el archivo solo con confirmación
 - [x] Marcar resuelto, continuar y abortar
-- [x] Rechazar rutas que se salen del repo
-- [x] Estado de rebase / cherry-pick reconocido para abort/continue (sin UI dedicada de rebase)
-- [ ] Tests de rebase y cherry-pick con conflicto (el código está; el fixture no)
+- [x] Editor de tres vías en la UI
+- [ ] Tests de rebase y cherry-pick con conflicto (el código de abort/continue está; el fixture no)
 
-## Fase 3 y 4 — IA
+## Fase 3 — IA (código presente, build apagado)
 
-- [x] Protocolo `AIProviding`
-- [x] `CopilotCLIProvider` (`copilot -p … -s`) sin herramientas de shell ni escritura
-- [x] `CodexExecProvider` (`codex exec --json`, sandbox read-only)
-- [x] Parser del JSONL de Codex (`agent_message` y `assistant_message`)
-- [x] Tope de contexto: no se lanza el proceso si el diff no cabe
-- [x] Orquestador Auto con fallback; un proveedor elegido a mano no cambia en silencio
-- [x] Error de login con la orden concreta
-- [x] Aceptar o rechazar no vuelve a llamar al CLI ni a git
-- [x] Hoja de la UI: usar mensaje, aplicar al editor, copiar, regenerar, descartar
-- [ ] Probar contra los CLI reales de Javier (aquí no están instalados; los tests usan un doble)
-- [ ] Copilot SDK y Codex app-server
-- [ ] Streaming de la respuesta
+El target `AriadnaAI` no se compila salvo `ARIADNA_AI=1`.
 
-## App macOS
-
-- [x] Target ejecutable `GitForge` con SwiftUI en `#if os(macOS)`
-- [x] Bienvenida, workspace, commit, ramas, historial, conflictos, ajustes
-- [x] Confirmaciones de abortar, borrar rama, escribir resolución y descartar cambios
-- [ ] Compilar y ejecutar en macOS (no hay SDK de Apple en el entorno de build)
-- [ ] Atajos ⌘⇧S (stage) y espacio para hunk
-- [ ] Diff lado a lado
-- [ ] Icono, `.app`, Hardened Runtime, notarización
-- [ ] Onboarding si falta `copilot` o `codex` en el PATH (hoy el error aparece al usarlos)
+- [x] Protocolo, Copilot CLI, Codex CLI, orquestador, tope de contexto, hoja de propuesta
+- [x] Tests del doble de proceso cuando el flag está activo
+- [ ] Probar contra los CLI reales de Javier
+- [ ] Copilot SDK, Codex app-server, streaming
 
 ## Comprobación de esta entrega
 
-- [x] `swift build` en Linux (Swift 6.4.1)
-- [x] `swift test`: 24 tests de `GitForgeCore` y 8 de `GitForgeAI`, todos en verde
-- [ ] `swift build` / Run en Xcode sobre macOS
+- [x] `swift test` en Linux: 36 tests de `GitCoreTests`
+- [x] `ARIADNA_AI=1 swift test` en Linux: esos 36 más 8 de `AriadnaAITests`
+- [ ] Run de la app en macOS 15 (lo hace el workflow de CI y, en local, Javier)

@@ -1,0 +1,14 @@
+title = "Ariadna"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Identificadores públicos y fixtures de test, no credenciales."
+paths = [
+    '''Info\.plist''',
+    '''specs/.*''',
+]
+regexes = [
+    '''es\.javiermartinez\.ariadna''',
+]

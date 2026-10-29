@@ -1,0 +1,9 @@
+#!/bin/sh
+# Escanea lo que va a entrar en el commit. El repo es público.
+set -e
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "gitleaks no está en el PATH." >&2
+    echo "Instálalo (brew install gitleaks) y vuelve a intentar el commit." >&2
+    exit 1
+fi
+gitleaks protect --staged --redact --no-banner --config .gitleaks.toml

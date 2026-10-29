@@ -1,8 +1,47 @@
+# Swift Package Manager
 .build/
 .swiftpm/
-*.xcodeproj/xcuserdata/
+Packages/
+Package.resolved
+*.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcworkspace/xcuserdata/
+
+# Xcode
 DerivedData/
+build/
+*.xcodeproj/xcuserdata/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Secretos, claves y certificados. El repo es público.
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+secrets.json
+credentials.json
+*.keystore
+
+# Sistema
 .DS_Store
 *.swp
+*~
+
+# Herramientas locales del agente
 /agent-tools/
