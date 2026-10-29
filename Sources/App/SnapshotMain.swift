@@ -122,12 +122,17 @@ private struct SnapshotSession {
         note(name, "renderer", rendererPNG)
         note(name, "capa", layerPNG)
         let candidates = [windowPNG, rendererPNG, layerPNG].compactMap { $0 }
-        guard let best = candidates.max(by: { colorVariety($0) < colorVariety($1) }) else {
+        guard let best = candidates.max(by: { lhs, rhs in
+            let left = colorVariety(lhs)
+            let right = colorVariety(rhs)
+            if left != right { return left < right }
+            return lhs.count < rhs.count
+        }) else {
             throw SnapshotFailure.message("\(name): no se pudo rasterizar la vista")
         }
         let variety = colorVariety(best)
         fputs("\(name): \(best.count) bytes, variedad \(variety)\n", stderr)
-        if variety < 8 || best.count < 8_000 {
+        if variety < 4 || best.count < 20_000 {
             throw SnapshotFailure.message("\(name): la captura parece vacía (\(best.count) bytes, variedad \(variety))")
         }
         try best.write(to: directory.appendingPathComponent(name))
