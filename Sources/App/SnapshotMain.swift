@@ -149,13 +149,13 @@ private struct SnapshotSession {
         hosting.layoutSubtreeIfNeeded()
         await pump(1.2)
         window.displayIfNeeded()
-        let windowID = CGWindowID(window.windowNumber)
-        guard let image = CGWindowListCreateImage(.null, .optionIncludingWindow, windowID, [.boundsIgnoreFraming, .bestResolution]) else {
+        let bounds = hosting.bounds
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: bounds) else {
             window.orderOut(nil)
             return nil
         }
+        hosting.cacheDisplay(in: bounds, to: rep)
         window.orderOut(nil)
-        let rep = NSBitmapImageRep(cgImage: image)
         return rep.representation(using: .png, properties: [:])
     }
 
