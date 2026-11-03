@@ -58,6 +58,10 @@ final class AppModel {
     var commitMessage = ""
     /// Si está activo, el botón de commit corrige el último commit (`--amend`).
     var amendLastCommit = false
+    /// Aviso si el commit que se va a corregir es un merge. Nil en otro caso.
+    var amendWarning: String?
+    /// Mensaje que Ariadna puso en el cuadro al activar el amend.
+    private var amendPrefilledMessage: String?
     /// Texto de la última búsqueda en todo el historial. Nil si se ven los últimos commits.
     var historySearch: String?
     var commitTemplate = ""
@@ -141,7 +145,7 @@ final class AppModel {
             self.session = session
             self.repository = repo
             self.historySearch = nil
-            self.amendLastCommit = false
+            self.resetAmend()
             self.commits = []
             self.selectedCommitSHA = nil
             self.commitDiff = []
@@ -229,20 +233,38 @@ final class AppModel {
         }
     }
 
-    /// Activa o desactiva el modo amend. Al activarlo con el cuadro vacío,
-    /// trae el mensaje del último commit para editarlo.
+    /// Activa o desactiva el modo amend.
+    ///
+    /// Al activarlo, trae el mensaje del último commit si el cuadro está vacío y
+    /// avisa si ese commit es un merge. Al desactivarlo, borra el mensaje traído
+    /// si nadie lo ha tocado, para que un commit normal no lo herede.
     func setAmend(_ enabled: Bool) async {
-        amendLastCommit = enabled
-        guard enabled, commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard enabled else {
+            commitMessage = AmendDraft.messageAfterDisabling(current: commitMessage, prefilled: amendPrefilledMessage)
+            resetAmend()
+            return
+        }
+        amendLastCommit = true
         await perform {
             guard let session = self.session else { return }
             guard let last = try await session.log(limit: 1).first else {
-                self.amendLastCommit = false
+                self.resetAmend()
                 self.errorMessage = "Todavía no hay ningún commit que corregir."
                 return
             }
-            self.commitMessage = last.body.isEmpty ? last.subject : last.subject + "\n\n" + last.body
+            self.amendWarning = AmendDraft.mergeWarning(for: last)
+            if self.commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let message = AmendDraft.message(for: last)
+                self.commitMessage = message
+                self.amendPrefilledMessage = message
+            }
         }
+    }
+
+    private func resetAmend() {
+        amendLastCommit = false
+        amendWarning = nil
+        amendPrefilledMessage = nil
     }
 
     private func amendNow() async {
@@ -250,7 +272,7 @@ final class AppModel {
             guard let session = self.session else { return }
             _ = try await session.amendLastCommit(message: self.commitMessage)
             self.commitMessage = ""
-            self.amendLastCommit = false
+            self.resetAmend()
             try await self.pull(from: session)
             self.commits = try await session.log(limit: 200)
             self.historySearch = nil

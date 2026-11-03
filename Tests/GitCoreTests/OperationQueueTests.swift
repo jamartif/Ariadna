@@ -8,6 +8,7 @@ final class OperationQueueTests: XCTestCase {
         XCTAssertFalse(GitCLIEngine.isGitMutation(["-c", "core.quotepath=false", "diff", "--cached"]))
         XCTAssertFalse(GitCLIEngine.isGitMutation(["log", "-n", "5"]))
         XCTAssertFalse(GitCLIEngine.isGitMutation(["remote", "-v"]))
+        XCTAssertFalse(GitCLIEngine.isGitMutation(["merge-base", "--is-ancestor", "abc", "HEAD"]))
         XCTAssertTrue(GitCLIEngine.isGitMutation(["add", "--", "a.txt"]))
         XCTAssertTrue(GitCLIEngine.isGitMutation(["commit", "-F", "-"]))
         XCTAssertTrue(GitCLIEngine.isGitMutation(["remote", "add", "origin", "/tmp/bare"]))
@@ -43,8 +44,13 @@ final class OperationQueueTests: XCTestCase {
         let repo = Repository(path: "/tmp/ariadna-locale", gitDir: "/tmp/ariadna-locale/.git")
         _ = try await engine.status(in: repo, includeIgnored: false)
         let environment = try XCTUnwrap(runner.lastEnvironment)
-        XCTAssertEqual(environment["LC_ALL"], "en_US.UTF-8")
-        XCTAssertEqual(environment["LANG"], "en_US.UTF-8")
+        XCTAssertEqual(environment["LC_ALL"], GitCLIEngine.messageLocale)
+        XCTAssertEqual(environment["LANG"], GitCLIEngine.messageLocale)
+        #if os(Linux)
+        XCTAssertEqual(GitCLIEngine.messageLocale, "C.UTF-8")
+        #else
+        XCTAssertEqual(GitCLIEngine.messageLocale, "en_US.UTF-8")
+        #endif
         XCTAssertEqual(environment["LANGUAGE"], "en")
         XCTAssertEqual(environment["HOME"], "/tmp")
     }

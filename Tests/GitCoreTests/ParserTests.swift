@@ -87,6 +87,27 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(commits.map(\.subject), ["uno", "dos"])
     }
 
+    func testAmendDraftPrefillsAndClearsUntouchedMessage() {
+        let simple = Commit(sha: "a", parents: ["p"], subject: "Asunto", body: "", authorName: "Ada", authorEmail: "a@b", authorDateISO: "", refs: [])
+        let withBody = Commit(sha: "b", parents: ["p"], subject: "Asunto", body: "Cuerpo", authorName: "Ada", authorEmail: "a@b", authorDateISO: "", refs: [])
+        XCTAssertEqual(AmendDraft.message(for: simple), "Asunto")
+        XCTAssertEqual(AmendDraft.message(for: withBody), "Asunto\n\nCuerpo")
+
+        // Sin tocar: se borra al desactivar.
+        XCTAssertEqual(AmendDraft.messageAfterDisabling(current: "Asunto", prefilled: "Asunto"), "")
+        // Editado: se respeta.
+        XCTAssertEqual(AmendDraft.messageAfterDisabling(current: "Asunto corregido", prefilled: "Asunto"), "Asunto corregido")
+        // Ariadna no puso nada (el usuario ya había escrito): se respeta.
+        XCTAssertEqual(AmendDraft.messageAfterDisabling(current: "Mío", prefilled: nil), "Mío")
+    }
+
+    func testAmendDraftWarnsOnMergeCommit() {
+        let normal = Commit(sha: "a", parents: ["p"], subject: "s", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
+        let merge = Commit(sha: "m", parents: ["p1", "p2"], subject: "Merge", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
+        XCTAssertNil(AmendDraft.mergeWarning(for: normal))
+        XCTAssertNotNil(AmendDraft.mergeWarning(for: merge))
+    }
+
     func testBranchTrackParser() {
         XCTAssertEqual(BranchListParser.parseTrack(" [ahead 2, behind 3]").ahead, 2)
         XCTAssertEqual(BranchListParser.parseTrack(" [ahead 2, behind 3]").behind, 3)
