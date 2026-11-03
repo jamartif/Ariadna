@@ -314,13 +314,13 @@ struct CommitBar: View {
             }
             .toggleStyle(.checkbox)
             .disabled(model.isBusy || model.status.isUnborn)
+            .help("Rehace el último commit con este mensaje y lo preparado. Ariadna se niega si ese commit ya está en un remoto.")
             if model.amendLastCommit, let warning = model.amendWarning {
                 Label(warning, systemImage: "arrow.triangle.merge")
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .help("Rehace el último commit con este mensaje y lo preparado. Ariadna se niega si ese commit ya está en un remoto.")
             HStack {
                 #if ARIADNA_AI
                 Button("Generar mensaje", systemImage: "sparkles") { Task { await model.generateCommitMessage() } }
