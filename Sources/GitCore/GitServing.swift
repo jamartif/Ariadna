@@ -16,7 +16,11 @@ public protocol GitServing: Sendable {
     func stageHunk(_ hunk: DiffHunk, path: String, in repository: Repository) async throws
     func unstageHunk(_ hunk: DiffHunk, path: String, in repository: Repository) async throws
     func commit(message: String, in repository: Repository, allowDetached: Bool) async throws -> String
+    /// `git commit --amend` con comprobaciones: nunca reescribe un commit ya publicado.
+    func amendLastCommit(message: String, in repository: Repository) async throws -> String
     func log(in repository: Repository, limit: Int) async throws -> [Commit]
+    /// Busca por mensaje, autor o hash en todo el historial de HEAD.
+    func searchLog(query: String, in repository: Repository, limit: Int) async throws -> [Commit]
     func diff(scope: DiffScope, paths: [String], in repository: Repository) async throws -> [FileDiff]
     func branches(in repository: Repository) async throws -> [Branch]
     /// Ramas de seguimiento (`origin/main`). No incluye `origin/HEAD`.

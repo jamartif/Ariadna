@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import SwiftUI
 import GitCore
 #if ARIADNA_AI
@@ -16,10 +17,20 @@ struct ConflictList: View {
                 model.selectConflict(path)
             }
         )) { file in
-            VStack(alignment: .leading, spacing: 2) {
-                Text(file.path)
-                Text(label(file.kind)).font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                StatusBadge(appearance: StatusAppearance(.unmerged))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(DisplayFormat.fileName(file.path)).lineLimit(1)
+                    Text(label(file.kind)).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if model.conflictResults[file.path] != nil {
+                    Image(systemName: "pencil.circle.fill")
+                        .foregroundStyle(.blue)
+                        .help("Hay una resolución en el editor sin escribir")
+                }
             }
+            .padding(.vertical, 2)
             .tag(file.path)
         }
         .overlay {
@@ -58,7 +69,8 @@ struct ConflictStudioView: View {
     var body: some View {
         if let file {
             VStack(alignment: .leading, spacing: 8) {
-                Text(file.path).font(.headline)
+                Label(file.path, systemImage: "arrow.triangle.merge")
+                    .font(.headline)
                 Text("Tres vías desde el índice de git. Pedir una propuesta no escribe el archivo.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -70,17 +82,22 @@ struct ConflictStudioView: View {
                 Text("Resultado").font(.headline)
                 TextEditor(text: resultBinding)
                     .font(.system(.body, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .padding(4)
                     .frame(minHeight: 140)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(.quaternary))
                     .accessibilityLabel("Resultado del conflicto")
                 HStack {
                     #if ARIADNA_AI
-                    Button("Pedir propuesta") { Task { await model.proposeResolution(path: path) } }
+                    Button("Pedir propuesta", systemImage: "sparkles") { Task { await model.proposeResolution(path: path) } }
                         .disabled(model.isBusy)
                     #endif
-                    Button("Escribir en el archivo…") { model.pathPendingWrite = path }
+                    Spacer()
+                    Button("Escribir en el archivo…", systemImage: "square.and.arrow.down") { model.pathPendingWrite = path }
                         .disabled(model.isBusy)
-                    Button("Marcar resuelto") { Task { await model.markResolved(path: path) } }
+                    Button("Marcar resuelto", systemImage: "checkmark.circle") { Task { await model.markResolved(path: path) } }
+                        .buttonStyle(.borderedProminent)
                         .disabled(model.isBusy)
                 }
             }
@@ -90,20 +107,21 @@ struct ConflictStudioView: View {
 
     @ViewBuilder
     private func panes(_ file: ConflictFile) -> some View {
-        sidePane("Nuestra", text: file.ours.content, missing: !file.ours.isPresent, binary: file.ours.isBinary) {
+        sidePane("Nuestra", color: .blue, text: file.ours.content, missing: !file.ours.isPresent, binary: file.ours.isBinary) {
             model.takeSide(.ours, path: path)
         }
-        sidePane("Base", text: file.base.content, missing: !file.base.isPresent, binary: file.base.isBinary) {
+        sidePane("Base", color: .gray, text: file.base.content, missing: !file.base.isPresent, binary: file.base.isBinary) {
             model.takeSide(.base, path: path)
         }
-        sidePane("De ellos", text: file.theirs.content, missing: !file.theirs.isPresent, binary: file.theirs.isBinary) {
+        sidePane("De ellos", color: .purple, text: file.theirs.content, missing: !file.theirs.isPresent, binary: file.theirs.isBinary) {
             model.takeSide(.theirs, path: path)
         }
     }
 
-    private func sidePane(_ title: String, text: String?, missing: Bool, binary: Bool, take: @escaping () -> Void) -> some View {
+    private func sidePane(_ title: String, color: Color, text: String?, missing: Bool, binary: Bool, take: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
+                Circle().fill(color).frame(width: 8, height: 8)
                 Text(title).font(.subheadline.weight(.semibold))
                 Spacer()
                 Button("Usar") { take() }
@@ -118,8 +136,9 @@ struct ConflictStudioView: View {
             }
             .frame(minHeight: 120, maxHeight: 220)
             .padding(6)
-            .background(Color.primary.opacity(0.04))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .background(color.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(color.opacity(0.25)))
             .accessibilityLabel("Panel \(title)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)

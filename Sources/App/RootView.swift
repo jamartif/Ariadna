@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import GitCore
 
 struct RootView: View {
     @Bindable var model: AppModel
@@ -58,16 +59,21 @@ struct RootView: View {
         } message: {
             Text(model.status.detachedCommitWarning ?? "HEAD está detached.")
         }
+        .animation(.snappy, value: model.infoMessage)
         .overlay(alignment: .bottom) {
             if let info = model.infoMessage {
-                Text(info)
+                Label(info, systemImage: "info.circle.fill")
                     .font(.callout)
-                    .padding(10)
-                    .background(.thinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .padding(.bottom, 12)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(Color.primary.opacity(0.08)))
+                    .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+                    .padding(.bottom, 16)
                     .onTapGesture { model.infoMessage = nil }
+                    .help("Pulsa para cerrar")
                     .accessibilityLabel(info)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }
@@ -85,27 +91,49 @@ struct WelcomeView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Ariadna")
-                .font(.largeTitle.bold())
-            Text(welcomeSubtitle)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack {
-                TextField("Ruta del repositorio", text: $model.pathDraft)
-                    .textFieldStyle(.roundedBorder)
-                Button("Examinar…") { model.browseAndFillPath() }
-                Button("Abrir") {
-                    Task { await model.open(path: model.pathDraft) }
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 16) {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 64, height: 64)
+                    .background(
+                        LinearGradient(colors: [.indigo, .purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    )
+                    .shadow(color: .purple.opacity(0.3), radius: 8, y: 4)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Ariadna")
+                        .font(.largeTitle.bold())
+                    Text(welcomeSubtitle)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .keyboardShortcut(.defaultAction)
-                .disabled(model.isBusy)
             }
 
-            if model.isBusy {
-                ProgressView("Abriendo…")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Abrir un repositorio")
+                    .font(.headline)
+                HStack {
+                    TextField("Ruta del repositorio", text: $model.pathDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { Task { await model.open(path: model.pathDraft) } }
+                    Button("Examinar…", systemImage: "folder") { model.browseAndFillPath() }
+                    Button("Abrir") {
+                        Task { await model.open(path: model.pathDraft) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(model.isBusy)
+                }
+                if model.isBusy {
+                    ProgressView("Abriendo…")
+                        .controlSize(.small)
+                }
             }
+            .padding(14)
+            .card()
 
             Text("Recientes")
                 .font(.headline)
@@ -116,30 +144,57 @@ struct WelcomeView: View {
                     description: Text("Abre una carpeta que ya tenga .git. Clonar e init quedan para una fase posterior.")
                 )
             } else {
-                List(model.recents) { recent in
-                    HStack {
+                List(sortedRecents) { recent in
+                    HStack(spacing: 10) {
+                        Image(systemName: "folder.fill")
+                            .font(.title2)
+                            .foregroundStyle(Palette.avatarColor(for: recent.name).gradient)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(recent.name).font(.body.weight(.semibold))
-                            Text(recent.path).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            Text(recent.path)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             if let branch = recent.lastBranch {
-                                Text(branch).font(.caption2).foregroundStyle(.tertiary)
+                                Label(branch, systemImage: "arrow.triangle.branch")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
                             }
                         }
                         Spacer()
-                        Button(recent.isFavorite ? "Quitar favorito" : "Favorito") {
+                        Button {
                             model.toggleFavorite(recent.path)
+                        } label: {
+                            Image(systemName: recent.isFavorite ? "star.fill" : "star")
+                                .foregroundStyle(recent.isFavorite ? Color.yellow : Color.secondary)
                         }
                         .buttonStyle(.borderless)
+                        .help(recent.isFavorite ? "Quitar de favoritos" : "Marcar como favorito")
                         Button("Abrir") {
                             Task { await model.open(path: recent.path) }
                         }
                         .disabled(model.isBusy)
                     }
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        Task { await model.open(path: recent.path) }
+                    }
                 }
+                .listStyle(.inset)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(28)
+        .frame(maxWidth: 860, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Favoritos primero; dentro de cada grupo se respeta el orden de uso.
+    private var sortedRecents: [RecentRepository] {
+        model.recents.filter(\.isFavorite) + model.recents.filter { !$0.isFavorite }
     }
 }
 
@@ -264,15 +319,19 @@ struct WorkspaceView: View {
 
     private var integrationBanner: some View {
         HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
             Text(model.integrationLabel)
+                .fontWeight(.medium)
             Spacer()
             Button("Continuar") { Task { await model.continueIntegration() } }
                 .disabled(model.isBusy || !model.conflicts.isEmpty)
             Button("Abortar") { model.confirmAbort = true }
                 .disabled(model.isBusy)
         }
-        .padding(8)
-        .background(.yellow.opacity(0.18))
+        .padding(10)
+        .background(.orange.opacity(0.14))
+        .overlay(alignment: .bottom) { Divider() }
         .accessibilityElement(children: .combine)
     }
 
@@ -305,16 +364,37 @@ struct WorkspaceView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            if let branch = model.status.branchName {
+                Label(branch, systemImage: model.status.isDetached ? "exclamationmark.triangle" : "arrow.triangle.branch")
+                    .labelStyle(.titleAndIcon)
+                    .font(.callout.weight(.medium))
+                    .help("Rama actual")
+            } else if model.status.isDetached {
+                Label("HEAD detached", systemImage: "exclamationmark.triangle")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(.orange)
+            }
+        }
         ToolbarItemGroup {
-            Button("Actualizar") { Task { await model.refresh() } }
-                .disabled(model.isBusy)
-            Button("Fetch") { Task { await model.fetch() } }
-                .disabled(model.isBusy)
-            Button("Pull") { Task { await model.pull() } }
-                .disabled(model.isBusy)
-            Button("Push") { Task { await model.push() } }
-                .disabled(model.isBusy)
             if model.isBusy { ProgressView().controlSize(.small) }
+            Button("Actualizar", systemImage: "arrow.clockwise") { Task { await model.refresh() } }
+                .keyboardShortcut("r", modifiers: .command)
+                .help("Volver a leer el estado (⌘R)")
+                .disabled(model.isBusy)
+            Button("Fetch", systemImage: "arrow.down.circle") { Task { await model.fetch() } }
+                .help("Traer cambios del remoto sin tocar tu rama")
+                .disabled(model.isBusy)
+            Button(model.status.behind > 0 ? "Pull (\(model.status.behind))" : "Pull", systemImage: "arrow.down.to.line") {
+                Task { await model.pull() }
+            }
+            .help("Traer e integrar los cambios del remoto")
+            .disabled(model.isBusy)
+            Button(model.status.ahead > 0 ? "Push (\(model.status.ahead))" : "Push", systemImage: "arrow.up.to.line") {
+                Task { await model.push() }
+            }
+            .help("Subir tus commits al remoto")
+            .disabled(model.isBusy)
         }
     }
 }

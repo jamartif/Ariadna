@@ -26,9 +26,11 @@ Estado después de alinear la Fase 1 con el PM. `[x]` significa hecho en el cód
 - [x] `.gitignore` estricto y gitleaks en `.githooks/pre-commit` y en CI
 - [x] Workflow de CI en `macos-15`: `swift build` + `swift test`, y otra pasada con `ARIADNA_AI=1`
 - [ ] Stage por líneas sueltas
-- [ ] Amend seguro
+- [x] Amend seguro: se niega si no hay commits, fuera de rama, con merge/rebase en curso o si el commit ya está en un remoto
 - [ ] `git clean` de no rastreados (a propósito no está)
-- [ ] Búsqueda en todo el historial (la UI filtra lo ya cargado)
+- [x] Búsqueda en todo el historial por mensaje, autor o hash (`searchLog`); la UI sigue filtrando al vuelo lo ya cargado
+- [x] Mensajes de git forzados en inglés para que la clasificación (merge, conflictos, nada que commitear) no dependa del idioma del Mac
+- [x] El parser del log ya no deja un salto de línea delante del hash a partir del segundo commit
 - [ ] Grafo de commits
 - [ ] Compilar la app en el Mac de Javier (CI lo intenta; este entorno no tiene SDK de Apple)
 

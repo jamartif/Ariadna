@@ -10,6 +10,8 @@ public enum GitError: Error, Sendable, Equatable, LocalizedError {
     case emptyCommitMessage
     /// HEAD detached. El commit no se hace hasta que el usuario confirme.
     case detachedHeadCommit
+    /// El amend no es seguro (sin commits, fuera de rama, integración en curso o ya publicado).
+    case cannotAmend(reason: String)
     /// `git switch` se negó porque pisaría cambios locales.
     case localChangesBlockCheckout(detail: String)
     /// La local ya existe y no apunta al mismo commit que la rama remota, o sigue a otra.
@@ -41,6 +43,8 @@ public enum GitError: Error, Sendable, Equatable, LocalizedError {
             return "El mensaje de commit está vacío."
         case .detachedHeadCommit:
             return "HEAD no está en una rama. El commit quedaría suelto. Confírmalo o crea una rama antes."
+        case .cannotAmend(let reason):
+            return "No corrijo el último commit. \(reason)"
         case .divergedLocalBranch(let local, let remote):
             return "La rama local «\(local)» no coincide con \(remote). No cambio de rama hasta que lo confirmes."
         case .localChangesBlockCheckout(let detail):

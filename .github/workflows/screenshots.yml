@@ -6,13 +6,20 @@ on:
     branches: [main]
     paths-ignore:
       - "docs/screenshots/**"
+  # En una PR solo se generan y se suben como artefacto: así un cambio de UI
+  # que rompa el renderizado se ve antes del merge. No se publica nada.
+  pull_request:
+    paths:
+      - "Sources/App/**"
+      - "scripts/render-snapshots.sh"
+      - ".github/workflows/screenshots.yml"
 
 permissions:
   contents: write
 
 concurrency:
-  group: screenshots-main
-  cancel-in-progress: false
+  group: screenshots-${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   png:
@@ -21,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'main' }}
           fetch-depth: 0
 
       - name: Generar PNG
@@ -30,11 +37,12 @@ jobs:
       - name: Subir artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
+          name: screenshots-${{ github.run_id }}
           path: docs/screenshots/*.png
           if-no-files-found: error
 
       - name: Publicar en docs/screenshots
+        if: github.event_name != 'pull_request'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

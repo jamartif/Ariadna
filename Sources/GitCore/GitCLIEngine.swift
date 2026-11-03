@@ -123,10 +123,9 @@ public final class GitCLIEngine: GitServing, Sendable {
 
     public func log(in repository: Repository, limit: Int) async throws -> [Commit] {
         let capped = max(1, min(limit, 2_000))
-        let format = "%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%b%x1f%D%x1e"
         let output = try await run(
             in: repository,
-            arguments: ["log", "-n", String(capped), "--pretty=format:\(format)"],
+            arguments: ["log", "-n", String(capped), "--pretty=format:\(Self.logFormat)"],
             allowNonZero: true
         )
         if output.exitCode != 0 {
@@ -137,6 +136,82 @@ public final class GitCLIEngine: GitServing, Sendable {
             throw failed(output, arguments: ["log"])
         }
         return CommitLogParser.parse(output.stdoutString)
+    }
+
+    /// Rehace el último commit con `message` y lo que haya preparado.
+    ///
+    /// Se niega si no hay commits, si HEAD no está en una rama, si hay un merge,
+    /// rebase o cherry-pick en curso, o si el commit ya está en alguna rama remota
+    /// (reescribirlo obligaría a un push forzado).
+    public func amendLastCommit(message: String, in repository: Repository) async throws -> String {
+        if message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw GitError.emptyCommitMessage
+        }
+        let current = try await status(in: repository, includeIgnored: false)
+        if current.isUnborn {
+            throw GitError.cannotAmend(reason: "Todavía no hay ningún commit que corregir.")
+        }
+        if current.isDetached {
+            throw GitError.cannotAmend(reason: "HEAD no está en una rama. Crea una rama antes de corregir el commit.")
+        }
+        let integration = try await integrationState(in: repository)
+        if integration != IntegrationState.none {
+            throw GitError.cannotAmend(reason: "Hay un merge, rebase o cherry-pick en curso. Termínalo o abórtalo antes.")
+        }
+        let published = try await remoteRefsContainingHEAD(in: repository)
+        if let first = published.first {
+            throw GitError.cannotAmend(
+                reason: "El último commit ya está en \(first). Corregirlo obligaría a un push forzado."
+            )
+        }
+        try await run(
+            in: repository,
+            arguments: ["commit", "--amend", "-F", "-"],
+            stdin: Data(message.utf8),
+            extraEnvironment: nonInteractiveGit
+        )
+        return try await requireHEAD(in: repository)
+    }
+
+    /// Busca en todo el historial de HEAD, no solo en lo cargado.
+    ///
+    /// Coincide (sin distinguir mayúsculas) con el mensaje, el autor o un prefijo
+    /// del hash. El texto se pasa a git como literal (`--fixed-strings`), no como regex.
+    public func searchLog(query: String, in repository: Repository, limit: Int) async throws -> [Commit] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else {
+            return try await log(in: repository, limit: limit)
+        }
+        if needle.contains("\0") || needle.contains("\n") {
+            throw GitError.invalidReference(needle)
+        }
+        let capped = max(1, min(limit, 2_000))
+        // Git combina --grep y --author con AND; aquí queremos OR, así que son dos pasadas.
+        let common = ["-n", String(capped), "--format=%H %ct", "--regexp-ignore-case", "--fixed-strings"]
+        var candidates = try await logStamps(common + ["--grep=\(needle)"], in: repository)
+        candidates += try await logStamps(common + ["--author=\(needle)"], in: repository)
+        if Self.looksLikeHash(needle) {
+            candidates += try await logStamps(["-n", "1", "--format=%H %ct", "\(needle)^{commit}", "--"], in: repository, missingIsEmpty: true)
+        }
+        var seen = Set<String>()
+        let unique = candidates.enumerated().filter { seen.insert($0.element.sha).inserted }
+        // De más nuevo a más viejo; con la misma fecha se respeta el orden en que git los recorrió.
+        let ordered = unique
+            .sorted { lhs, rhs in
+                lhs.element.time != rhs.element.time ? lhs.element.time > rhs.element.time : lhs.offset < rhs.offset
+            }
+            .prefix(capped)
+            .map { $0.element.sha }
+        guard !ordered.isEmpty else { return [] }
+        let output = try await run(
+            in: repository,
+            arguments: ["log", "--no-walk=unsorted", "--pretty=format:\(Self.logFormat)"] + ordered + ["--"]
+        )
+        return Array(CommitLogParser.parse(output.stdoutString).prefix(capped))
+    }
+
+    static func looksLikeHash(_ text: String) -> Bool {
+        (4...64).contains(text.count) && text.allSatisfy(\.isHexDigit)
     }
 
     public func diff(scope: DiffScope, paths: [String], in repository: Repository) async throws -> [FileDiff] {
@@ -420,6 +495,56 @@ public final class GitCLIEngine: GitServing, Sendable {
 
     // MARK: - Privado
 
+    /// Campos separados por US (0x1f) y commits por RS (0x1e). Lo lee `CommitLogParser`.
+    static let logFormat = "%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%b%x1f%D%x1e"
+
+    /// Fuerza los mensajes de git en inglés.
+    ///
+    /// El motor reconoce resultados por texto (`Already up to date`, `CONFLICT`,
+    /// `nothing to commit`…). Un git traducido (el de Homebrew, con el Mac en
+    /// español) los escribe en otro idioma y la clasificación fallaría.
+    /// Solo afecta a los mensajes: rutas y commits siguen siendo UTF-8.
+    static func englishMessages(_ environment: [String: String]) -> [String: String] {
+        var result = environment
+        result["LC_ALL"] = "en_US.UTF-8"
+        result["LANG"] = "en_US.UTF-8"
+        result["LANGUAGE"] = "en"
+        return result
+    }
+
+    /// `git log --format="%H %ct"`: hash y fecha de commit (epoch).
+    private func logStamps(
+        _ arguments: [String],
+        in repository: Repository,
+        missingIsEmpty: Bool = false
+    ) async throws -> [(sha: String, time: Int)] {
+        let output = try await run(in: repository, arguments: ["log"] + arguments, allowNonZero: true)
+        if output.exitCode != 0 {
+            if missingIsEmpty || output.stderrString.contains("does not have any commits") {
+                return []
+            }
+            throw failed(output, arguments: ["log"] + arguments)
+        }
+        return output.stdoutString
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line -> (sha: String, time: Int)? in
+                let parts = line.split(separator: " ")
+                guard parts.count == 2, let time = Int(parts[1]) else { return nil }
+                return (String(parts[0]), time)
+            }
+    }
+
+    private func remoteRefsContainingHEAD(in repository: Repository) async throws -> [String] {
+        let output = try await run(
+            in: repository,
+            arguments: ["for-each-ref", "--contains", "HEAD", "--format=%(refname:short)", "refs/remotes"]
+        )
+        return output.stdoutString
+            .split(whereSeparator: \.isNewline)
+            .map { trim(String($0)) }
+            .filter { !$0.isEmpty && !$0.hasSuffix("/HEAD") }
+    }
+
     private func appendingUntrackedDiffs(_ parsed: [FileDiff], paths: [String], in repository: Repository) async throws -> [FileDiff] {
         guard !paths.isEmpty else { return parsed }
         let already = Set(parsed.filter { !$0.hunks.isEmpty }.map(\.path))
@@ -682,7 +807,7 @@ public final class GitCLIEngine: GitServing, Sendable {
         extraEnvironment: [String: String] = [:],
         allowNonZero: Bool = false
     ) async throws -> ProcessOutput {
-        var environment = self.environment
+        var environment = Self.englishMessages(self.environment)
         for (key, value) in extraEnvironment {
             environment[key] = value
         }

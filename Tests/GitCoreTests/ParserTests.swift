@@ -77,6 +77,16 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(commits[0].shortSHA, "abc")
     }
 
+    func testCommitLogParserTrimsSeparatorNewlineFromHashes() {
+        let one = "aaa\0\0Ada\0ada@example.com\02026-01-02T03:04:05Z\0uno\0\0\u{1e}"
+        let two = "\nbbb\0aaa\0Ada\0ada@example.com\02026-01-01T03:04:05Z\0dos\0\0\u{1e}"
+        let raw = (one + two)
+            .replacingOccurrences(of: "\0", with: "\u{1f}")
+        let commits = CommitLogParser.parse(raw)
+        XCTAssertEqual(commits.map(\.sha), ["aaa", "bbb"])
+        XCTAssertEqual(commits.map(\.subject), ["uno", "dos"])
+    }
+
     func testBranchTrackParser() {
         XCTAssertEqual(BranchListParser.parseTrack(" [ahead 2, behind 3]").ahead, 2)
         XCTAssertEqual(BranchListParser.parseTrack(" [ahead 2, behind 3]").behind, 3)

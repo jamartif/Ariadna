@@ -34,6 +34,28 @@ final class OperationQueueTests: XCTestCase {
         XCTAssertEqual(writes.finished, 2)
     }
 
+    func testGitRunsWithEnglishMessages() async throws {
+        let runner = OverlapRunner()
+        let engine = GitCLIEngine(
+            runner: runner,
+            environment: ProcessEnvironment.sanitized(["PATH": "/usr/bin:/bin", "HOME": "/tmp", "LANG": "es_ES.UTF-8", "LC_ALL": "es_ES.UTF-8"])
+        )
+        let repo = Repository(path: "/tmp/ariadna-locale", gitDir: "/tmp/ariadna-locale/.git")
+        _ = try await engine.status(in: repo, includeIgnored: false)
+        let environment = try XCTUnwrap(runner.lastEnvironment)
+        XCTAssertEqual(environment["LC_ALL"], "en_US.UTF-8")
+        XCTAssertEqual(environment["LANG"], "en_US.UTF-8")
+        XCTAssertEqual(environment["LANGUAGE"], "en")
+        XCTAssertEqual(environment["HOME"], "/tmp")
+    }
+
+    func testHashDetection() {
+        XCTAssertTrue(GitCLIEngine.looksLikeHash("a1b2c3d"))
+        XCTAssertTrue(GitCLIEngine.looksLikeHash(String(repeating: "f", count: 40)))
+        XCTAssertFalse(GitCLIEngine.looksLikeHash("abc"))
+        XCTAssertFalse(GitCLIEngine.looksLikeHash("marea"))
+    }
+
     func testCancelledRefreshDoesNotPublishStatus() async throws {
         let runner = OverlapRunner()
         runner.hangStatus = true
@@ -105,6 +127,13 @@ private final class OverlapRunner: ProcessRunning, @unchecked Sendable {
 
     var hangStatus = false
     private let lock = NSLock()
+    private var recordedEnvironment: [String: String]?
+
+    var lastEnvironment: [String: String]? {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedEnvironment
+    }
     private var activeReads = 0
     private var activeWrites = 0
     private var maxReads = 0
@@ -123,6 +152,7 @@ private final class OverlapRunner: ProcessRunning, @unchecked Sendable {
 
     func run(_ request: ProcessRequest) async throws -> ProcessOutput {
         let writing = GitCLIEngine.isGitMutation(request.arguments)
+        record(request.environment)
         enter(writing: writing)
         defer { leave(writing: writing) }
         if hangStatus && request.arguments.contains("status") {
@@ -138,6 +168,12 @@ private final class OverlapRunner: ProcessRunning, @unchecked Sendable {
             stdout = Data()
         }
         return ProcessOutput(executable: request.executable, arguments: request.arguments, exitCode: 0, stdout: stdout, stderr: Data())
+    }
+
+    private func record(_ environment: [String: String]?) {
+        lock.lock()
+        defer { lock.unlock() }
+        recordedEnvironment = environment
     }
 
     private func enter(writing: Bool) {
