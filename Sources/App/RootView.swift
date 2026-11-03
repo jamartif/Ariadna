@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import GitCore
 
 struct RootView: View {
     @Bindable var model: AppModel
