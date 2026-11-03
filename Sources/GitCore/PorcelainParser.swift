@@ -213,7 +213,8 @@ enum CommitLogParser {
                 .filter { !$0.isEmpty }
             commits.append(
                 Commit(
-                    sha: fields[0],
+                    // `--pretty=format:` separa commits con "\n": el hash de todos menos el primero llega con él delante.
+                    sha: fields[0].trimmingCharacters(in: .whitespacesAndNewlines),
                     parents: parents,
                     subject: fields[5],
                     body: fields[6].trimmingCharacters(in: .whitespacesAndNewlines),

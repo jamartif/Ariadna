@@ -628,6 +628,91 @@ final class GitCLIEngineTests: XCTestCase {
         XCTAssertTrue(subjects.contains("origin"))
     }
 
+    func testAmendRewritesUnpublishedCommitOnly() async throws {
+        let root = try makeRepo()
+        let repo = try await engine.openRepository(at: root.path)
+        do {
+            _ = try await engine.amendLastCommit(message: "nada", in: repo)
+            XCTFail("sin commits no hay nada que corregir")
+        } catch let error as GitError {
+            guard case .cannotAmend = error else { throw error }
+        }
+
+        try write("a\n", name: "a.txt", in: root)
+        try await engine.stage(paths: ["a.txt"], in: repo)
+        let first = try await engine.commit(message: "asunto con erata", in: repo)
+        do {
+            _ = try await engine.amendLastCommit(message: "  \n", in: repo)
+            XCTFail("mensaje vacío")
+        } catch let error as GitError {
+            guard case .emptyCommitMessage = error else { throw error }
+        }
+
+        try write("b\n", name: "b.txt", in: root)
+        try await engine.stage(paths: ["b.txt"], in: repo)
+        let amended = try await engine.amendLastCommit(message: "asunto corregido", in: repo)
+        XCTAssertNotEqual(amended, first)
+        let log = try await engine.log(in: repo, limit: 10)
+        XCTAssertEqual(log.count, 1)
+        XCTAssertEqual(log.first?.subject, "asunto corregido")
+        let files = try TempGit.output(["show", "--name-only", "--format=", "HEAD"], at: root)
+        XCTAssertTrue(files.contains("a.txt"))
+        XCTAssertTrue(files.contains("b.txt"))
+
+        let bare = FileManager.default.temporaryDirectory.appendingPathComponent("gitforge-bare-\(UUID().uuidString)", isDirectory: true)
+        roots.append(bare)
+        try TempGit.run(["init", "-b", "main", "--bare", bare.path], at: root)
+        try await engine.addRemote(name: "origin", url: bare.path, in: repo)
+        try await engine.push(remote: "origin", refspec: "main", setUpstream: true, in: repo)
+        do {
+            _ = try await engine.amendLastCommit(message: "otra vez", in: repo)
+            XCTFail("el commit ya está publicado")
+        } catch let error as GitError {
+            guard case .cannotAmend(let reason) = error else { throw error }
+            XCTAssertTrue(reason.contains("origin/main"), reason)
+        }
+        let after = try await engine.log(in: repo, limit: 1)
+        XCTAssertEqual(after.first?.sha, amended)
+    }
+
+    func testSearchLogMatchesMessageAuthorAndHash() async throws {
+        let root = try makeRepo()
+        let repo = try await engine.openRepository(at: root.path)
+        let none = try await engine.searchLog(query: "faro", in: repo, limit: 50)
+        XCTAssertTrue(none.isEmpty)
+
+        try write("1\n", name: "a.txt", in: root)
+        try TempGit.run(["add", "a.txt"], at: root)
+        try TempGit.run(["commit", "-m", "Añade el faro"], at: root)
+        try write("2\n", name: "a.txt", in: root)
+        try TempGit.run(["commit", "-am", "Corrige la MAREA", "-m", "detalle del cuerpo"], at: root)
+        try write("3\n", name: "a.txt", in: root)
+        try TempGit.run(["-c", "user.name=Otra Persona", "commit", "-am", "Ajusta el horario"], at: root)
+
+        let byMessage = try await engine.searchLog(query: "marea", in: repo, limit: 50)
+        XCTAssertEqual(byMessage.map(\.subject), ["Corrige la MAREA"])
+
+        let byBody = try await engine.searchLog(query: "DETALLE", in: repo, limit: 50)
+        XCTAssertEqual(byBody.map(\.subject), ["Corrige la MAREA"])
+
+        let byAuthor = try await engine.searchLog(query: "otra persona", in: repo, limit: 50)
+        XCTAssertEqual(byAuthor.map(\.subject), ["Ajusta el horario"])
+
+        let all = try await engine.log(in: repo, limit: 10)
+        let target = try XCTUnwrap(all.last)
+        let byHash = try await engine.searchLog(query: String(target.sha.prefix(8)), in: repo, limit: 50)
+        XCTAssertEqual(byHash.map(\.sha), [target.sha])
+
+        let literal = try await engine.searchLog(query: "el.*", in: repo, limit: 50)
+        XCTAssertTrue(literal.isEmpty, "el texto no se interpreta como regex")
+
+        let several = try await engine.searchLog(query: " EL ", in: repo, limit: 50)
+        XCTAssertEqual(several.map(\.subject), all.map(\.subject), "orden de más nuevo a más viejo")
+
+        let empty = try await engine.searchLog(query: "   ", in: repo, limit: 50)
+        XCTAssertEqual(empty.count, 3)
+    }
+
     private func stageFirstOfTwo(file: String, gap: Int, lineEnding: String, trailingNewline: Bool) async throws {
         let root = try makeRepo()
         var lines = (1...30).map { "line\($0)" }

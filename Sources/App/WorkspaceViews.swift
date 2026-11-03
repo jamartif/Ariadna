@@ -177,6 +177,16 @@ struct CommitBar: View {
                 .frame(minHeight: 72, maxHeight: 120)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                 .accessibilityLabel("Mensaje de commit")
+            Toggle(isOn: Binding(
+                get: { model.amendLastCommit },
+                set: { enabled in Task { await model.setAmend(enabled) } }
+            )) {
+                Text("Corregir el último commit (amend)")
+                    .font(.caption)
+            }
+            .toggleStyle(.checkbox)
+            .disabled(model.isBusy || model.status.isUnborn)
+            .help("Rehace el último commit con este mensaje y lo preparado. Ariadna se niega si ese commit ya está en un remoto.")
             HStack {
                 #if ARIADNA_AI
                 Button("Generar mensaje") { Task { await model.generateCommitMessage() } }
@@ -185,9 +195,13 @@ struct CommitBar: View {
                     .disabled(model.isBusy)
                 #endif
                 Spacer()
-                Button("Crear commit") { Task { await model.commit() } }
+                Button(model.amendLastCommit ? "Corregir commit" : "Crear commit") { Task { await model.commit() } }
                     .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(model.isBusy || model.commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.status.staged.isEmpty)
+                    .disabled(
+                        model.isBusy
+                            || model.commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || (model.status.staged.isEmpty && !model.amendLastCommit)
+                    )
             }
             TextField("Plantilla opcional para el mensaje", text: $model.commitTemplate)
                 .textFieldStyle(.roundedBorder)
@@ -301,9 +315,30 @@ struct HistoryList: View {
 
     var body: some View {
         VStack {
-            TextField("Filtrar por mensaje, autor o hash", text: $query)
-                .textFieldStyle(.roundedBorder)
-                .padding([.horizontal, .top], 8)
+            HStack {
+                TextField("Filtrar por mensaje, autor o hash", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { Task { await model.searchHistory(query) } }
+                Button("Buscar en todo") { Task { await model.searchHistory(query) } }
+                    .disabled(model.isBusy || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .help("Busca en todo el historial de la rama, no solo en los commits cargados. También con Intro.")
+            }
+            .padding([.horizontal, .top], 8)
+            if let search = model.historySearch {
+                HStack {
+                    Text("\(model.commits.count) resultado(s) para «\(search)» en todo el historial")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Ver los últimos") {
+                        query = ""
+                        Task { await model.loadHistory() }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+                }
+                .padding(.horizontal, 8)
+            }
             List(filtered, selection: $model.selectedCommitSHA) { commit in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(commit.subject).lineLimit(2)
@@ -319,13 +354,17 @@ struct HistoryList: View {
             }
         }
         .overlay {
-            if model.commits.isEmpty && !model.isBusy {
+            if model.commits.isEmpty && !model.isBusy, let search = model.historySearch {
+                ContentUnavailableView.search(text: search)
+            } else if model.commits.isEmpty && !model.isBusy {
                 ContentUnavailableView("Sin historial cargado", systemImage: "clock", description: Text("Abre esta pestaña para leer los últimos commits. Un repo nuevo todavía no tiene ninguno."))
             }
         }
     }
 
     private var filtered: [Commit] {
+        // Tras una búsqueda completa, la lista ya son los resultados: no se filtra otra vez.
+        if model.historySearch != nil { return model.commits }
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return model.commits }
         return model.commits.filter { commit in

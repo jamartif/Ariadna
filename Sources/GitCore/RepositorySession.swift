@@ -89,6 +89,12 @@ public actor RepositorySession {
         return sha
     }
 
+    public func amendLastCommit(message: String) async throws -> String {
+        let sha = try await engine.amendLastCommit(message: message, in: repository)
+        try await refresh()
+        return sha
+    }
+
     public func createBranch(name: String, from startPoint: String? = nil) async throws {
         try await engine.createBranch(name: name, from: startPoint, in: repository)
         try await refresh()
@@ -131,6 +137,10 @@ public actor RepositorySession {
 
     public func log(limit: Int = 200) async throws -> [Commit] {
         try await engine.log(in: repository, limit: limit)
+    }
+
+    public func searchLog(query: String, limit: Int = 200) async throws -> [Commit] {
+        try await engine.searchLog(query: query, in: repository, limit: limit)
     }
 
     /// Escribe el resultado en el archivo solo con confirmación. No lo prepara.

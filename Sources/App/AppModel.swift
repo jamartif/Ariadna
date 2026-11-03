@@ -56,6 +56,10 @@ final class AppModel {
     var unstagedDiff: [FileDiff] = []
     var commitDiff: [FileDiff] = []
     var commitMessage = ""
+    /// Si está activo, el botón de commit corrige el último commit (`--amend`).
+    var amendLastCommit = false
+    /// Texto de la última búsqueda en todo el historial. Nil si se ven los últimos commits.
+    var historySearch: String?
     var commitTemplate = ""
     #if ARIADNA_AI
     var aiSettings: AISettings = .default
@@ -136,6 +140,11 @@ final class AppModel {
             try await session.refresh(includeIgnored: self.includeIgnored)
             self.session = session
             self.repository = repo
+            self.historySearch = nil
+            self.amendLastCommit = false
+            self.commits = []
+            self.selectedCommitSHA = nil
+            self.commitDiff = []
             try await self.pull(from: session)
             try? self.recentsStore.remember(repo, branch: self.status.branchName)
             self.recents = (try? self.recentsStore.load()) ?? self.recents
@@ -191,6 +200,10 @@ final class AppModel {
     }
 
     func commit() async {
+        if amendLastCommit {
+            await amendNow()
+            return
+        }
         if status.isDetached {
             confirmDetachedCommit = true
             return
@@ -213,6 +226,36 @@ final class AppModel {
             self.infoMessage = allowDetached
                 ? "Commit creado fuera de una rama. No se ha hecho push."
                 : "Commit creado. No se ha hecho push."
+        }
+    }
+
+    /// Activa o desactiva el modo amend. Al activarlo con el cuadro vacío,
+    /// trae el mensaje del último commit para editarlo.
+    func setAmend(_ enabled: Bool) async {
+        amendLastCommit = enabled
+        guard enabled, commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        await perform {
+            guard let session = self.session else { return }
+            guard let last = try await session.log(limit: 1).first else {
+                self.amendLastCommit = false
+                self.errorMessage = "Todavía no hay ningún commit que corregir."
+                return
+            }
+            self.commitMessage = last.body.isEmpty ? last.subject : last.subject + "\n\n" + last.body
+        }
+    }
+
+    private func amendNow() async {
+        await perform {
+            guard let session = self.session else { return }
+            _ = try await session.amendLastCommit(message: self.commitMessage)
+            self.commitMessage = ""
+            self.amendLastCommit = false
+            try await self.pull(from: session)
+            self.commits = try await session.log(limit: 200)
+            self.historySearch = nil
+            await self.reloadSelectedDiff()
+            self.infoMessage = "Último commit corregido. No se ha hecho push."
         }
     }
 
@@ -336,6 +379,25 @@ final class AppModel {
         await perform {
             guard let session = self.session else { return }
             self.commits = try await session.log(limit: 200)
+            self.historySearch = nil
+        }
+    }
+
+    /// Busca por mensaje, autor o hash en todo el historial de la rama actual.
+    func searchHistory(_ query: String) async {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else {
+            await loadHistory()
+            return
+        }
+        await perform {
+            guard let session = self.session else { return }
+            self.commits = try await session.searchLog(query: needle, limit: 500)
+            self.historySearch = needle
+            if let selected = self.selectedCommitSHA, !self.commits.contains(where: { $0.sha == selected }) {
+                self.selectedCommitSHA = nil
+                self.commitDiff = []
+            }
         }
     }
 
