@@ -41,7 +41,7 @@ public final class GitCLIEngine: GitServing, Sendable {
         guard index < arguments.count else { return true }
         let command = arguments[index]
         switch command {
-        case "status", "log", "diff", "show", "rev-parse", "for-each-ref", "ls-files", "cat-file", "version":
+        case "status", "log", "diff", "show", "rev-parse", "for-each-ref", "ls-files", "cat-file", "merge-base", "version":
             return false
         case "remote":
             let subcommand = arguments.dropFirst(index + 1).first { !$0.hasPrefix("-") }
@@ -143,6 +143,9 @@ public final class GitCLIEngine: GitServing, Sendable {
     /// Se niega si no hay commits, si HEAD no está en una rama, si hay un merge,
     /// rebase o cherry-pick en curso, o si el commit ya está en alguna rama remota
     /// (reescribirlo obligaría a un push forzado).
+    ///
+    /// Un commit de merge sí se puede corregir (git conserva sus padres); la UI
+    /// avisa antes con `AmendDraft.mergeWarning(for:)`.
     public func amendLastCommit(message: String, in repository: Repository) async throws -> String {
         if message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw GitError.emptyCommitMessage
@@ -177,6 +180,8 @@ public final class GitCLIEngine: GitServing, Sendable {
     ///
     /// Coincide (sin distinguir mayúsculas) con el mensaje, el autor o un prefijo
     /// del hash. El texto se pasa a git como literal (`--fixed-strings`), no como regex.
+    /// Un hash de un commit que existe pero no es antecesor de HEAD (otra rama)
+    /// no cuenta: los tres criterios miran el mismo historial.
     public func searchLog(query: String, in repository: Repository, limit: Int) async throws -> [Commit] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else {
@@ -191,7 +196,12 @@ public final class GitCLIEngine: GitServing, Sendable {
         var candidates = try await logStamps(common + ["--grep=\(needle)"], in: repository)
         candidates += try await logStamps(common + ["--author=\(needle)"], in: repository)
         if Self.looksLikeHash(needle) {
-            candidates += try await logStamps(["-n", "1", "--format=%H %ct", "\(needle)^{commit}", "--"], in: repository, missingIsEmpty: true)
+            let byHash = try await logStamps(["-n", "1", "--format=%H %ct", "\(needle)^{commit}", "--"], in: repository, missingIsEmpty: true)
+            for candidate in byHash {
+                if try await isAncestorOfHEAD(candidate.sha, in: repository) {
+                    candidates.append(candidate)
+                }
+            }
         }
         var seen = Set<String>()
         let unique = candidates.enumerated().filter { seen.insert($0.element.sha).inserted }
@@ -495,6 +505,14 @@ public final class GitCLIEngine: GitServing, Sendable {
 
     // MARK: - Privado
 
+    /// Locale de los subprocesos de git. `C.UTF-8` es el más portable en Linux;
+    /// macOS no lo trae, pero sí `en_US.UTF-8`.
+    #if os(Linux)
+    static let messageLocale = "C.UTF-8"
+    #else
+    static let messageLocale = "en_US.UTF-8"
+    #endif
+
     /// Campos separados por US (0x1f) y commits por RS (0x1e). Lo lee `CommitLogParser`.
     static let logFormat = "%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%s%x1f%b%x1f%D%x1e"
 
@@ -506,8 +524,8 @@ public final class GitCLIEngine: GitServing, Sendable {
     /// Solo afecta a los mensajes: rutas y commits siguen siendo UTF-8.
     static func englishMessages(_ environment: [String: String]) -> [String: String] {
         var result = environment
-        result["LC_ALL"] = "en_US.UTF-8"
-        result["LANG"] = "en_US.UTF-8"
+        result["LC_ALL"] = messageLocale
+        result["LANG"] = messageLocale
         result["LANGUAGE"] = "en"
         return result
     }
@@ -532,6 +550,16 @@ public final class GitCLIEngine: GitServing, Sendable {
                 guard parts.count == 2, let time = Int(parts[1]) else { return nil }
                 return (String(parts[0]), time)
             }
+    }
+
+    /// `true` si `sha` está en el historial de HEAD (incluido HEAD). Sin commits, `false`.
+    private func isAncestorOfHEAD(_ sha: String, in repository: Repository) async throws -> Bool {
+        let output = try await run(
+            in: repository,
+            arguments: ["merge-base", "--is-ancestor", sha, "HEAD"],
+            allowNonZero: true
+        )
+        return output.exitCode == 0
     }
 
     private func remoteRefsContainingHEAD(in repository: Repository) async throws -> [String] {

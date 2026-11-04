@@ -14,22 +14,27 @@ on:
       - "scripts/render-snapshots.sh"
       - ".github/workflows/screenshots.yml"
 
+# Por defecto, solo lectura. Únicamente el job `publish` pide escritura.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: screenshots-${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  png:
+  render:
     name: Capturas de la interfaz
     runs-on: macos-15
+    permissions:
+      contents: read
     steps:
+      # El código de una PR se ejecuta aquí (render-snapshots.sh, swift build):
+      # sin credenciales guardadas y con un token de solo lectura.
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'main' }}
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Generar PNG
         run: bash scripts/render-snapshots.sh docs/screenshots
@@ -41,8 +46,26 @@ jobs:
           path: docs/screenshots/*.png
           if-no-files-found: error
 
-      - name: Publicar en docs/screenshots
-        if: github.event_name != 'pull_request'
+  publish:
+    name: Publicar en docs/screenshots
+    needs: render
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Este job no ejecuta código del repositorio: solo copia los PNG y hace push.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Descargar capturas
+        uses: actions/download-artifact@v4
+        with:
+          name: screenshots-${{ github.run_id }}
+          path: docs/screenshots
+
+      - name: Commit y push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

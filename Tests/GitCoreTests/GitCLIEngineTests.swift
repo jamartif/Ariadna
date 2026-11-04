@@ -675,6 +675,65 @@ final class GitCLIEngineTests: XCTestCase {
         XCTAssertEqual(after.first?.sha, amended)
     }
 
+    func testAmendRefusesDetachedHead() async throws {
+        let repo = try await seededRepo()
+        let before = try await engine.log(in: repo, limit: 5)
+        let sha = try XCTUnwrap(before.first?.sha)
+        try await engine.checkout(ref: sha, in: repo)
+        let status = try await engine.status(in: repo, includeIgnored: false)
+        XCTAssertTrue(status.isDetached)
+        do {
+            _ = try await engine.amendLastCommit(message: "corregido", in: repo)
+            XCTFail("con HEAD detached no se corrige")
+        } catch let error as GitError {
+            guard case .cannotAmend(let reason) = error else { throw error }
+            XCTAssertTrue(reason.contains("rama"), reason)
+        }
+        let after = try await engine.log(in: repo, limit: 5)
+        XCTAssertEqual(after.map(\.sha), before.map(\.sha))
+        XCTAssertEqual(after.first?.subject, "base")
+    }
+
+    func testAmendRefusesDuringMerge() async throws {
+        let repo = try await conflictedRepo()
+        let before = try await engine.log(in: repo, limit: 5)
+        do {
+            _ = try await engine.amendLastCommit(message: "corregido", in: repo)
+            XCTFail("con un merge a medias no se corrige")
+        } catch let error as GitError {
+            guard case .cannotAmend(let reason) = error else { throw error }
+            XCTAssertTrue(reason.contains("merge"), reason)
+        }
+        let state = try await engine.integrationState(in: repo)
+        XCTAssertEqual(state, .merging)
+        let after = try await engine.log(in: repo, limit: 5)
+        XCTAssertEqual(after.map(\.sha), before.map(\.sha))
+    }
+
+    func testSearchByHashIgnoresCommitsOnOtherBranches() async throws {
+        let repo = try await seededRepo()
+        let root = URL(fileURLWithPath: repo.path)
+        let mainCommits = try await engine.log(in: repo, limit: 5)
+        let mainSHA = try XCTUnwrap(mainCommits.first?.sha)
+
+        try await engine.createBranch(name: "otra", from: nil, in: repo)
+        try await engine.checkout(ref: "otra", in: repo)
+        try write("solo en otra\n", name: "otra.txt", in: root)
+        try await engine.stage(paths: ["otra.txt"], in: repo)
+        let otherSHA = try await engine.commit(message: "commit de otra rama", in: repo)
+        try await engine.checkout(ref: "main", in: repo)
+
+        let fromOtherBranch = try await engine.searchLog(query: String(otherSHA.prefix(10)), in: repo, limit: 50)
+        XCTAssertTrue(fromOtherBranch.isEmpty, "el hash existe, pero no está en el historial de HEAD")
+
+        let fromHEAD = try await engine.searchLog(query: String(mainSHA.prefix(10)), in: repo, limit: 50)
+        XCTAssertEqual(fromHEAD.map(\.sha), [mainSHA])
+
+        try await engine.checkout(ref: "otra", in: repo)
+        let onOther = try await engine.searchLog(query: String(otherSHA.prefix(10)), in: repo, limit: 50)
+        XCTAssertEqual(onOther.map(\.sha), [otherSHA])
+    }
+
     func testSearchLogMatchesMessageAuthorAndHash() async throws {
         let root = try makeRepo()
         let repo = try await engine.openRepository(at: root.path)
