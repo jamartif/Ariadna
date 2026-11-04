@@ -31,9 +31,11 @@ jobs:
     steps:
       # El código de una PR se ejecuta aquí (render-snapshots.sh, swift build):
       # sin credenciales guardadas y con un token de solo lectura.
+      # Se usa el commit exacto que lanzó el workflow, no `main`: si entra otro
+      # push mientras tanto, las capturas siguen siendo las de este commit.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'main' }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Generar PNG
@@ -49,7 +51,8 @@ jobs:
   publish:
     name: Publicar en docs/screenshots
     needs: render
-    if: github.event_name != 'pull_request'
+    # Solo se publica lo generado desde main (un workflow_dispatch en otra rama no).
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write

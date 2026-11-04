@@ -25,3 +25,81 @@ public enum AmendDraft {
         return "El último commit es un merge (\(commit.parents.count) padres). Corregirlo lo rehace con los mismos padres: revisa el mensaje y lo preparado."
     }
 }
+
+/// Estado del modo amend en la barra de commit.
+///
+/// Activar el amend lee el último commit de forma asíncrona. Si mientras tanto
+/// el usuario desmarca la casilla (o se abre otro repositorio), esa lectura
+/// llega tarde y no debe rellenar nada: un commit normal saldría con el mensaje
+/// del anterior. Por eso la activación se hace en dos pasos, `beginEnabling()`
+/// y `finishEnabling(...)`, y el segundo descarta resultados obsoletos.
+///
+/// Vive en el núcleo (y no en `AppModel`) para poder testear esa carrera sin la UI.
+public struct AmendState: Sendable, Equatable {
+    /// Turno de una activación en curso. Solo sirve para `finishEnabling`.
+    public struct Ticket: Sendable, Equatable {
+        fileprivate let epoch: Int
+    }
+
+    /// Qué hacer con la lectura del último commit.
+    public enum Outcome: Sendable, Equatable {
+        /// Llegó tarde (amend desactivado o repositorio cambiado): no se toca nada.
+        case stale
+        /// No hay commits que corregir. El amend queda desactivado.
+        case noCommit
+        /// Aplicado. `message` es el texto que debe quedar en el cuadro.
+        case applied(message: String)
+    }
+
+    public private(set) var isEnabled = false
+    /// Aviso si el commit que se va a corregir es un merge. Nil en otro caso.
+    public private(set) var warning: String?
+    /// Mensaje que Ariadna puso en el cuadro al activar el amend.
+    public private(set) var prefilledMessage: String?
+    /// Cambia con cada `reset()`, para invalidar lecturas de un repositorio anterior.
+    private var epoch = 0
+
+    public init() {}
+
+    /// Marca el amend como activo y devuelve el turno para `finishEnabling`.
+    public mutating func beginEnabling() -> Ticket {
+        isEnabled = true
+        return Ticket(epoch: epoch)
+    }
+
+    /// Aplica el último commit leído tras `beginEnabling()`.
+    ///
+    /// Se vuelve a comprobar el estado después del `await`: si el amend ya no
+    /// está activo, o el repositorio cambió, el resultado se descarta.
+    public mutating func finishEnabling(_ ticket: Ticket, lastCommit: Commit?, currentMessage: String) -> Outcome {
+        guard isEnabled, ticket.epoch == epoch else { return .stale }
+        guard let lastCommit else {
+            reset()
+            return .noCommit
+        }
+        warning = AmendDraft.mergeWarning(for: lastCommit)
+        guard currentMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .applied(message: currentMessage)
+        }
+        let message = AmendDraft.message(for: lastCommit)
+        prefilledMessage = message
+        return .applied(message: message)
+    }
+
+    /// Desactiva el amend y devuelve el texto que debe quedar en el cuadro.
+    public mutating func disable(currentMessage: String) -> String {
+        let message = AmendDraft.messageAfterDisabling(current: currentMessage, prefilled: prefilledMessage)
+        isEnabled = false
+        warning = nil
+        prefilledMessage = nil
+        return message
+    }
+
+    /// Vuelve al estado inicial (repositorio nuevo, amend hecho) e invalida lecturas en curso.
+    public mutating func reset() {
+        isEnabled = false
+        warning = nil
+        prefilledMessage = nil
+        epoch &+= 1
+    }
+}

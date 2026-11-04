@@ -635,7 +635,7 @@ final class GitCLIEngineTests: XCTestCase {
             _ = try await engine.amendLastCommit(message: "nada", in: repo)
             XCTFail("sin commits no hay nada que corregir")
         } catch let error as GitError {
-            guard case .cannotAmend = error else { throw error }
+            XCTAssertEqual(error, .cannotAmend(.noCommits))
         }
 
         try write("a\n", name: "a.txt", in: root)
@@ -668,8 +668,7 @@ final class GitCLIEngineTests: XCTestCase {
             _ = try await engine.amendLastCommit(message: "otra vez", in: repo)
             XCTFail("el commit ya está publicado")
         } catch let error as GitError {
-            guard case .cannotAmend(let reason) = error else { throw error }
-            XCTAssertTrue(reason.contains("origin/main"), reason)
+            XCTAssertEqual(error, .cannotAmend(.alreadyPublished(remoteRef: "origin/main")))
         }
         let after = try await engine.log(in: repo, limit: 1)
         XCTAssertEqual(after.first?.sha, amended)
@@ -686,8 +685,7 @@ final class GitCLIEngineTests: XCTestCase {
             _ = try await engine.amendLastCommit(message: "corregido", in: repo)
             XCTFail("con HEAD detached no se corrige")
         } catch let error as GitError {
-            guard case .cannotAmend(let reason) = error else { throw error }
-            XCTAssertTrue(reason.contains("rama"), reason)
+            XCTAssertEqual(error, .cannotAmend(.detachedHead))
         }
         let after = try await engine.log(in: repo, limit: 5)
         XCTAssertEqual(after.map(\.sha), before.map(\.sha))
@@ -701,8 +699,7 @@ final class GitCLIEngineTests: XCTestCase {
             _ = try await engine.amendLastCommit(message: "corregido", in: repo)
             XCTFail("con un merge a medias no se corrige")
         } catch let error as GitError {
-            guard case .cannotAmend(let reason) = error else { throw error }
-            XCTAssertTrue(reason.contains("merge"), reason)
+            XCTAssertEqual(error, .cannotAmend(.integrationInProgress))
         }
         let state = try await engine.integrationState(in: repo)
         XCTAssertEqual(state, .merging)

@@ -152,20 +152,18 @@ public final class GitCLIEngine: GitServing, Sendable {
         }
         let current = try await status(in: repository, includeIgnored: false)
         if current.isUnborn {
-            throw GitError.cannotAmend(reason: "Todavía no hay ningún commit que corregir.")
+            throw GitError.cannotAmend(.noCommits)
         }
         if current.isDetached {
-            throw GitError.cannotAmend(reason: "HEAD no está en una rama. Crea una rama antes de corregir el commit.")
+            throw GitError.cannotAmend(.detachedHead)
         }
         let integration = try await integrationState(in: repository)
         if integration != IntegrationState.none {
-            throw GitError.cannotAmend(reason: "Hay un merge, rebase o cherry-pick en curso. Termínalo o abórtalo antes.")
+            throw GitError.cannotAmend(.integrationInProgress)
         }
         let published = try await remoteRefsContainingHEAD(in: repository)
         if let first = published.first {
-            throw GitError.cannotAmend(
-                reason: "El último commit ya está en \(first). Corregirlo obligaría a un push forzado."
-            )
+            throw GitError.cannotAmend(.alreadyPublished(remoteRef: first))
         }
         try await run(
             in: repository,
