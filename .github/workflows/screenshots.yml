@@ -1,4 +1,4 @@
-name: Capturas
+name: Screenshots
 
 on:
   workflow_dispatch:
@@ -6,15 +6,15 @@ on:
     branches: [main]
     paths-ignore:
       - "docs/screenshots/**"
-  # En una PR solo se generan y se suben como artefacto: así un cambio de UI
-  # que rompa el renderizado se ve antes del merge. No se publica nada.
+  # On a PR they are only rendered and uploaded as an artifact, so a UI change
+  # that breaks rendering shows up before the merge. Nothing is published.
   pull_request:
     paths:
       - "Sources/App/**"
       - "scripts/render-snapshots.sh"
       - ".github/workflows/screenshots.yml"
 
-# Por defecto, solo lectura. Únicamente el job `publish` pide escritura.
+# Read-only by default. Only the `publish` job asks for write access.
 permissions:
   contents: read
 
@@ -24,24 +24,24 @@ concurrency:
 
 jobs:
   render:
-    name: Capturas de la interfaz
+    name: UI screenshots
     runs-on: macos-15
     permissions:
       contents: read
     steps:
-      # El código de una PR se ejecuta aquí (render-snapshots.sh, swift build):
-      # sin credenciales guardadas y con un token de solo lectura.
-      # Se usa el commit exacto que lanzó el workflow, no `main`: si entra otro
-      # push mientras tanto, las capturas siguen siendo las de este commit.
+      # A PR's code runs here (render-snapshots.sh, swift build): with no
+      # persisted credentials and a read-only token.
+      # The exact commit that triggered the workflow is used, not `main`: if
+      # another push lands meanwhile, the screenshots still match this commit.
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - name: Generar PNG
+      - name: Render PNGs
         run: bash scripts/render-snapshots.sh docs/screenshots
 
-      - name: Subir artefacto
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: screenshots-${{ github.run_id }}
@@ -49,33 +49,33 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publicar en docs/screenshots
+    name: Publish to docs/screenshots
     needs: render
-    # Solo se publica lo generado desde main (un workflow_dispatch en otra rama no).
+    # Only what was rendered from main is published (not a workflow_dispatch on another branch).
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      # Este job no ejecuta código del repositorio: solo copia los PNG y hace push.
+      # This job runs no repository code: it only copies the PNGs and pushes.
       - uses: actions/checkout@v4
         with:
           ref: main
 
-      - name: Descargar capturas
+      - name: Download screenshots
         uses: actions/download-artifact@v4
         with:
           name: screenshots-${{ github.run_id }}
           path: docs/screenshots
 
-      - name: Commit y push
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/screenshots/*.png
           if git diff --cached --quiet; then
-            echo "Las capturas no han cambiado."
+            echo "The screenshots have not changed."
             exit 0
           fi
-          git commit -m "Actualiza las capturas de la interfaz."
+          git commit -m "Update UI screenshots."
           git push origin HEAD:main

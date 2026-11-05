@@ -11,14 +11,14 @@ permissions:
 
 jobs:
   package:
-    name: Empaquetar Ariadna.app
+    name: Package Ariadna.app
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Compilar, firmar ad-hoc y empaquetar
+      - name: Build, ad-hoc sign and package
         env:
           APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
@@ -27,7 +27,7 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: bash scripts/build-app.sh
 
-      - name: Subir artefactos
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Ariadna-${{ github.sha }}
@@ -36,7 +36,7 @@ jobs:
             dist/*.zip
           if-no-files-found: error
 
-      - name: Publicar GitHub Release
+      - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,8 +46,8 @@ jobs:
             dist/Ariadna-${version}.dmg \
             dist/Ariadna-${version}.zip \
             --title "Ariadna ${version}" \
-            --notes "Binario universal (arm64 y x86_64) para macOS 15, con firma ad-hoc. Javier no tiene cuenta de Apple Developer: no está notarizado salvo que el workflow tuviera los secrets APPLE_* configurados.
+            --notes "Universal binary (arm64 and x86_64) for macOS 15, ad-hoc signed. It is not notarized unless the workflow has the APPLE_* secrets configured.
 
-          Para abrirlo en macOS 15: Ajustes del Sistema > Privacidad y seguridad > Abrir igualmente.
+          To open it on macOS 15: System Settings > Privacy & Security > Open Anyway.
 
-          O, en Terminal: \`xattr -dr com.apple.quarantine /Applications/Ariadna.app\`"
+          Or, in Terminal: \`xattr -dr com.apple.quarantine /Applications/Ariadna.app\`"

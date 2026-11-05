@@ -1,34 +1,34 @@
-# Plan del MVP (fundación)
+# MVP plan (foundation)
 
-Derivado de [spec.md](spec.md). Esta entrega construye la fundación que ya se puede compilar y testear, más la UI SwiftUI lista para abrir en Xcode en un Mac. No es todavía el pulido de la fase 5.
+Derived from [spec.md](spec.md). This delivery builds the foundation that can already be compiled and tested, plus the SwiftUI UI ready to open in Xcode on a Mac. It is not yet the phase 5 polish.
 
-## Decisiones de diseño
+## Design decisions
 
-- **Git por CLI.** `GitCLIEngine` implementa `GitServing` lanzando `git`. Misma semántica que la terminal, hooks incluidos. libgit2 queda descartado hasta que un perfil de `status` en repos enormes lo pida.
-- **Procesos en serie.** `SerialExecutor` encadena las llamadas a `git` de un motor. Así no se corrompe el índice. La IA no usa esa cola.
-- **IA solo propone.** `AIProviding` devuelve `AISuggestion` en `pending`. `AIOrchestrator.accept` cambia el estado en memoria. Escribir el archivo exige `confirmed: true` en el motor, y el commit es otro método. No existe un `apply` que junte las dos cosas.
-- **CLIs del usuario.** Copilot: `copilot -p … -s --no-ask-user` y denegación de `shell` y `write`. Codex: `codex exec --json --sandbox read-only`. Sin API keys. El cwd de la IA no es el repo.
-- **Linux puede testear el núcleo.** SwiftUI y AppKit van en `#if os(macOS)`. En Linux el ejecutable `Ariadna` solo explica que la UI es de Mac.
-- **Swift tools 6.0, lenguaje Swift 6, macOS 15.** En Mac el manifiesto fija `.macOS(.v15)`. En Linux no se lista plataforma porque SwiftPM no acepta la lista vacía.
-- **IA detrás de un flag.** `ARIADNA_AI=1` incluye el target `AriadnaAI`. Por defecto el build de Fase 1 no lo enlaza. El código no se borra. Merge y conflictos siguen en `GitCore` y en la app.
+- **Git through the CLI.** `GitCLIEngine` implements `GitServing` by running `git`. Same semantics as the terminal, hooks included. libgit2 is ruled out until a `status` profile on huge repos calls for it.
+- **Serial processes.** `SerialExecutor` chains an engine's `git` calls, so the index is never corrupted. The AI does not use that queue.
+- **The AI only proposes.** `AIProviding` returns an `AISuggestion` in `pending`. `AIOrchestrator.accept` changes the state in memory. Writing the file requires `confirmed: true` in the engine, and committing is a separate method. There is no `apply` that joins both.
+- **The user's CLIs.** Copilot: `copilot -p … -s --no-ask-user` with `shell` and `write` denied. Codex: `codex exec --json --sandbox read-only`. No API keys. The AI's cwd is not the repo.
+- **Linux can test the core.** SwiftUI and AppKit are behind `#if os(macOS)`. On Linux the `Ariadna` executable only explains that the UI is Mac-only.
+- **Swift tools 6.0, Swift 6 language mode, macOS 15.** On a Mac the manifest pins `.macOS(.v15)`. On Linux no platform is listed because SwiftPM does not accept an empty list.
+- **AI behind a flag.** `ARIADNA_AI=1` includes the `AriadnaAI` target. By default the Phase 1 build does not link it. The code is not deleted. Merge and conflicts stay in `GitCore` and in the app.
 
-## Módulos
+## Modules
 
-| Módulo | Rol | Dónde corre |
+| Module | Role | Where it runs |
 | --- | --- | --- |
-| `GitCore` | Modelos, `ProcessRunner`, parsers, `GitCLIEngine`, `RepositorySession`, recientes | Siempre |
-| `AriadnaAI` | Protocolo, Copilot, Codex, orquestador | Solo con `ARIADNA_AI=1` |
-| `App` | SwiftUI. El producto ejecutable se llama `Ariadna` | UI solo macOS |
+| `GitCore` | Models, `ProcessRunner`, parsers, `GitCLIEngine`, `RepositorySession`, recents | Always |
+| `AriadnaAI` | Protocol, Copilot, Codex, orchestrator | Only with `ARIADNA_AI=1` |
+| `App` | SwiftUI. The executable product is called `Ariadna` | UI macOS only |
 
-## Qué entra en esta fundación
+## What this foundation includes
 
-Abrir repo, status, stage/unstage de archivos y hunks, commit (con aviso si HEAD está detached), log, diff, ramas, merge, conflictos a tres vías, fetch/pull/push. La UI de Fase 1 no muestra la IA. Con `ARIADNA_AI=1` vuelven el mensaje de commit, el resumen, la explicación y la propuesta de conflicto.
+Open repo, status, stage/unstage of files and hunks, commit (with a warning if HEAD is detached), log, diff, branches, merge, three-way conflicts, fetch/pull/push. The Phase 1 UI does not show the AI. With `ARIADNA_AI=1` the commit message, summary, explanation and conflict proposal come back.
 
-## Qué no entra
+## What it does not include
 
-Clone, init, amend, rebase interactivo, cherry-pick visual, stash, tags, submódulos, LFS, worktrees, diff lado a lado, grafo de historia, stage por líneas sueltas, Copilot SDK, Codex app-server, notarización, icono, empaquetar un `.app`.
+Clone, init, amend, interactive rebase, visual cherry-pick, stash, tags, submodules, LFS, worktrees, side-by-side diff, history graph, staging individual lines, Copilot SDK, Codex app-server, notarization, icon, packaging a `.app`.
 
-## Cómo se comprueba
+## How it is checked
 
-- `swift test` en Linux con repos temporales reales y CLIs simulados.
-- En Mac: abrir `Package.swift` en Xcode 16 o posterior y ejecutar el scheme `Ariadna`. La UI no se ha podido ejecutar en el entorno de esta entrega (no hay SDK de macOS). El workflow `.github/workflows/ci.yml` la compila en un runner `macos-15`.
+- `swift test` on Linux with real temporary repos and simulated CLIs.
+- On a Mac: open `Package.swift` in Xcode 16 or later and run the `Ariadna` scheme. The UI could not be run in this delivery's environment (no macOS SDK). The `.github/workflows/ci.yml` workflow builds it on a `macos-15` runner.

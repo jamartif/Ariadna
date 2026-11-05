@@ -5,84 +5,86 @@
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-blue)
 ![Swift 6](https://img.shields.io/badge/Swift-6-orange)
 
-**Ariadna es un cliente Git nativo para macOS**, escrito en Swift y SwiftUI, en español. Por debajo usa el `git` de tu sistema, así que hooks, credenciales, configuración y resultados son los mismos que en la terminal. Lo que añade es una interfaz clara para preparar cambios por hunk, revisar el historial, gestionar ramas y resolver conflictos a tres vías, con una regla fija: **nada que reescriba tu repositorio ocurre sin que lo confirmes**.
+**Ariadna is a native Git client for macOS**, written in Swift and SwiftUI. Under the hood it uses your system's `git`, so hooks, credentials, configuration and results are the same as in the terminal. What it adds is a clear interface to stage changes by hunk, review history, manage branches and resolve conflicts three-way, with one fixed rule: **nothing that rewrites your repository happens without your confirmation**.
 
-Opcionalmente, y detrás de un flag de compilación, puede pedir ayuda a GitHub Copilot CLI o a Codex CLI para redactar mensajes de commit, resumir cambios, explicar commits o proponer resoluciones de conflictos. La IA solo propone; tú decides.
+Optionally, behind a build flag, it can ask GitHub Copilot CLI or Codex CLI to draft commit messages, summarize changes, explain commits or propose conflict resolutions. The AI only proposes; you decide.
 
-![Ariadna: cambios preparados, sin preparar y diff por hunk](docs/screenshots/staging.png)
+> The app's interface is currently in Spanish.
 
-## Índice
+![Ariadna: staged and unstaged changes, diff by hunk](docs/screenshots/staging.png)
 
-- [Funcionalidades](#funcionalidades)
-- [Capturas](#capturas)
-- [Instalación](#instalación)
-- [Compilar desde el código](#compilar-desde-el-código)
-- [Arquitectura](#arquitectura)
-- [Principios de seguridad](#principios-de-seguridad)
-- [Capa de IA (opcional)](#capa-de-ia-opcional)
-- [Desarrollo](#desarrollo)
-- [Publicar una versión](#publicar-una-versión)
-- [Hoja de ruta](#hoja-de-ruta)
-- [Limitaciones conocidas](#limitaciones-conocidas)
+## Contents
 
-## Funcionalidades
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Installation](#installation)
+- [Building from source](#building-from-source)
+- [Architecture](#architecture)
+- [Safety principles](#safety-principles)
+- [AI layer (optional)](#ai-layer-optional)
+- [Development](#development)
+- [Publishing a release](#publishing-a-release)
+- [Roadmap](#roadmap)
+- [Known limitations](#known-limitations)
 
-**Repositorios**
-- Abrir cualquier carpeta dentro de un repo (sube hasta la raíz) con error claro si no lo es.
-- Recientes y favoritos, guardados en `~/Library/Application Support/Ariadna/recents.json`.
+## Features
 
-**Cambios y commits**
-- Estado con `git status --porcelain=v2`: preparados, sin preparar, sin seguimiento, ignorados y conflictos.
-- Preparar y quitar **por archivo o por hunk**, también en archivos nuevos, con CRLF, sin salto final o con rutas con espacios y Unicode.
-- Descartar cambios del árbol de trabajo (siempre con confirmación).
-- Commit con mensaje obligatorio. Si HEAD está *detached*, Ariadna avisa y no crea el commit hasta que lo confirmes.
-- **Amend seguro**: corrige el último commit (mensaje y/o contenido) solo si aún no está en ningún remoto, no hay un merge/rebase en curso y estás en una rama. Así nunca te obliga a un push forzado.
+**Repositories**
+- Open any folder inside a repo (it walks up to the root), with a clear error if it is not one.
+- Recents and favorites, stored in `~/Library/Application Support/Ariadna/recents.json`.
 
-**Historial**
-- Log con autor, fecha, refs y cuerpo del mensaje, y diff del commit seleccionado.
-- Filtro instantáneo sobre lo cargado y **búsqueda en todo el historial** por mensaje, autor o hash (pulsa Intro o *Buscar en todo*).
+**Changes and commits**
+- Status from `git status --porcelain=v2`: staged, unstaged, untracked, ignored and conflicted.
+- Stage and unstage **by file or by hunk**, including new files, CRLF, files without a final newline, and paths with spaces and Unicode.
+- Discard working-tree changes (always with confirmation).
+- Commit with a required message. If HEAD is *detached*, Ariadna warns you and does not create the commit until you confirm.
+- **Safe amend**: fixes the last commit (message and/or content) only if it is not on any remote yet, no merge/rebase is in progress and you are on a branch. So it never forces you into a force push.
 
-**Ramas y remotos**
-- Listar, crear, cambiar, renombrar y borrar ramas. Las ramas remotas (`origin/x`) crean la local con seguimiento; si ya existe y no coincide, Ariadna pregunta.
-- Fetch, pull (merge o rebase, configurable) y push, con `--set-upstream` automático la primera vez.
+**History**
+- Log with author, date, refs and message body, and the diff of the selected commit.
+- Instant filter over what is loaded, and **search across the whole history** by message, author or hash (press Return or *Buscar en todo*).
 
-**Merge y conflictos**
-- Merge con fast-forward, sin fast-forward o “ya al día”.
-- Editor de conflictos a tres vías (ours / base / theirs), elección por hunk o por archivo completo, sin tocar el disco hasta que confirmas.
-- Marcar como resuelto, continuar o abortar merge, rebase y cherry-pick.
+**Branches and remotes**
+- List, create, switch, rename and delete branches. Remote branches (`origin/x`) create the local branch with tracking; if it already exists and does not match, Ariadna asks.
+- Fetch, pull (merge or rebase, configurable) and push, with `--set-upstream` the first time.
 
-**Robustez**
-- Las mutaciones de git van en cola, de una en una; las lecturas pueden solaparse. Un refresco cancelado no publica un estado a medias.
-- Timeout y cancelación de procesos, y `PATH` del login shell para encontrar el mismo `git` que en tu terminal.
-- Los mensajes de git se piden en inglés internamente para interpretarlos igual con el Mac en cualquier idioma; la interfaz y los errores se muestran en español.
+**Merge and conflicts**
+- Merge with fast-forward, no fast-forward or "already up to date".
+- Three-way conflict editor (ours / base / theirs), choice by hunk or by whole file, without touching the disk until you confirm.
+- Mark as resolved, continue or abort merge, rebase and cherry-pick.
 
-## Capturas
+**Robustness**
+- Git mutations are queued and run one at a time; reads can overlap. A cancelled refresh never publishes a half-built state.
+- Process timeouts and cancellation, and the login shell's `PATH`, so it finds the same `git` as your terminal.
+- Git messages are requested in English internally so they are parsed the same way whatever the Mac's language; the interface and errors are shown in Spanish.
 
-| Ramas | Historial | Ajustes |
+## Screenshots
+
+| Branches | History | Settings |
 | --- | --- | --- |
-| ![Ramas](docs/screenshots/ramas.png) | ![Historial](docs/screenshots/historial.png) | ![Ajustes](docs/screenshots/ajustes.png) |
+| ![Branches](docs/screenshots/ramas.png) | ![History](docs/screenshots/historial.png) | ![Settings](docs/screenshots/ajustes.png) |
 
-| Diff por hunk | Propuesta de la IA |
+| Diff by hunk | AI proposal |
 | --- | --- |
-| ![Diff](docs/screenshots/diff.png) | ![Panel de IA](docs/screenshots/panel-ia.png) |
+| ![Diff](docs/screenshots/diff.png) | ![AI panel](docs/screenshots/panel-ia.png) |
 
-Las capturas se generan solas en CI (workflow **Capturas**, `scripts/render-snapshots.sh`) con un repositorio de ejemplo, así que reflejan la interfaz real de `main`.
+The screenshots are generated automatically in CI (**Screenshots** workflow, `scripts/render-snapshots.sh`) from a sample repository, so they reflect the real interface on `main`.
 
-## Instalación
+## Installation
 
-Requisitos: **macOS 15 (Sequoia) o posterior** y `git` instalado (el de las Command Line Tools de Xcode o el de Homebrew).
+Requirements: **macOS 15 (Sequoia) or later** and `git` installed (from the Xcode Command Line Tools or Homebrew).
 
-1. Descarga `Ariadna-X.Y.Z.dmg` (o `.zip`) de la página de [Releases](https://github.com/jamartif/ariadna/releases). El binario es universal (Apple Silicon e Intel).
-2. Arrastra `Ariadna.app` a `/Applications`.
-3. La app tiene firma ad-hoc pero **no está notarizada**. Si macOS la bloquea la primera vez, ve a **Ajustes del Sistema › Privacidad y seguridad** y pulsa **Abrir igualmente**, o quita la cuarentena desde Terminal:
+1. Download `Ariadna-X.Y.Z.dmg` (or `.zip`) from the [Releases](https://github.com/jamartif/ariadna/releases) page. The binary is universal (Apple Silicon and Intel).
+2. Drag `Ariadna.app` to `/Applications`.
+3. The app is ad-hoc signed but **not notarized**. If macOS blocks it the first time, go to **System Settings › Privacy & Security** and click **Open Anyway**, or remove the quarantine flag from Terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Ariadna.app
 ```
 
-## Compilar desde el código
+## Building from source
 
-Necesitas macOS 15+ y Xcode 16+ (Swift 6).
+You need macOS 15+ and Xcode 16+ (Swift 6).
 
 ```bash
 git clone https://github.com/jamartif/ariadna.git
@@ -100,71 +102,72 @@ swift test
 swift run Ariadna
 ```
 
-También puedes abrir `Package.swift` en Xcode y ejecutar el scheme **Ariadna**.
+You can also open `Package.swift` in Xcode and run the **Ariadna** scheme.
 
-Para generar `Ariadna.app`, `.dmg` y `.zip` en `dist/`:
+To build `Ariadna.app`, `.dmg` and `.zip` into `dist/`:
 
 ```bash
 sh scripts/build-app.sh
 ```
 
-> `swift test` del núcleo (`GitCore`) también funciona en Linux. Allí `swift run Ariadna` solo avisa de que la interfaz es de macOS y sale con código 64.
+> `swift test` for the core (`GitCore`) also works on Linux. There, `swift run Ariadna` only reports that the interface is macOS-only and exits with code 64.
 
-## Arquitectura
+## Architecture
 
-Es un paquete de Swift Package Manager con tres módulos:
+It is a Swift Package Manager package with three modules:
 
 ```
 Sources/
-├── GitCore/      Núcleo sin UI: modelos, procesos, parsers y motor Git
-├── App/          Interfaz SwiftUI (ejecutable «Ariadna»)
-└── AriadnaAI/    Copilot CLI y Codex CLI (solo con ARIADNA_AI=1)
+├── GitCore/      UI-free core: models, processes, parsers and Git engine
+├── App/          SwiftUI interface ("Ariadna" executable)
+└── AriadnaAI/    Copilot CLI and Codex CLI (only with ARIADNA_AI=1)
 Tests/
-├── GitCoreTests/     Tests contra repos git reales en carpetas temporales
-└── AriadnaAITests/   Tests de la IA con un doble de proceso (sin CLI reales)
-specs/            Especificación, plan y lista de tareas
-scripts/          Hooks, empaquetado y capturas
+├── GitCoreTests/     Tests against real git repos in temporary folders
+└── AriadnaAITests/   AI tests with a process double (no real CLIs)
+specs/            Specification, plan and task list
+scripts/          Hooks, packaging and screenshots
 ```
 
-El flujo de una acción es siempre el mismo:
+Every action follows the same path:
 
 ```
-Vista SwiftUI ─▶ AppModel (@MainActor) ─▶ RepositorySession (actor) ─▶ GitServing ─▶ GitCLIEngine ─▶ ProcessRunner ─▶ git
+SwiftUI view ─▶ AppModel (@MainActor) ─▶ RepositorySession (actor) ─▶ GitServing ─▶ GitCLIEngine ─▶ ProcessRunner ─▶ git
 ```
 
-| Pieza | Responsabilidad |
+| Piece | Responsibility |
 | --- | --- |
-| `GitServing` | Protocolo con todas las operaciones Git. La app y los tests dependen de él, no de `Process`. |
-| `GitCLIEngine` | Implementación que lanza el `git` del sistema. Valida rutas y refs, serializa mutaciones (`GitOperationGate`) y traduce fallos a `GitError` con texto en español. |
-| `RepositorySession` | Estado de un repo abierto (status, ramas, remotos, conflictos). Refresca tras cada mutación y descarta refrescos obsoletos. |
-| `PorcelainParser`, `DiffParser`, `ConflictParser` | Interpretan `status --porcelain=v2 -z`, diffs unificados y marcadores de conflicto (incluido diff3). |
-| `ProcessRunner` | Subprocesos con timeout, cancelación, stdin y un entorno saneado (sin variables con pinta de token). |
-| `PathSafety` | Impide que una ruta o ref salga del repo o se interprete como opción de git. |
-| `AppModel` | Estado de la ventana y acciones de la UI; se comunica con la sesión con `async/await`. |
+| `GitServing` | Protocol with every Git operation. The app and the tests depend on it, not on `Process`. |
+| `GitCLIEngine` | Implementation that runs the system `git`. Validates paths and refs, serializes mutations (`GitOperationGate`) and turns failures into `GitError`, with user-facing text in Spanish. |
+| `RepositorySession` | State of an open repo (status, branches, remotes, conflicts). Refreshes after every mutation and drops stale refreshes. |
+| `PorcelainParser`, `DiffParser`, `ConflictParser` | Parse `status --porcelain=v2 -z`, unified diffs and conflict markers (including diff3). |
+| `ProcessRunner` | Subprocesses with timeout, cancellation, stdin and a sanitized environment (no token-like variables). |
+| `PathSafety` | Prevents a path or ref from escaping the repo or being read as a git option. |
+| `AppModel` | Window state and UI actions; talks to the session with `async/await`. |
+| `AmendDraft`, `AmendState` | Amend rules (message prefill, merge warning) and the enable/disable race, testable without the UI. |
 
-Se usa el `git` de la terminal en lugar de libgit2 a propósito: el comportamiento es idéntico al que ya conoces (hooks, credenciales, `includeIf`, LFS…).
+The terminal's `git` is used instead of libgit2 on purpose: the behavior is identical to what you already know (hooks, credentials, `includeIf`, LFS…).
 
-*Si vienes de C#:* un `protocol` es una `interface`, un `actor` es una clase cuyo estado solo se toca de forma serializada, y `@MainActor` es el hilo de la UI.
+*Coming from C#?* A `protocol` is an `interface`, an `actor` is a class whose state is only touched serially, and `@MainActor` is the UI thread.
 
-## Principios de seguridad
+## Safety principles
 
-- **Confirmación explícita** para todo lo que pisa trabajo: escribir un archivo de conflicto, descartar cambios, abortar una integración, commitear con HEAD detached o cambiar a una rama local que no coincide con la remota. En el núcleo esto se fuerza con `UserConfirmation.require(confirmed:)`, sin valor por defecto.
-- **Nunca reescribe historia publicada**: el amend se niega si el commit ya está en alguna rama remota. No hay push forzado.
-- **No toca tu configuración**: Ariadna no escribe `core.hooksPath` ni ningún otro ajuste en los repos que abres.
-- **Sin secretos en los procesos hijos**: el entorno que recibe `git` (y los CLI de IA) se filtra y deja fuera variables cuyo nombre contiene `TOKEN`, `SECRET`, `PASSWORD` o `API_KEY`.
-- **El repo de Ariadna es público**: `.gitignore` excluye `.env*`, certificados y claves; el hook `pre-commit` pasa `gitleaks protect --staged` y CI pasa gitleaks sobre todo el historial.
+- **Explicit confirmation** for everything that can overwrite work: writing a conflict file, discarding changes, aborting an integration, committing with a detached HEAD or switching to a local branch that does not match the remote one. In the core this is enforced with `UserConfirmation.require(confirmed:)`, which has no default value.
+- **Never rewrites published history**: amend is refused if the commit is already on a remote branch. There is no force push.
+- **Does not touch your configuration**: Ariadna does not write `core.hooksPath` or any other setting in the repos you open.
+- **No secrets in child processes**: the environment passed to `git` (and to the AI CLIs) is filtered and leaves out variables whose name contains `TOKEN`, `SECRET`, `PASSWORD` or `API_KEY`.
+- **The Ariadna repo is public**: `.gitignore` excludes `.env*`, certificates and keys; the `pre-commit` hook runs `gitleaks protect --staged` and CI runs gitleaks over the whole history.
 
-## Capa de IA (opcional)
+## AI layer (optional)
 
-El código está en `Sources/AriadnaAI`, pero **no entra en el build por defecto**. Para activarla:
+The code lives in `Sources/AriadnaAI`, but it is **not part of the default build**. To enable it:
 
 ```bash
 ARIADNA_AI=1 swift run Ariadna
 ```
 
-Con el flag aparecen en la interfaz: *Generar mensaje* y *Resumir* en la barra de commit, *Explicar con IA* en el historial y *Pedir propuesta* en el editor de conflictos. En Ajustes eliges proveedor y rutas de los binarios.
+With the flag, the interface gains: *Generar mensaje* (generate message) and *Resumir* (summarize) in the commit bar, *Explicar con IA* (explain with AI) in the history and *Pedir propuesta* (ask for a proposal) in the conflict editor. In Settings you choose the provider and the binary paths.
 
-La app no pide API keys: reutiliza el login de cada CLI.
+The app does not ask for API keys: it reuses each CLI's login.
 
 ```bash
 copilot login
@@ -174,68 +177,70 @@ copilot login
 codex login
 ```
 
-- Copilot se lanza como `copilot -p … -s`, sin permiso de shell ni de escritura.
-- Codex se lanza como `codex exec --json --sandbox read-only`.
-- El contexto que se envía tiene un tope de tamaño configurable.
-- Toda respuesta llega como **propuesta** en una hoja aparte: puedes copiarla, usarla o descartarla. Ni un mensaje de commit ni una resolución se aplican sin tu acción.
+- Copilot runs as `copilot -p … -s`, without shell or write permissions.
+- Codex runs as `codex exec --json --sandbox read-only`.
+- The context sent has a configurable size cap.
+- Every answer arrives as a **proposal** in a separate sheet: you can copy it, use it or discard it. Neither a commit message nor a resolution is applied without your action.
 
-## Desarrollo
+## Development
 
-**Justo después de clonar**, activa el hook de secretos (git no lo hace solo):
+**Right after cloning**, enable the secrets hook (git does not do it on its own):
 
 ```bash
 sh scripts/install-git-hooks.sh
 ```
 
-El script ejecuta `git config --local core.hooksPath .githooks` solo en el clon de Ariadna.
+The script runs `git config --local core.hooksPath .githooks` only in the Ariadna clone.
 
-Comandos habituales:
+Common commands:
 
-| Comando | Qué hace |
+| Command | What it does |
 | --- | --- |
-| `swift build` | Compila núcleo y app (sin IA). |
-| `swift test` | Tests de `GitCoreTests`, contra repos git reales en `/tmp`. |
-| `ARIADNA_AI=1 swift test` | Lo anterior más `AriadnaAITests`. |
-| `swift run Ariadna` | Abre la app (solo macOS). |
-| `bash scripts/render-snapshots.sh` | Regenera las capturas de `docs/screenshots` (solo macOS). |
-| `sh scripts/build-app.sh` | Empaqueta `.app`, `.dmg` y `.zip` en `dist/`. |
+| `swift build` | Builds the core and the app (no AI). |
+| `swift test` | `GitCoreTests`, against real git repos in `/tmp`. |
+| `ARIADNA_AI=1 swift test` | The above plus `AriadnaAITests`. |
+| `swift run Ariadna` | Opens the app (macOS only). |
+| `bash scripts/render-snapshots.sh` | Regenerates the screenshots in `docs/screenshots` (macOS only). |
+| `sh scripts/build-app.sh` | Packages `.app`, `.dmg` and `.zip` into `dist/`. |
 
-**CI** (`.github/workflows/ci.yml`) corre en cada push y PR: gitleaks sobre todo el historial en Ubuntu y, en un runner `macos-15`, `swift build` + `swift test` con y sin `ARIADNA_AI=1`.
+**CI** (`.github/workflows/ci.yml`) runs on every push and PR: gitleaks over the whole history on Ubuntu and, on a `macos-15` runner, `swift build` + `swift test` with and without `ARIADNA_AI=1`.
 
-Documentación de diseño: [`specs/spec.md`](specs/spec.md) (qué y por qué), [`specs/plan.md`](specs/plan.md) (cómo) y [`specs/tasks.md`](specs/tasks.md) (estado de cada tarea).
+Design documents: [`specs/spec.md`](specs/spec.md) (what and why), [`specs/plan.md`](specs/plan.md) (how) and [`specs/tasks.md`](specs/tasks.md) (status of each task).
 
-Datos útiles:
-- Bundle id: `es.javiermartinez.ariadna` (en `Sources/App/Info.plist` y `AriadnaIdentity.bundleIdentifier`).
-- Ajustes de la app y recientes: `~/Library/Application Support/Ariadna/`.
+Useful facts:
+- Bundle id: `es.javiermartinez.ariadna` (in `Sources/App/Info.plist` and `AriadnaIdentity.bundleIdentifier`).
+- App settings and recents: `~/Library/Application Support/Ariadna/`.
 
-## Publicar una versión
+## Publishing a release
 
-Cada push a `main` y cada ejecución manual del workflow **Release** generan `Ariadna.app`, un `.dmg` y un `.zip` como artefactos. Para publicar una release con descarga:
+Every push to `main` and every manual run of the **Release** workflow produce `Ariadna.app`, a `.dmg` and a `.zip` as artifacts. To publish a release with downloads:
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-El tag debe seguir el formato `vX.Y.Z`. El workflow, en `macos-15`, compila en Release un binario universal (arm64 + x86_64), arma `Ariadna.app` con la versión del tag, firma ad-hoc (`codesign -s -`) y adjunta `Ariadna-X.Y.Z.dmg` y `.zip` a la GitHub Release. Sin tag `v*`, la versión es `0.0.0-<sha corto>`.
+The tag must follow the `vX.Y.Z` format. The workflow, on `macos-15`, builds a universal Release binary (arm64 + x86_64), assembles `Ariadna.app` with the tag's version, signs it ad-hoc (`codesign -s -`) and attaches `Ariadna-X.Y.Z.dmg` and `.zip` to the GitHub Release. Without a `v*` tag, the version is `0.0.0-<short sha>`.
 
-La firma Developer ID y la notarización están preparadas en `scripts/build-app.sh`, pero **solo se ejecutan** si existen a la vez estos secrets del repositorio: `APPLE_CERT_P12` (el `.p12` en base64), `APPLE_CERT_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID` y `APPLE_APP_PASSWORD`. Nunca van en el código.
+Developer ID signing and notarization are ready in `scripts/build-app.sh`, but they **only run** if all of these repository secrets exist: `APPLE_CERT_P12` (the `.p12` in base64), `APPLE_CERT_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_PASSWORD`. They never go in the code.
 
-## Hoja de ruta
+## Roadmap
 
-Pendiente según [`specs/tasks.md`](specs/tasks.md):
+Pending according to [`specs/tasks.md`](specs/tasks.md):
 
-- [ ] Preparar líneas sueltas (no solo hunks completos)
-- [ ] Grafo de commits
+- [ ] Stage individual lines (not only whole hunks)
+- [ ] Commit graph
 - [ ] Stash
-- [ ] Test de cherry-pick con conflicto
-- [ ] Probar la IA contra los CLI reales; streaming y Copilot SDK / Codex app-server
-- [ ] Firma Developer ID y notarización
+- [ ] Cherry-pick conflict test
+- [ ] Try the AI against the real CLIs; streaming and Copilot SDK / Codex app-server
+- [ ] Developer ID signing and notarization
+- [ ] English interface
 
-`git clean` de archivos no rastreados queda fuera a propósito: es irreversible.
+`git clean` of untracked files is left out on purpose: it is irreversible.
 
-## Limitaciones conocidas
+## Known limitations
 
-- Solo macOS 15 o posterior; la interfaz no existe en otras plataformas.
-- La app no está notarizada (ver [Instalación](#instalación)).
-- Las acciones de remoto usan el primer remoto configurado (normalmente `origin`).
-- El historial y la búsqueda recorren la rama actual (HEAD), no todas las ramas.
+- macOS 15 or later only; the interface does not exist on other platforms.
+- The interface is in Spanish only.
+- The app is not notarized (see [Installation](#installation)).
+- Remote actions use the first configured remote (usually `origin`).
+- History and search walk the current branch (HEAD), not all branches.
