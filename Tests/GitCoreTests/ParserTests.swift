@@ -140,6 +140,24 @@ final class ParserTests: XCTestCase {
         XCTAssertNil(state.prefilledMessage)
     }
 
+    /// Carrera: se marca, desmarca y vuelve a marcar antes de que vuelva el primer `log(limit: 1)`.
+    func testAmendStateIgnoresLogFromEarlierActivation() {
+        let old = Commit(sha: "a", parents: ["p"], subject: "Anterior", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
+        var state = AmendState()
+        let first = state.beginEnabling()
+        _ = state.disable(currentMessage: "")
+        let second = state.beginEnabling()
+        XCTAssertNotEqual(first, second)
+        let late = state.finishEnabling(first, lastCommit: old, currentMessage: "")
+        XCTAssertEqual(late, .stale)
+        XCTAssertTrue(state.isEnabled)
+        XCTAssertNil(state.prefilledMessage)
+        XCTAssertNil(state.warning)
+        // La lectura de la activación vigente sí se aplica.
+        let current = state.finishEnabling(second, lastCommit: old, currentMessage: "")
+        XCTAssertEqual(current, .applied(message: "Anterior"))
+    }
+
     func testAmendStateIgnoresLogFromPreviousRepository() {
         let last = Commit(sha: "a", parents: ["p"], subject: "Otro repo", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
         var state = AmendState()

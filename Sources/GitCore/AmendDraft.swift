@@ -56,7 +56,9 @@ public struct AmendState: Sendable, Equatable {
     public private(set) var warning: String?
     /// Mensaje que Ariadna puso en el cuadro al activar el amend.
     public private(set) var prefilledMessage: String?
-    /// Cambia con cada `reset()`, para invalidar lecturas de un repositorio anterior.
+    /// Cambia con cada activación, desactivación y `reset()`: un ticket solo vale
+    /// para la última activación, aunque la casilla se marque, desmarque y vuelva
+    /// a marcar antes de que llegue la primera lectura.
     private var epoch = 0
 
     public init() {}
@@ -64,6 +66,7 @@ public struct AmendState: Sendable, Equatable {
     /// Marca el amend como activo y devuelve el turno para `finishEnabling`.
     public mutating func beginEnabling() -> Ticket {
         isEnabled = true
+        epoch &+= 1
         return Ticket(epoch: epoch)
     }
 
@@ -92,6 +95,7 @@ public struct AmendState: Sendable, Equatable {
         isEnabled = false
         warning = nil
         prefilledMessage = nil
+        epoch &+= 1
         return message
     }
 
