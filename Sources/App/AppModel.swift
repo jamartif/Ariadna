@@ -56,12 +56,12 @@ final class AppModel {
     var unstagedDiff: [FileDiff] = []
     var commitDiff: [FileDiff] = []
     var commitMessage = ""
+    /// Modo amend: activo, aviso de merge y mensaje que Ariadna puso en el cuadro.
+    private var amend = AmendState()
     /// Si está activo, el botón de commit corrige el último commit (`--amend`).
-    var amendLastCommit = false
+    var amendLastCommit: Bool { amend.isEnabled }
     /// Aviso si el commit que se va a corregir es un merge. Nil en otro caso.
-    var amendWarning: String?
-    /// Mensaje que Ariadna puso en el cuadro al activar el amend.
-    private var amendPrefilledMessage: String?
+    var amendWarning: String? { amend.warning }
     /// Texto de la última búsqueda en todo el historial. Nil si se ven los últimos commits.
     var historySearch: String?
     var commitTemplate = ""
@@ -240,31 +240,28 @@ final class AppModel {
     /// si nadie lo ha tocado, para que un commit normal no lo herede.
     func setAmend(_ enabled: Bool) async {
         guard enabled else {
-            commitMessage = AmendDraft.messageAfterDisabling(current: commitMessage, prefilled: amendPrefilledMessage)
-            resetAmend()
+            commitMessage = amend.disable(currentMessage: commitMessage)
             return
         }
-        amendLastCommit = true
+        let ticket = amend.beginEnabling()
         await perform {
             guard let session = self.session else { return }
-            guard let last = try await session.log(limit: 1).first else {
-                self.resetAmend()
-                self.errorMessage = "Todavía no hay ningún commit que corregir."
+            let last = try await session.log(limit: 1).first
+            // El usuario pudo desmarcar la casilla mientras se leía el log:
+            // `finishEnabling` lo comprueba y descarta el resultado.
+            switch self.amend.finishEnabling(ticket, lastCommit: last, currentMessage: self.commitMessage) {
+            case .stale:
                 return
-            }
-            self.amendWarning = AmendDraft.mergeWarning(for: last)
-            if self.commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let message = AmendDraft.message(for: last)
+            case .noCommit:
+                self.errorMessage = GitError.cannotAmend(.noCommits).errorDescription
+            case .applied(let message):
                 self.commitMessage = message
-                self.amendPrefilledMessage = message
             }
         }
     }
 
     private func resetAmend() {
-        amendLastCommit = false
-        amendWarning = nil
-        amendPrefilledMessage = nil
+        amend.reset()
     }
 
     private func amendNow() async {

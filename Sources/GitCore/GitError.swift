@@ -10,8 +10,9 @@ public enum GitError: Error, Sendable, Equatable, LocalizedError {
     case emptyCommitMessage
     /// HEAD detached. El commit no se hace hasta que el usuario confirme.
     case detachedHeadCommit
-    /// El amend no es seguro (sin commits, fuera de rama, integración en curso o ya publicado).
-    case cannotAmend(reason: String)
+    /// El amend no es seguro. El motivo es un valor, no un texto, para que los tests
+    /// y la UI no dependan de la redacción.
+    case cannotAmend(AmendRefusal)
     /// `git switch` se negó porque pisaría cambios locales.
     case localChangesBlockCheckout(detail: String)
     /// La local ya existe y no apunta al mismo commit que la rama remota, o sigue a otra.
@@ -44,7 +45,7 @@ public enum GitError: Error, Sendable, Equatable, LocalizedError {
         case .detachedHeadCommit:
             return "HEAD no está en una rama. El commit quedaría suelto. Confírmalo o crea una rama antes."
         case .cannotAmend(let reason):
-            return "No corrijo el último commit. \(reason)"
+            return "No corrijo el último commit. \(reason.explanation)"
         case .divergedLocalBranch(let local, let remote):
             return "La rama local «\(local)» no coincide con \(remote). No cambio de rama hasta que lo confirmes."
         case .localChangesBlockCheckout(let detail):
@@ -75,6 +76,32 @@ public enum GitError: Error, Sendable, Equatable, LocalizedError {
     static func truncate(_ text: String, limit: Int = 4_000) -> String {
         guard text.count > limit else { return text }
         return String(text.prefix(limit)) + "…"
+    }
+}
+
+/// Por qué no se puede corregir el último commit.
+public enum AmendRefusal: Sendable, Equatable {
+    /// El repositorio todavía no tiene commits.
+    case noCommits
+    /// HEAD no está en una rama.
+    case detachedHead
+    /// Hay un merge, rebase o cherry-pick a medias.
+    case integrationInProgress
+    /// El commit ya está en una rama remota (p. ej. `origin/main`).
+    case alreadyPublished(remoteRef: String)
+
+    /// Texto para la UI.
+    public var explanation: String {
+        switch self {
+        case .noCommits:
+            return "Todavía no hay ningún commit que corregir."
+        case .detachedHead:
+            return "HEAD no está en una rama. Crea una rama antes de corregir el commit."
+        case .integrationInProgress:
+            return "Hay un merge, rebase o cherry-pick en curso. Termínalo o abórtalo antes."
+        case .alreadyPublished(let remoteRef):
+            return "El último commit ya está en \(remoteRef). Corregirlo obligaría a un push forzado."
+        }
     }
 }
 
