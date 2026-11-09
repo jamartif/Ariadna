@@ -1,0 +1,2 @@
+Warning: no stdin data received in 3s, proceeding without it.
+{"type":"result","subtype":"success","is_error":false,"duration_ms":2312,"duration_api_ms":2190,"num_turns":1,"result":"feat: parsear status porcelain v2\n\nUsa el formato estable de git status.","stop_reason":"end_turn","session_id":"00000000-0000-0000-0000-000000000000","total_cost_usd":0.0123,"usage":{"input_tokens":120,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":18},"modelUsage":{},"permission_denials":[],"campo_futuro":{"x":1}}

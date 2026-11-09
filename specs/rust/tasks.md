@@ -12,24 +12,28 @@
 - [ ] Spike de perfiles: aislar el login por proveedor con directorio de configuración propio (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, Copilot a verificar) y detectar la cuenta activa
 - [ ] Solicitar SignPath Foundation para el proyecto (D17) y leer sus condiciones
 - [ ] Matriz de trazabilidad: G-01…G-15, RF-IA → tarea → test (generar desde `specs/spec.md` y `Sources/`)
-- [ ] Inventario de los 36 + 8 tests Swift con su tarea Rust
+- [ ] Inventario de los 58 + 8 tests Swift con su tarea Rust
 - [ ] Generar y versionar fixtures de git (con metadatos de versión)
 - [ ] Mockups de las 5 pantallas clave y tokens de diseño
 - [ ] Ampliar `.gitignore` (`target/`, `node_modules/`) y `.gitleaks.toml`
 - [ ] Javier decide las PROPUESTAS D7, D10, D11, D13
 
 ## M1 — Fundación
+
+> Estado: implementado en `crates/ariadna-process` y `crates/ariadna-git` (203 tests en verde entre los tres crates de Rust, probados en Linux/WSL; la CI valida macOS y Windows). Pendiente: fixtures contra git real en CI, fuzz de parsers y `core.longpaths`.
 - [ ] Cambiar a macOS 15 como mínimo en la configuración de Tauri y en la CI (D15)
-- [ ] `Cargo.toml` workspace, `rust-toolchain.toml` (≥ 1.77.2), rustfmt, clippy, cargo-deny
+- [x] `Cargo.toml` workspace, `rust-toolchain.toml` (≥ 1.77.2), rustfmt, clippy, cargo-deny
 - [ ] CI Rust: macos-15, windows-2025, windows-11-arm, ubuntu; job agregador; caché
-- [ ] `ProcessRunner`: timeout, cancelación, stdin en tarea aparte, stdout/stderr en paralelo, tope de bytes, Job Object (kill-on-close, suspendido) / grupo de procesos, `CREATE_NO_WINDOW` (NF-7) · ProcessAndStoreTests
-- [ ] Localizar `git` una vez, ruta absoluta, versión ≥ 2.39 (§4.1)
-- [ ] `PathSafety` con la lista cerrada de §4.2 · ParserTests / GitCLIEngineTests
-- [ ] `PorcelainParser` v2 -z · ParserTests
-- [ ] `DiffParser` · ParserTests
-- [ ] `ConflictParser` con diff3 · ParserTests
-- [ ] Almacén de recientes y favoritos + importación del `recents.json` Swift (G-15)
+- [x] `ProcessRunner`: timeout, cancelación, stdin en tarea aparte, stdout/stderr en paralelo, tope de bytes, Job Object (kill-on-close, suspendido) / grupo de procesos, `CREATE_NO_WINDOW` (NF-7) · ProcessAndStoreTests
+- [x] Localizar `git` una vez, ruta absoluta, versión ≥ 2.39 (§4.1)
+- [x] `PathSafety` con la lista cerrada de §4.2 · ParserTests / GitCLIEngineTests
+- [x] `PorcelainParser` v2 -z · ParserTests
+- [x] `DiffParser` · ParserTests
+- [x] `ConflictParser` con diff3 · ParserTests
+- [x] Almacén de recientes y favoritos + importación del `recents.json` Swift (G-15)
 - [ ] Fuzz/propiedades de los parsers
+- [x] Parsers de log, ramas y remotos, y `AmendDraft` (los necesitan 7 tests Swift)
+- [ ] Atajos ⌘O y ⌘R, menús nativos y tamaño mínimo de ventana 980×640 (huecos detectados en la matriz)
 
 ## M2 — Motor Git
 - [ ] Trait `GitServing` y `GitCliEngine` con endurecimiento de §4.1
@@ -81,23 +85,25 @@
 - [ ] Publicar `0.1.0-alpha.1` (macOS y Windows x64)
 
 ## M6 — IA (→ alpha.2)
-- [ ] Trait `AiProvider`, `AiSuggestion` con `revision` y estado obsoleto
+
+> Estado: la capa `crates/ariadna-ai` está implementada con un CLI falso. **Codex y Copilot siguen sin verificar** (flags como constantes `SPIKE` en `commands.rs`); los fixtures de salida de los tres son reconstruidos, no capturados. Falta la UI (hoja de propuesta, Ajustes, botón «Iniciar sesión») y el humo manual con CLI reales.
+- [x] Trait `AiProvider`, `AiSuggestion` con `revision` y estado obsoleto
 - [ ] Consentimiento por proveedor, vista previa, exclusión de sensibles, redactor de secretos, marcado de contenido no fiable (§5.1)
-- [ ] `ClaudeCli` (RF-IA1/3/5/6/7)
-- [ ] `CodexCli` · `CopilotCli` (según resultado del spike; experimental si no se verifican)
-- [ ] Resolución de binarios en Windows y shims (RF-IA2); test de lista blanca de argumentos
-- [ ] Entorno por lista blanca y variables prohibidas (RF-IA3)
-- [ ] Detección de disponibilidad, versión y sesión ejecutando el CLI (RF-IA4)
-- [ ] Cola de IA: 2 simultáneas, límite por minuto, cancelación al cerrar pestaña (RF-IA8)
-- [ ] Modo Auto con reglas de RF-IA9
-- [ ] Perfiles Personal/Empresa: modelo, asociación repo→perfil con reglas por remoto, confirmación al cambiar, perfil visible en pestaña y hoja (D16)
+- [x] `ClaudeCli` (RF-IA1/3/5/6/7)
+- [x] `CodexCli` · `CopilotCli` (según resultado del spike; experimental si no se verifican)
+- [x] Resolución de binarios en Windows y shims (RF-IA2); test de lista blanca de argumentos
+- [x] Entorno por lista blanca y variables prohibidas (RF-IA3)
+- [x] Detección de disponibilidad, versión y sesión ejecutando el CLI (RF-IA4)
+- [x] Cola de IA: 2 simultáneas, límite por minuto, cancelación al cerrar pestaña (RF-IA8)
+- [x] Modo Auto con reglas de RF-IA9
+- [ ] Perfiles Personal/Empresa: modelo hecho en `ariadna-ai`; falta asociación repo→perfil con reglas por remoto, confirmación al cambiar, perfil visible en pestaña y hoja (D16)
 - [ ] Directorio de configuración aislado por perfil y botón «Iniciar sesión» del CLI; aviso si el proveedor comparte login
-- [ ] Consentimiento por perfil y proveedor; Claude desactivado por defecto en Empresa
+- [x] Consentimiento por perfil y proveedor; Claude desactivado por defecto en Empresa
 - [ ] Mostrar cuenta activa por proveedor cuando el CLI la exponga (RF-IA12)
-- [ ] Acciones: mensaje de commit, resumen, explicar commit, propuesta de conflicto
-- [ ] Rechazo de propuestas de conflicto que salen de los hunks
+- [x] Acciones: mensaje de commit, resumen, explicar commit, propuesta de conflicto
+- [x] Rechazo de propuestas de conflicto que salen de los hunks
 - [ ] Hoja de propuesta: copiar, usar, regenerar, descartar
-- [ ] CLI falso en CI: entorno, argv, stdin, secreto de prueba · AITests
+- [x] CLI falso en CI: entorno, argv, stdin, secreto de prueba · AITests
 - [ ] Humo manual con CLI reales en macOS y Windows, con cuentas de organización (checklist)
 - [ ] Publicar `0.1.0-alpha.2`
 

@@ -1,5 +1,6 @@
 [package]
 name = "ariadna-ai"
+description = "Capa de IA de Ariadna: Claude, Codex y Copilot mediante su CLI oficial. La IA solo propone"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,6 +8,22 @@ rust-version.workspace = true
 
 [dependencies]
 ariadna-process.workspace = true
+async-trait.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+# CLI falso que imita a claude/codex/copilot para los tests de integración.
+[[bin]]
+name = "ariadna-ai-fake-cli"
+path = "src/bin/fake_cli.rs"
+test = false
 
 [lints]
 workspace = true

@@ -1,0 +1,2 @@
+{"type":"thread.started","thread_id":"abc"}
+{"type":"turn.failed","error":{"message":"You exceeded your current quota"}}

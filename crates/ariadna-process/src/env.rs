@@ -6,12 +6,13 @@ use std::ffi::{OsStr, OsString};
 /// Un patrón que termina en `*` es un prefijo (`GIT_*`); si no, es un nombre exacto.
 #[derive(Debug, Clone)]
 pub enum EnvPolicy {
-    /// Hereda todo el entorno, salvo las variables cuyo nombre contenga alguna
-    /// subcadena denegada. `exceptions` rescata nombres que de otro modo se
-    /// eliminarían (por ejemplo `GIT_ASKPASS`).
-    InheritFiltered {
+    /// Lista blanca de nombres, y de las que pasan se quitan además las que
+    /// contengan alguna subcadena de aspecto secreto (`TOKEN`, `PASSWORD`…).
+    /// Es el modelo del `ProcessEnvironment` del Swift: solo entra lo conocido,
+    /// y un `GIT_*`/`SSH_*` con pinta de token se elimina igualmente.
+    AllowlistSecretFiltered {
+        allow: Vec<String>,
         deny_substrings: Vec<String>,
-        exceptions: Vec<String>,
     },
     /// Solo pasan las variables de la lista blanca, y de esas se quitan las de
     /// `always_remove` aunque coincidan.
@@ -22,14 +23,54 @@ pub enum EnvPolicy {
 }
 
 impl EnvPolicy {
-    /// Filtro heredado del Swift para `git`: quita `TOKEN`, `SECRET`, `PASSWORD`
-    /// y `API_KEY`, pero deja pasar lo que git y los credential helpers necesitan.
+    /// Entorno para `git`, equivalente al del Swift (`ProcessEnvironment.sanitized`):
+    /// los nombres de siempre, `GIT_*` y `SSH_*`, y las variables que Windows exige
+    /// para que `git` y el Git Credential Manager funcionen. Fuera cualquier
+    /// variable con `TOKEN`, `SECRET`, `PASSWORD`, `PASSWD` o `API_KEY` en el nombre.
     pub fn git_default() -> Self {
-        EnvPolicy::InheritFiltered {
-            deny_substrings: ["TOKEN", "SECRET", "PASSWORD", "API_KEY"]
-                .map(String::from)
-                .to_vec(),
-            exceptions: ["SSH_AUTH_SOCK", "GIT_*", "GCM_*"]
+        let allow = [
+            // Comunes (heredadas del Swift)
+            "PATH",
+            "HOME",
+            "USER",
+            "LOGNAME",
+            "LANG",
+            "LC_*",
+            "TERM",
+            "TMPDIR",
+            "TMP",
+            "TEMP",
+            "SHELL",
+            "SSH_*",
+            "GIT_*",
+            "DISPLAY",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            // Windows: sin ellas fallan Winsock/DNS, las rutas de usuario y los scripts de git
+            "SystemRoot",
+            "SystemDrive",
+            "windir",
+            "USERPROFILE",
+            "USERNAME",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "ProgramData",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+            "ComSpec",
+            "PATHEXT",
+            "OS",
+            "COMPUTERNAME",
+            "PROCESSOR_ARCHITECTURE",
+            // Git Credential Manager
+            "GCM_*",
+        ];
+        EnvPolicy::AllowlistSecretFiltered {
+            allow: allow.map(String::from).to_vec(),
+            deny_substrings: ["TOKEN", "SECRET", "PASSWORD", "PASSWD", "API_KEY"]
                 .map(String::from)
                 .to_vec(),
         }
@@ -65,15 +106,15 @@ where
         .filter(|(k, _)| {
             let Some(name) = k.to_str() else { return false };
             match policy {
-                EnvPolicy::InheritFiltered {
+                EnvPolicy::AllowlistSecretFiltered {
+                    allow,
                     deny_substrings,
-                    exceptions,
                 } => {
                     let upper = name.to_ascii_uppercase();
-                    let denied = deny_substrings
+                    let secret = deny_substrings
                         .iter()
                         .any(|d| upper.contains(&d.to_ascii_uppercase()));
-                    !denied || any_match(exceptions, name)
+                    any_match(allow, name) && !secret
                 }
                 EnvPolicy::Allowlist {
                     allow,
@@ -115,16 +156,22 @@ mod tests {
     }
 
     #[test]
-    fn git_default_quita_secretos_y_conserva_lo_necesario() {
+    fn git_default_es_lista_blanca_y_quita_secretos() {
         let parent = e(&[
             ("PATH", "x"),
             ("GITHUB_TOKEN", "t"),
+            ("GIT_TOKEN", "t"),
+            ("GIT_HTTP_PASSWORD", "p"),
             ("my_Api_Key", "k"),
             ("DB_PASSWORD", "p"),
+            ("RANDOM_THING", "r"),
             ("SSH_AUTH_SOCK", "s"),
+            ("SSH_ASKPASS_PASSWORD", "s"),
             ("GIT_ASKPASS", "a"),
             ("GCM_CREDENTIAL_STORE", "c"),
             ("HOME", "h"),
+            ("SystemRoot", "C:\\Windows"),
+            ("Path", "y"),
         ]);
         let out = build_env(parent, &EnvPolicy::git_default(), &[]);
         assert_eq!(
@@ -134,7 +181,9 @@ mod tests {
                 "GIT_ASKPASS",
                 "HOME",
                 "PATH",
-                "SSH_AUTH_SOCK"
+                "Path",
+                "SSH_AUTH_SOCK",
+                "SystemRoot"
             ]
         );
     }

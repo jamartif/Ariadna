@@ -27,7 +27,8 @@ Cada requisito es `[P]` paridad con el Swift o `[N]` novedad. Las novedades no p
 | Recientes y favoritos | [P] | Se importa el `recents.json` existente |
 | IA: mensaje de commit, resumen, explicar commit, propuesta de conflicto | [P] | El Swift la tiene con Copilot y Codex tras flag |
 | IA con Claude | [N] | Spike verificado, ver §5 |
-| Modo Auto, consentimiento por proveedor, ajustes por proveedor | [N] | |
+| Modo Auto | [P] ampliado | El Swift ya hacía Auto (Copilot → Codex) y saltaba ante varios fallos; aquí salta solo si el CLI no está instalado (RF-IA9) |
+| Consentimiento por proveedor, ajustes por proveedor | [N] | |
 | Pestañas por repo | [N] | Ver §8 |
 | Windows | [N] | Ver §4 |
 | Tema moderno, paleta de comandos | [N] | Ver §7 |
@@ -64,7 +65,7 @@ UI Svelte ─IPC tipado─▶ comando Tauri ─▶ SessionManager ─▶ Reposit
                                                      └──▶ AiService ─▶ AiProvider ─▶ ProcessRunner ─▶ claude | codex | copilot
 ```
 
-Cargo workspace: `crates/ariadna-git`, `crates/ariadna-ai`, `src-tauri`, `ui`.
+Cargo workspace: `crates/ariadna-process` (lanzador de procesos), `crates/ariadna-git`, `crates/ariadna-ai`, `src-tauri`, `ui`.
 
 Equivalencias Swift → Rust: `protocol` → `trait`; `actor` → tarea tokio con canal; `@MainActor` → la UI no tiene estado de verdad; `UserConfirmation.require` → ver §6.
 
@@ -191,7 +192,7 @@ Un proveedor sin flags verificados no bloquea `alpha.2`; se publica marcado expe
 
 - **Confirmaciones:** el diálogo lo abre **Rust** (plugin dialog nativo). Los comandos destructivos no reciben ninguna prueba de confirmación desde la UI. Internamente `Confirmed` es un token de un solo uso ligado a `(session_id, operación, revision, hash de parámetros)` con caducidad; el backend comprueba la revisión antes de ejecutar. El diálogo muestra repo, rama y ruta, y bloquea el cambio de pestaña.
 - **WebView:** CSP estricta sin `unsafe-eval`, capabilities mínimas por ventana, sin plugin shell ni fs, sin `{@html}` salvo sanitizado. Todo texto de git o IA se escapa. Test con repo malicioso (nombres de rama con HTML, secuencias de control, `.git/config` con `core.fsmonitor`/`core.sshCommand`).
-- Entorno de `git`: el Swift filtraba por subcadena (`TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`). Se mantiene ese filtro por paridad, con comparación sin distinguir mayúsculas, pero se **permiten** las variables que git y los credential helpers necesitan (`SSH_AUTH_SOCK`, `GIT_*`, `GCM_*`, `GIT_ASKPASS`). Los hijos de **IA** usan lista blanca (§5.3), no este filtro.
+- Entorno de `git`: igual que el Swift (`ProcessEnvironment.sanitized`), **lista blanca** de nombres (`PATH`, `HOME`, `LANG`, `LC_*`, `TMP*`, `SSH_*`, `GIT_*`…) y, de las que pasan, se quitan las que contengan `TOKEN`, `SECRET`, `PASSWORD`, `PASSWD` o `API_KEY`. En Windows se añaden las que exige el sistema (`SystemRoot`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `ComSpec`, `PATHEXT`…) y `GCM_*` para el Git Credential Manager. Implementado en `EnvPolicy::git_default`. Los hijos de **IA** usan su propia lista blanca (§5.3).
 - No se escribe `core.hooksPath` ni ninguna configuración en repos ajenos.
 - Repo público: `.gitignore` ampliado (`target/`, `node_modules/`), gitleaks en pre-commit y CI.
 
@@ -265,7 +266,7 @@ macOS: Developer ID y notarización requieren Apple Developer Program (de pago).
 
 ## 11. Pruebas
 
-- Inventario de los 36 tests de `GitCoreTests` y los 8 de `AriadnaAITests` con su tarea Rust. Criterio de salida de M2 y M3: nº de tests portados = nº de tests Swift del área.
+- Inventario de los **58** tests de `GitCoreTests` y los 8 de `AriadnaAITests` (66 en total; el «36 + 8» del README estaba desactualizado) en [trazabilidad.md](trazabilidad.md). Criterio de salida de M2 y M3: cada test Swift del área tiene su equivalente Rust o una justificación escrita.
 - **La fuente de verdad es git.** Fixtures de parsers generados con git real y contrastados con el Swift; versionados con metadatos (versión de git, SO) y regenerables con un script Rust.
 - Tests de sesiones: cola, cancelación, cierre durante push/rebase/IA, refresco concurrente, confirmar tras cambiar de pestaña, repo borrado, 20 sesiones.
 - Fuzz/propiedades de los parsers.
