@@ -74,8 +74,11 @@ impl Norm {
                 } else if key == Some("lastOpened") {
                     *s = "2026-01-01T00:00:00Z".to_owned();
                 } else if s.contains(&self.root) {
+                    // En Windows las rutas de los mensajes llevan `\` (`C:\...\suelta`): tras
+                    // sustituir la raíz se unifican los separadores en todo el texto, no solo
+                    // cuando el valor empieza por la ruta.
                     let mut t = s.replace(&self.root, "/work");
-                    if t.starts_with("/work") {
+                    if t.contains("/work") {
                         t = t.replace('\\', "/");
                     }
                     *s = t;
