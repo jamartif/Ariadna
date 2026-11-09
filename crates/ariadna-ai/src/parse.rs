@@ -287,13 +287,112 @@ pub fn strip_fences(text: &str) -> String {
     rest.trim().to_string()
 }
 
-/// Separa asunto y cuerpo de un mensaje de commit.
-pub fn split_commit_message(raw: &str) -> (String, String) {
-    let text = strip_fences(raw);
-    match text.split_once('\n') {
-        Some((s, b)) => (s.trim().to_string(), b.trim().to_string()),
-        None => (text.trim().to_string(), String::new()),
+struct CommitRegexes {
+    preamble: Regex,
+    subject_label: Regex,
+    body_label: Regex,
+    heading: Regex,
+}
+
+fn commit_regexes() -> &'static CommitRegexes {
+    static R: OnceLock<CommitRegexes> = OnceLock::new();
+    R.get_or_init(|| CommitRegexes {
+        preamble: Regex::new(
+            r"(?i)^(here(?:'s| is| are)\b|sure\b|certainly\b|of course\b|aqu[ií]\b|claro\b|esta es\b|este es\b)",
+        )
+        .expect("regex fija"),
+        subject_label: Regex::new(
+            r"(?i)^(?:asunto|subject|title|t[ií]tulo|commit message|commit|mensaje de commit|mensaje|summary|resumen)\s*[:：]\s*",
+        )
+        .expect("regex fija"),
+        body_label: Regex::new(
+            r"(?i)^(?:cuerpo|body|description|descripci[oó]n|details|detalles)\s*[:：]\s*(.*)$",
+        )
+        .expect("regex fija"),
+        heading: Regex::new(r"^#{1,6}\s+").expect("regex fija"),
+    })
+}
+
+/// Primer bloque con valla de código, aunque haya una frase de introducción delante
+/// (hasta dos líneas). Sin valla de cierre, hasta el final.
+fn fenced_block(text: &str) -> Option<String> {
+    let start = text.find("```")?;
+    let before = text[..start].trim();
+    if before.lines().count() > 2 {
+        return None;
     }
+    let after = &text[start + 3..];
+    // La primera línea tras la valla es el lenguaje (`text`, `gitcommit`…) y se descarta.
+    let rest = &after[after.find('\n')? + 1..];
+    let body = rest.find("```").map_or(rest, |end| &rest[..end]);
+    Some(body.trim().to_string())
+}
+
+const QUOTES: [(char, char); 5] = [('"', '"'), ('\'', '\''), ('“', '”'), ('«', '»'), ('`', '`')];
+
+/// Quita un par de comillas que envuelva todo el texto.
+fn strip_wrapping_quotes(text: &str) -> &str {
+    let t = text.trim();
+    for (open, close) in QUOTES {
+        if t.chars().count() >= 2 && t.starts_with(open) && t.ends_with(close) {
+            let inner = &t[open.len_utf8()..t.len() - close.len_utf8()];
+            // Si dentro hay otra comilla de cierre, no era un envoltorio del conjunto.
+            if !inner.contains(close) || (open != close && !inner.contains(open)) {
+                return inner.trim();
+            }
+        }
+    }
+    t
+}
+
+/// Limpia la respuesta: valla de código, frase de introducción y comillas de conjunto.
+fn clean_commit_text(raw: &str) -> String {
+    let normalized = raw.replace("\r\n", "\n");
+    let mut text = normalized.trim().to_string();
+    if text.starts_with("```") {
+        text = strip_fences(&text);
+    } else if let Some(inner) = fenced_block(&text) {
+        text = inner;
+    }
+    // «Here is the commit message:» / «Aquí tienes el mensaje:» delante del mensaje.
+    let mut lines: Vec<&str> = text.lines().collect();
+    if lines.len() > 1 {
+        let first = lines[0].trim();
+        let next_blank = lines[1].trim().is_empty();
+        if commit_regexes().preamble.is_match(first) && (first.ends_with(':') || next_blank) {
+            lines.remove(0);
+            while lines.first().is_some_and(|l| l.trim().is_empty()) {
+                lines.remove(0);
+            }
+            text = lines.join("\n");
+        }
+    }
+    strip_wrapping_quotes(&text).to_string()
+}
+
+fn clean_subject(line: &str) -> String {
+    let re = commit_regexes();
+    // Negritas de markdown (`**Asunto:** …`).
+    let mut s = line.replace("**", "").trim().to_string();
+    s = re.heading.replace(&s, "").trim().to_string();
+    s = re.subject_label.replace(&s, "").trim().to_string();
+    strip_wrapping_quotes(&s).to_string()
+}
+
+/// Separa asunto y cuerpo de un mensaje de commit. Tolera vallas de código, comillas,
+/// una frase de introducción y etiquetas como «Asunto:» o «Cuerpo:».
+pub fn split_commit_message(raw: &str) -> (String, String) {
+    let text = clean_commit_text(raw);
+    let mut lines = text.lines().skip_while(|l| l.trim().is_empty());
+    let subject = clean_subject(lines.next().unwrap_or_default());
+    let mut rest: Vec<String> = lines.map(|l| l.trim_end().to_string()).collect();
+    if let Some(first) = rest.iter().position(|l| !l.trim().is_empty()) {
+        if let Some(c) = commit_regexes().body_label.captures(rest[first].trim()) {
+            let tail = c[1].trim().to_string();
+            rest[first] = tail;
+        }
+    }
+    (subject, rest.join("\n").trim().to_string())
 }
 
 fn with_trailing_newline(raw: &str) -> String {
@@ -522,6 +621,112 @@ mod tests {
         assert_eq!(s, "fix: puerta");
         assert_eq!(b, "Evita el write.");
         assert_eq!(strip_fences("sin vallas "), "sin vallas");
+    }
+
+    fn split(raw: &str) -> (String, String) {
+        split_commit_message(raw)
+    }
+
+    #[test]
+    fn mensaje_limpio_asunto_y_cuerpo() {
+        assert_eq!(
+            split("feat: añade login\n\n- valida el token\n- guarda la sesión\n"),
+            (
+                "feat: añade login".into(),
+                "- valida el token\n- guarda la sesión".into()
+            )
+        );
+        assert_eq!(
+            split("fix: solo asunto"),
+            ("fix: solo asunto".into(), String::new())
+        );
+    }
+
+    #[test]
+    fn asunto_y_cuerpo_sin_linea_en_blanco() {
+        assert_eq!(
+            split("fix: x\n- a\n- b"),
+            ("fix: x".into(), "- a\n- b".into())
+        );
+    }
+
+    #[test]
+    fn vallas_con_introduccion_y_con_lenguaje() {
+        let raw =
+            "Here is the commit message:\n\n```gitcommit\nfeat: nueva vista\n\n- detalle\n```\n";
+        assert_eq!(split(raw), ("feat: nueva vista".into(), "- detalle".into()));
+        // Sin valla de cierre.
+        assert_eq!(
+            split("```\nfix: corta\n\ncuerpo").0,
+            "fix: corta".to_string()
+        );
+        // Fin de línea de Windows.
+        assert_eq!(
+            split("```\r\nfix: crlf\r\n\r\ncuerpo\r\n```").1,
+            "cuerpo".to_string()
+        );
+    }
+
+    #[test]
+    fn comillas_alrededor_del_asunto_o_del_mensaje() {
+        for raw in [
+            "\"fix: puerta\"",
+            "'fix: puerta'",
+            "“fix: puerta”",
+            "«fix: puerta»",
+            "`fix: puerta`",
+        ] {
+            assert_eq!(split(raw).0, "fix: puerta", "{raw}");
+        }
+        // Mensaje completo entre comillas.
+        assert_eq!(
+            split("\"fix: puerta\n\n- detalle\""),
+            ("fix: puerta".into(), "- detalle".into())
+        );
+        // Solo el asunto entre comillas.
+        assert_eq!(
+            split("\"fix: puerta\"\n\n- detalle"),
+            ("fix: puerta".into(), "- detalle".into())
+        );
+        // Una comilla legítima dentro no se toca.
+        assert_eq!(split("fix: cierra \"x\" bien").0, "fix: cierra \"x\" bien");
+    }
+
+    #[test]
+    fn prefijos_de_etiqueta_en_espanol_e_ingles() {
+        for (raw, subject) in [
+            ("Asunto: corrige el login", "corrige el login"),
+            ("Subject: fix login", "fix login"),
+            ("**Asunto:** corrige el login", "corrige el login"),
+            ("Mensaje de commit: corrige el login", "corrige el login"),
+            ("Title: \"fix login\"", "fix login"),
+            ("# fix: login", "fix: login"),
+        ] {
+            assert_eq!(split(raw).0, subject, "{raw}");
+        }
+        assert_eq!(
+            split("Asunto: corrige el login\n\nCuerpo:\n- cambia A\n- cambia B"),
+            ("corrige el login".into(), "- cambia A\n- cambia B".into())
+        );
+        assert_eq!(
+            split("Subject: fix\n\nBody: arregla el caso vacío").1,
+            "arregla el caso vacío"
+        );
+    }
+
+    #[test]
+    fn un_tipo_conventional_no_se_confunde_con_una_etiqueta() {
+        assert_eq!(
+            split("docs: actualiza la guía").0,
+            "docs: actualiza la guía"
+        );
+        assert_eq!(split("feat(ui): botón").0, "feat(ui): botón");
+    }
+
+    #[test]
+    fn respuesta_vacia_da_asunto_vacio() {
+        assert_eq!(split("  \n\n "), (String::new(), String::new()));
+        assert_eq!(split("```\n```").0, "");
     }
 
     #[test]

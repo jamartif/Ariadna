@@ -19,8 +19,8 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::env::shares_login_between_profiles;
 use crate::models::{
-    AiError, AiSuggestion, Availability, ProviderChoice, ProviderId, SuggestionStatus,
-    SummaryStyle, DEFAULT_MAX_CONTEXT_BYTES,
+    AiError, AiSuggestion, Availability, CommitOptions, ProviderChoice, ProviderId,
+    SuggestionStatus, SummaryStyle, DEFAULT_MAX_CONTEXT_BYTES,
 };
 use crate::prompt::ConflictInput;
 use crate::provider::{AiProvider, CallContext};
@@ -210,7 +210,7 @@ pub struct ProviderStatus {
 enum Action<'a> {
     CommitMessage {
         diff: &'a str,
-        template: Option<&'a str>,
+        opts: &'a CommitOptions,
     },
     Summarize {
         diff: &'a str,
@@ -230,8 +230,8 @@ async fn dispatch(
     a: &Action<'_>,
 ) -> Result<AiSuggestion, AiError> {
     match a {
-        Action::CommitMessage { diff, template } => {
-            p.suggest_commit_message(ctx, diff, *template).await
+        Action::CommitMessage { diff, opts } => {
+            p.suggest_commit_message_with(ctx, diff, opts).await
         }
         Action::Summarize { diff, style } => p.summarize_diff(ctx, diff, *style).await,
         Action::Explain {
@@ -292,13 +292,25 @@ impl Orchestrator {
         diff: &str,
         template: Option<&str>,
     ) -> Result<AiSuggestion, AiError> {
-        self.perform(
-            profile,
-            choice,
-            ctx,
-            &Action::CommitMessage { diff, template },
-        )
-        .await
+        let opts = CommitOptions {
+            template: template.map(String::from),
+            ..CommitOptions::default()
+        };
+        self.suggest_commit_message_with(profile, choice, ctx, diff, &opts)
+            .await
+    }
+
+    /// Mensaje de commit con idioma, estilo y asuntos recientes.
+    pub async fn suggest_commit_message_with(
+        &self,
+        profile: &Profile,
+        choice: ProviderChoice,
+        ctx: &CallContext,
+        diff: &str,
+        opts: &CommitOptions,
+    ) -> Result<AiSuggestion, AiError> {
+        self.perform(profile, choice, ctx, &Action::CommitMessage { diff, opts })
+            .await
     }
 
     pub async fn summarize_diff(

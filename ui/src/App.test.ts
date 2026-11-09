@@ -20,7 +20,7 @@ describe('App (integración con mockApi)', () => {
     expect(await screen.findByRole('tab', { name: /^ariadna, rama rust-migration/ })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByRole('grid', { name: /Archivos con cambios/ })).toBeInTheDocument();
     expect(screen.getByRole('tabpanel', { name: /ariadna/ })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Mensaje' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Asunto' })).toBeInTheDocument();
   });
 
   it('muestra el esqueleto de arranque y después el contenido', async () => {

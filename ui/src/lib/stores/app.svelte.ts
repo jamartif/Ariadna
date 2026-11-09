@@ -4,6 +4,7 @@ import {
   type ApiError,
   type AppState,
   type GitInfo,
+  type OpenResult,
   type RecentRepository,
   type TabInfo
 } from '$lib/api/types';
@@ -29,6 +30,8 @@ export class AppStore {
   status = $state<'loading' | 'ready' | 'error'>('loading');
   loadError = $state.raw<ApiError | null>(null);
   paletteOpen = $state(false);
+  /** Diálogo «Clonar repositorio» (desde la bienvenida o la paleta). */
+  cloneOpen = $state(false);
   opening = $state(false);
 
   private tabStores = new Map<string, TabState>();
@@ -238,35 +241,44 @@ export class AppStore {
     this.opening = true;
     try {
       const res = await this.api.openRepository(path);
-      const tab = res.tab;
-      const real = this.entries.findIndex((e) => e.id === tab.tabId);
-      const draftIdx = draftId ? this.entries.findIndex((e) => e.id === draftId) : -1;
-      let next = [...this.entries];
-      if (real >= 0) {
-        // Ya abierto: se enfoca y el borrador sobra.
-        next[real] = { id: tab.tabId, kind: 'repo', info: tab };
-        if (draftIdx >= 0) next = next.filter((e) => e.id !== draftId);
-      } else if (draftIdx >= 0) {
-        next[draftIdx] = { id: tab.tabId, kind: 'repo', info: tab };
-      } else {
-        next.push({ id: tab.tabId, kind: 'repo', info: tab });
-      }
-      this.entries = next;
-      this.activeId = tab.tabId;
-      if (res.alreadyOpen) toasts.info(t('welcome.alreadyOpen', { name: tab.name }));
-      // Refresca la lista de recientes desde Rust.
-      void this.api
-        .appState()
-        .then((s) => {
-          this.recents = s.recents;
-        })
-        .catch(() => undefined);
+      this.adopt(res, draftId);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: toApiError(e) };
     } finally {
       this.opening = false;
     }
+  }
+
+  /** Integra un `OpenResult` (abrir o clonar): enfoca la pestaña y refresca los recientes. */
+  adopt(res: OpenResult, draftId?: string): void {
+    const tab = res.tab;
+    const real = this.entries.findIndex((e) => e.id === tab.tabId);
+    const draftIdx = draftId ? this.entries.findIndex((e) => e.id === draftId) : -1;
+    let next = [...this.entries];
+    if (real >= 0) {
+      // Ya abierto: se enfoca y el borrador sobra.
+      next[real] = { id: tab.tabId, kind: 'repo', info: tab };
+      if (draftIdx >= 0) next = next.filter((e) => e.id !== draftId);
+    } else if (draftIdx >= 0) {
+      next[draftIdx] = { id: tab.tabId, kind: 'repo', info: tab };
+    } else {
+      next.push({ id: tab.tabId, kind: 'repo', info: tab });
+    }
+    this.entries = next;
+    this.activeId = tab.tabId;
+    if (res.alreadyOpen) toasts.info(t('welcome.alreadyOpen', { name: tab.name }));
+    // Refresca la lista de recientes desde Rust.
+    void this.api
+      .appState()
+      .then((s) => {
+        this.recents = s.recents;
+      })
+      .catch(() => undefined);
+  }
+
+  openClone(): void {
+    this.cloneOpen = true;
   }
 
   async toggleFavorite(path: string): Promise<void> {

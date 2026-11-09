@@ -566,3 +566,23 @@ fn ajustes_ida_y_vuelta() {
     s.save(&path).unwrap();
     assert_eq!(AiSettings::load(&path).unwrap(), s);
 }
+
+#[tokio::test]
+async fn las_opciones_de_commit_llegan_al_hijo_por_stdin() {
+    use ariadna_ai::{CommitLanguage, CommitOptions, CommitStyle};
+    let (p, fx) = provider(ProviderId::Claude, "ok");
+    let opts = CommitOptions {
+        template: None,
+        language: CommitLanguage::Auto,
+        style: CommitStyle::Conventional,
+        recent_subjects: vec!["fix: arregla la puerta-unica".into()],
+    };
+    p.suggest_commit_message_with(&ctx(), DIFF, &opts)
+        .await
+        .unwrap();
+    let d = dumps(&fx);
+    let stdin = d.last().unwrap()["stdin"].as_str().unwrap().to_string();
+    assert!(stdin.contains("RECENT COMMIT SUBJECTS:\n- fix: arregla la puerta-unica"));
+    assert!(stdin.contains("Conventional Commits"));
+    assert!(stdin.contains("rama-secreta.rs"));
+}

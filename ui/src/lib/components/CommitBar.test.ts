@@ -16,7 +16,8 @@ afterEach(() => {
   resetGlobals();
 });
 
-const box = () => screen.getByRole('textbox', { name: 'Mensaje' });
+const box = () => screen.getByRole('textbox', { name: 'Asunto' });
+const desc = () => screen.getByRole('textbox', { name: 'Descripción' });
 
 describe('CommitBar', () => {
   it('desactiva el botón sin mensaje y explica por qué', async () => {
@@ -40,8 +41,8 @@ describe('CommitBar', () => {
     expect(screen.getByText('Asunto 73/72')).toBeInTheDocument();
     expect(screen.getByText(/supera los 72 caracteres/)).toBeInTheDocument();
     expect(box()).toHaveAttribute('aria-invalid', 'true');
-    // el contador solo mide la primera línea
-    await userEvent.type(box(), '{Enter}descripción larga');
+    // el contador solo mide el asunto, no la descripción
+    await userEvent.type(desc(), 'descripción larga');
     expect(screen.getByText('Asunto 73/72')).toBeInTheDocument();
   });
 
@@ -65,6 +66,17 @@ describe('CommitBar', () => {
     await waitFor(() => expect(tab.message).toBe(''));
     await waitFor(() => expect(tab.stagedCount).toBe(0));
     expect(toasts.items.some((t) => t.kind === 'success' && t.title === 'Commit creado')).toBe(true);
+  });
+
+  it('Intro en el asunto salta a la descripción sin crear el commit', async () => {
+    const { tab, api } = await loadedTab();
+    const spy = vi.spyOn(api, 'commit');
+    render(CommitBar, { props: { tab } });
+    await userEvent.type(box(), 'Asunto{Enter}');
+    expect(desc()).toHaveFocus();
+    expect(spy).not.toHaveBeenCalled();
+    await userEvent.type(desc(), 'cuerpo{Control>}{Enter}{/Control}');
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(tab.id, 'Asunto\n\ncuerpo', false));
   });
 
   it('Ctrl+Intro sin mensaje no hace nada', async () => {
@@ -116,7 +128,8 @@ describe('CommitBar', () => {
     const { tab } = await loadedTab();
     render(CommitBar, { props: { tab } });
     await userEvent.type(box(), 'a medias');
-    expect(localStorage.getItem(`ariadna.draft:${tab.info.path}`)).toBe('a medias');
+    await userEvent.type(desc(), 'y más');
+    expect(JSON.parse(localStorage.getItem(`ariadna.draft:${tab.info.path}`) ?? '{}')).toEqual({ summary: 'a medias', description: 'y más' });
   });
 
   it('avisa si HEAD está desacoplado', async () => {

@@ -6,16 +6,19 @@ use std::sync::Arc;
 
 use ariadna_git::{
     Commit, ConflictFile, DiffScope, FileDiff, GitPath, MergeFastForward, MergeResult,
-    RecentRepository,
+    RecentRepository, Secret,
 };
 use async_trait::async_trait;
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 
 use crate::core::{
-    default_data_dir, locate_git, AmendDraft, ApiError, ApiSnapshot, AppConfig, AppCore, AppEvent,
-    AppState, Closed, CommitResult, Done, EventSink, HunkArg, OpenResult, Prompter,
+    default_data_dir, locate_git, validate_external_url, AiCommitOptions, AiCommitSuggestion,
+    AiContextPreview, AiSettingsPatch, AiState, AmendDraft, ApiError, ApiSnapshot, AppConfig,
+    AppCore, AppEvent, AppState, Closed, CommitResult, CredentialTest, Done, EventSink, HunkArg,
+    OpenResult, Prompter,
 };
 
 type Cmd<T> = Result<T, ApiError>;
@@ -72,6 +75,7 @@ impl EventSink for TauriSink {
             AppEvent::TabUpdated(p) => self.app.emit("tab-updated", p),
             AppEvent::Session(p) => self.app.emit("session-event", p),
             AppEvent::TabsChanged(p) => self.app.emit("tabs-changed", p),
+            AppEvent::CloneProgress(p) => self.app.emit("clone-progress", p),
         };
         if let Err(e) = result {
             eprintln!("no se pudo emitir el evento: {e}");
@@ -130,6 +134,85 @@ async fn cancel_operation(
     operation_id: u64,
 ) -> Cmd<bool> {
     core.cancel_operation(&tab_id, operation_id)
+}
+
+/// Clona y abre una pestaña. `secret` es un PAT de un solo uso: no se guarda (ver `clone_ops`).
+#[tauri::command]
+async fn clone_repository(
+    core: State<'_, AppCore>,
+    url: String,
+    destination: String,
+    branch: Option<String>,
+    username: Option<String>,
+    secret: Option<Secret>,
+) -> Cmd<OpenResult> {
+    core.clone_repository(url, destination, branch, username, secret)
+        .await
+}
+
+#[tauri::command]
+async fn store_credential(
+    core: State<'_, AppCore>,
+    url: String,
+    username: String,
+    secret: Secret,
+) -> Cmd<()> {
+    core.store_credential(&url, &username, secret).await
+}
+
+#[tauri::command]
+async fn test_credential(core: State<'_, AppCore>, url: String) -> Cmd<CredentialTest> {
+    core.test_credential(&url).await
+}
+
+#[tauri::command]
+async fn forget_credential(core: State<'_, AppCore>, url: String, username: String) -> Cmd<()> {
+    core.forget_credential(&url, &username).await
+}
+
+/// Abre una URL en el navegador del sistema. Solo `https` y solo hosts de la lista del
+/// contrato (`core::external`); cualquier otra cosa es un error `POLICY`.
+#[tauri::command]
+async fn open_external_url(app: AppHandle, url: String) -> Cmd<()> {
+    let url = validate_external_url(&url)?;
+    app.opener()
+        .open_url(url.as_str(), None::<&str>)
+        .map_err(|e| ApiError::io(format!("no se pudo abrir el navegador: {e}")))
+}
+
+// --- comandos de IA -----------------------------------------------------------------------
+
+#[tauri::command]
+async fn ai_state(core: State<'_, AppCore>, tab_id: String) -> Cmd<AiState> {
+    core.ai_state(&tab_id).await
+}
+
+#[tauri::command]
+async fn ai_update_settings(core: State<'_, AppCore>, patch: AiSettingsPatch) -> Cmd<AiState> {
+    core.ai_update_settings(patch).await
+}
+
+#[tauri::command]
+async fn ai_preview_context(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    options: Option<AiCommitOptions>,
+) -> Cmd<AiContextPreview> {
+    core.ai_preview_context(&tab_id, options).await
+}
+
+#[tauri::command]
+async fn ai_generate_commit_message(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    options: AiCommitOptions,
+) -> Cmd<AiCommitSuggestion> {
+    core.ai_generate_commit_message(&tab_id, options).await
+}
+
+#[tauri::command]
+async fn ai_cancel(core: State<'_, AppCore>, tab_id: String) -> Cmd<bool> {
+    core.ai_cancel(&tab_id)
 }
 
 // --- comandos de pestaña ------------------------------------------------------------------
@@ -220,6 +303,17 @@ async fn log(
 }
 
 #[tauri::command]
+async fn log_page(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    skip: usize,
+    limit: usize,
+    query: Option<String>,
+) -> Cmd<Vec<Commit>> {
+    core.log_page(&tab_id, skip, limit, query).await
+}
+
+#[tauri::command]
 async fn create_branch(
     core: State<'_, AppCore>,
     tab_id: String,
@@ -250,7 +344,7 @@ async fn delete_branch(
     tab_id: String,
     name: String,
     force: bool,
-) -> Cmd<()> {
+) -> Cmd<Done> {
     core.delete_branch(&tab_id, name, force).await
 }
 
@@ -262,6 +356,17 @@ async fn merge(
     fast_forward: MergeFastForward,
 ) -> Cmd<MergeResult> {
     core.merge(&tab_id, branch, fast_forward).await
+}
+
+/// Fusiona sin conflictos: si los hay, aborta y devuelve `MERGE_CONFLICTS`.
+#[tauri::command]
+async fn merge_clean(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    branch: String,
+    fast_forward: MergeFastForward,
+) -> Cmd<MergeResult> {
+    core.merge_clean(&tab_id, branch, fast_forward).await
 }
 
 #[tauri::command]
@@ -328,6 +433,7 @@ async fn push(
 pub fn run() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let handle = app.handle().clone();
             let data_dir = match default_data_dir() {
@@ -375,6 +481,16 @@ pub fn run() {
             toggle_favorite,
             forget_recent,
             cancel_operation,
+            open_external_url,
+            clone_repository,
+            store_credential,
+            test_credential,
+            forget_credential,
+            ai_state,
+            ai_update_settings,
+            ai_preview_context,
+            ai_generate_commit_message,
+            ai_cancel,
             get_snapshot,
             refresh,
             stage,
@@ -387,6 +503,8 @@ pub fn run() {
             amend_draft,
             diff,
             log,
+            log_page,
+            merge_clean,
             create_branch,
             rename_branch,
             checkout,

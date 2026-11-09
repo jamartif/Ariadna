@@ -1,35 +1,77 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import type { Entry } from '$lib/stores/app.svelte';
   import { t } from '$lib/i18n';
-  import { formatCombo, isMac, SHORTCUTS } from '$lib/shortcuts/registry';
+  import { formatCombo, SHORTCUTS } from '$lib/shortcuts/registry';
   import { settings } from '$lib/stores/settings.svelte';
+  import { detectPlatform, type Platform } from '$lib/util/platform';
+  import { getWindowApi, type WindowApi } from '$lib/util/window';
   import Icon from './Icon.svelte';
   import Logo from './Logo.svelte';
+  import TabStrip from './TabStrip.svelte';
+  import WindowControls from './WindowControls.svelte';
   import type { IconName } from './icons';
 
-  let { title = '', onpalette }: { title?: string; onpalette: () => void } = $props();
+  interface Props {
+    entries: Entry[];
+    activeId: string | null;
+    onactivate: (id: string) => void;
+    onclose: (id: string) => void;
+    onnew: () => void;
+    onreorder: (ids: string[]) => void;
+    onpalette: () => void;
+    /** Para pruebas y revisión visual; por defecto se detecta con `navigator`. */
+    platform?: Platform;
+    /** `undefined` = detectar Tauri; `null` = sin API de ventana (navegador). */
+    windowApi?: WindowApi | null;
+  }
+  let { entries, activeId, onactivate, onclose, onnew, onreorder, onpalette, platform, windowApi }: Props = $props();
 
-  const mac = isMac();
-  const paletteCombo = formatCombo(SHORTCUTS.find((s) => s.id === 'palette.open')?.combo ?? 'Mod+K', mac);
+  const os = $derived(platform ?? detectPlatform());
+  const mac = $derived(os === 'mac');
+  const paletteCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'palette.open')?.combo ?? 'Mod+K', mac));
   const themeIcon = $derived<IconName>(settings.theme === 'light' ? 'sun' : settings.theme === 'dark' ? 'moon' : 'monitor');
   const themeLabel = $derived(t(`settings.theme.${settings.theme}`));
+
+  // Doble clic en la zona vacía: maximizar. Se resuelve aquí (y se corta la propagación)
+  // para que el manejador interno de Tauri no lo alterne una segunda vez.
+  let win = $state<WindowApi | null>(null);
+  onMount(() => {
+    void (async () => {
+      win = windowApi !== undefined ? windowApi : await getWindowApi();
+    })();
+  });
+  function onDragMouseDown(e: MouseEvent) {
+    if (e.detail !== 2 || e.button !== 0) return;
+    const el = e.target as HTMLElement | null;
+    if (!el?.hasAttribute('data-tauri-drag-region')) return;
+    e.stopPropagation();
+    void win?.toggleMaximize().catch(() => undefined);
+  }
 </script>
 
-<!-- Barra de título integrada: la región arrastrable es el propio contenedor; los botones no lo son. -->
-<header class="titlebar" data-tauri-drag-region>
+<!-- Barra de título ÚNICA e integrada: marca, pestañas de repo, paleta y controles de ventana.
+     Solo las zonas vacías llevan `data-tauri-drag-region`: botones y pestañas no se arrastran. -->
+<!-- svelte-ignore a11y_no_static_element_interactions, a11y_no_noninteractive_element_interactions -->
+<header class="titlebar" class:mac data-platform={os} data-tauri-drag-region onmousedown={onDragMouseDown}>
+  {#if mac}<div class="mac-inset" data-tauri-drag-region aria-hidden="true"></div>{/if}
   <div class="brand" data-tauri-drag-region>
     <Logo size={22} />
-    <span class="app" data-tauri-drag-region>Ariadna</span>
   </div>
-  <div class="title" data-tauri-drag-region>{title}</div>
+
+  <TabStrip {entries} {activeId} {onactivate} {onclose} {onnew} {onreorder} />
+
+  <div class="grow" data-tauri-drag-region></div>
+
   <div class="tools">
-    <button type="button" class="btn palette" onclick={onpalette} aria-label={t('palette.open')} title={t('palette.open')}>
+    <button type="button" class="palette" onclick={onpalette} aria-label={t('palette.open')} title={t('palette.open')}>
       <Icon name="search" size={14} />
       <span class="hint">{t('palette.placeholderShort')}</span>
       <kbd>{paletteCombo}</kbd>
     </button>
     <button
       type="button"
-      class="btn btn-ghost btn-icon"
+      class="btn btn-ghost btn-icon tool"
       onclick={() => settings.cycleTheme()}
       aria-label={t('settings.themeButton', { mode: themeLabel })}
       title={t('settings.themeButton', { mode: themeLabel })}
@@ -38,7 +80,7 @@
     </button>
     <button
       type="button"
-      class="btn btn-ghost btn-icon"
+      class="btn btn-ghost btn-icon tool"
       onclick={() => settings.toggleDensity()}
       aria-pressed={settings.density === 'compact'}
       aria-label={t('settings.density')}
@@ -47,64 +89,90 @@
       <Icon name="rows" size={16} />
     </button>
   </div>
+
+  {#if !mac}<WindowControls api={windowApi} />{/if}
 </header>
 
 <style>
   .titlebar {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2);
     height: var(--titlebar-h);
-    padding: 0 var(--space-3);
-    /* Reserva el hueco de los controles de ventana nativos si el SO los superpone. */
-    padding-left: max(var(--space-3), var(--window-controls-inset-left, 0px));
-    padding-right: max(var(--space-3), var(--window-controls-inset-right, 0px));
+    padding-left: var(--space-3);
+    padding-right: var(--space-2);
     background: var(--bg-app);
+    flex: none;
+  }
+  .titlebar:not(.mac) {
+    padding-right: 0;
+  }
+  .mac-inset {
+    /* Hueco para los semáforos nativos (titleBarStyle: Overlay). */
+    width: 68px;
+    align-self: stretch;
+    flex: none;
   }
   .brand {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    font-weight: 650;
-    letter-spacing: -0.01em;
+    align-self: stretch;
+    flex: none;
+    padding-right: var(--space-1);
   }
-  .app {
-    font-size: var(--text-md);
-  }
-  .title {
+  .grow {
     flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    text-align: center;
-    color: var(--text-subtle);
-    font-size: var(--text-sm);
+    align-self: stretch;
+    min-width: 24px;
   }
   .tools {
     display: flex;
     align-items: center;
-    gap: var(--space-1);
+    gap: 2px;
+    flex: none;
+  }
+  .tool {
+    width: 28px;
+    min-width: 28px;
+    min-height: 28px;
   }
   .palette {
+    display: inline-flex;
+    align-items: center;
     gap: var(--space-2);
-    color: var(--text-muted);
-    background: var(--bg-surface);
-    border-color: var(--border);
+    height: 28px;
     min-width: 200px;
-    justify-content: flex-start;
+    margin-right: var(--space-1);
+    padding: 0 var(--space-2) 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--pill);
+    background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+    color: var(--text-subtle);
+    font-size: var(--text-sm);
+    transition:
+      border-color var(--dur-fast) var(--ease),
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
+  }
+  .palette:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-surface);
+    color: var(--text-muted);
   }
   .palette .hint {
     flex: 1;
     text-align: left;
-    font-weight: 400;
   }
-  @media (max-width: 760px) {
+  @media (max-width: 900px) {
     .palette {
       min-width: 0;
+      width: 28px;
+      padding: 0;
+      justify-content: center;
     }
     .palette .hint,
-    .title {
+    .palette kbd {
       display: none;
     }
   }

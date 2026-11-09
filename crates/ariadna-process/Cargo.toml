@@ -11,6 +11,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 command-group.workspace = true
 thiserror.workspace = true
+zeroize.workspace = true
 
 [[bin]]
 name = "ariadna-proc-fake"

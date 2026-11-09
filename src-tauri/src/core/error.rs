@@ -1,6 +1,7 @@
 //! `GitError` → `ApiError` (contrato `specs/rust/ipc.md`). Los códigos son estables y la UI
 //! nunca interpreta `message`.
 
+use ariadna_ai::AiError;
 use ariadna_git::GitError;
 use serde::{Deserialize, Serialize};
 
@@ -17,7 +18,8 @@ pub struct ApiError {
 pub type ApiResult<T> = Result<T, ApiError>;
 
 /// Todos los códigos del contrato (para tests y documentación).
-pub const ALL_CODES: [&str; 22] = [
+pub const ALL_CODES: [&str; 35] = [
+    "MERGE_CONFLICTS",
     "NOT_A_REPOSITORY",
     "GIT_NOT_FOUND",
     "COMMAND_FAILED",
@@ -40,6 +42,32 @@ pub const ALL_CODES: [&str; 22] = [
     "AUTH",
     "IO",
     "REPO_MISSING",
+    "AI_DISABLED",
+    "AI_NOT_INSTALLED",
+    "AI_NOT_LOGGED_IN",
+    "AI_QUOTA",
+    "AI_BAD_OUTPUT",
+    "AI_CONTEXT_TOO_LARGE",
+    "AI_TIMEOUT",
+    "AI_CONSENT_REQUIRED",
+    "AI_NO_STAGED_CHANGES",
+    "AI_SENSITIVE_FILE",
+    "POLICY",
+    "RATE_LIMITED",
+];
+
+/// Códigos `AI_*` del contrato (los produce [`From<AiError>`] y el servicio de IA).
+pub const AI_CODES: [&str; 10] = [
+    "AI_DISABLED",
+    "AI_NOT_INSTALLED",
+    "AI_NOT_LOGGED_IN",
+    "AI_QUOTA",
+    "AI_BAD_OUTPUT",
+    "AI_CONTEXT_TOO_LARGE",
+    "AI_TIMEOUT",
+    "AI_CONSENT_REQUIRED",
+    "AI_NO_STAGED_CHANGES",
+    "AI_SENSITIVE_FILE",
 ];
 
 impl ApiError {
@@ -127,4 +155,60 @@ impl From<GitError> for ApiError {
             detail,
         }
     }
+}
+
+impl From<AiError> for ApiError {
+    fn from(e: AiError) -> Self {
+        let message = e.to_string();
+        // `match` exhaustivo a propósito, como en `GitError`: una variante nueva obliga a
+        // darle código. Ningún `AiError` lleva el prompt ni el diff.
+        let (code, detail) = match &e {
+            AiError::NotInstalled { provider, .. } => (
+                "AI_NOT_INSTALLED",
+                Some(provider.login_invocation().to_owned()),
+            ),
+            AiError::NotLoggedIn { provider, .. } => (
+                "AI_NOT_LOGGED_IN",
+                Some(provider.login_invocation().to_owned()),
+            ),
+            AiError::Quota { detail, .. } => ("AI_QUOTA", non_empty(detail)),
+            AiError::BadOutput(d) => ("AI_BAD_OUTPUT", non_empty(d)),
+            AiError::ContextTooLarge { bytes, max_bytes } => {
+                ("AI_CONTEXT_TOO_LARGE", Some(format!("{bytes}/{max_bytes}")))
+            }
+            AiError::Timeout { provider } => ("AI_TIMEOUT", Some(provider_id(*provider))),
+            AiError::Cancelled => ("CANCELLED", None),
+            AiError::ConsentRequired { provider } => {
+                ("AI_CONSENT_REQUIRED", Some(provider_id(*provider)))
+            }
+            AiError::ProviderDisabled { provider } => ("AI_DISABLED", Some(provider_id(*provider))),
+            AiError::AiDisabled => ("AI_DISABLED", None),
+            AiError::NoProviderAvailable { .. } => (
+                "AI_NOT_INSTALLED",
+                Some(
+                    ariadna_ai::ProviderId::AUTO_ORDER
+                        .iter()
+                        .map(|p| p.login_invocation())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                ),
+            ),
+            AiError::ProviderFailed { detail, .. } => ("COMMAND_FAILED", non_empty(detail)),
+            AiError::ConflictProposalRejected(d) => ("AI_BAD_OUTPUT", non_empty(d)),
+            AiError::SensitiveFile(p) => ("AI_SENSITIVE_FILE", non_empty(p)),
+            AiError::RateLimited { retry_after_secs } => {
+                ("RATE_LIMITED", Some(retry_after_secs.to_string()))
+            }
+            AiError::Io(d) => ("IO", non_empty(d)),
+        };
+        Self {
+            code: code.to_owned(),
+            message,
+            detail,
+        }
+    }
+}
+
+fn provider_id(p: ariadna_ai::ProviderId) -> String {
+    p.binary_name().to_owned()
 }

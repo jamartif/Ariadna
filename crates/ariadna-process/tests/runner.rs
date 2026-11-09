@@ -2,7 +2,9 @@
 
 use std::time::{Duration, Instant};
 
-use ariadna_process::{run, CancellationToken, EnvPolicy, ProcessError, ProcessSpec};
+use ariadna_process::{
+    run, run_streaming, CancellationToken, EnvPolicy, ProcessError, ProcessSpec,
+};
 
 fn fake() -> ProcessSpec {
     ProcessSpec::new(env!("CARGO_BIN_EXE_ariadna-proc-fake"))
@@ -137,4 +139,42 @@ async fn programa_inexistente_da_error_de_spawn() {
     .await
     .unwrap_err();
     assert!(matches!(err, ProcessError::Spawn { .. }));
+}
+
+#[tokio::test]
+async fn streaming_entrega_stderr_por_trozos_y_lo_conserva() {
+    let mut chunks: Vec<Vec<u8>> = Vec::new();
+    let out = run_streaming(
+        fake().args(["stderr-stream", "4"]),
+        CancellationToken::new(),
+        |c| chunks.push(c.to_vec()),
+    )
+    .await
+    .unwrap();
+    assert!(out.success());
+    let joined: Vec<u8> = chunks.concat();
+    assert_eq!(joined, out.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&joined),
+        "paso-0\rpaso-1\rpaso-2\rpaso-3\rfin\n"
+    );
+    // Las pausas entre escrituras hacen que llegue en más de un trozo.
+    assert!(chunks.len() > 1, "{} trozos", chunks.len());
+}
+
+#[tokio::test]
+async fn streaming_cancelado_devuelve_lo_leido() {
+    let cancel = CancellationToken::new();
+    let c2 = cancel.clone();
+    let mut seen = 0usize;
+    let out = run_streaming(fake().args(["stderr-stream", "200"]), cancel, |c| {
+        seen += c.len();
+        if seen > 10 {
+            c2.cancel();
+        }
+    })
+    .await
+    .unwrap();
+    assert!(out.cancelled);
+    assert!(seen > 0);
 }

@@ -10,12 +10,18 @@
 //! * [`listings`]: log, ramas y remotos.
 //! * [`amend`]: reglas del borrador de mensaje al enmendar.
 //! * [`git_locator`]: localización y validación de `git`.
+//! * [`auth`], [`credentials`] y [`clone`]: error de autenticación, credenciales por PAT
+//!   (credential helper de git) y clonado desde URL con progreso (spec §4.3).
 //! * [`recents`]: recientes y favoritos en JSON compatible con el Swift.
 //!
 //! * [`runner`], [`engine`], [`serving`] y [`error`]: motor git por CLI (M2/M3).
 
 pub mod amend;
+pub mod askpass;
+pub mod auth;
+pub mod clone;
 pub mod conflict;
+pub mod credentials;
 pub mod diff;
 pub mod engine;
 pub mod error;
@@ -25,6 +31,7 @@ pub mod models;
 pub mod path_safety;
 pub mod porcelain;
 pub mod recents;
+mod remote_url;
 pub mod runner;
 pub mod serving;
 pub mod session;
@@ -32,10 +39,14 @@ pub mod session;
 #[cfg(test)]
 mod testutil;
 
+pub use askpass::{scrub_error, CloneAuth};
+pub use auth::{classify_auth_failure, AUTH_MARKERS};
+pub use clone::{parse_progress_line, ClonePhase, CloneProgress, CloneRequest, CloneService};
 pub use conflict::{
     conflict_hunks, has_conflict_markers, parse_conflicts, resolve_all, resolve_hunks,
     ConflictError, ConflictRegion, Eol, ParsedConflicts,
 };
+pub use credentials::{CredentialStore, FilledCredential, Secret};
 pub use diff::{parse_diff, rebuild_diff, unquote_c_style, DiffError};
 pub use engine::GitCliEngine;
 pub use error::{GitError, GitResult};

@@ -3,29 +3,46 @@
   import { t, tn } from '$lib/i18n';
   import { formatCombo, isMac, registerHandlers, SHORTCUTS } from '$lib/shortcuts/registry';
   import type { TabState } from '$lib/stores/tab.svelte';
+  import { toasts } from '$lib/stores/toasts.svelte';
+  import AiConsentDialog from './AiConsentDialog.svelte';
   import Icon from './Icon.svelte';
 
   let { tab }: { tab: TabState } = $props();
 
   const SUBJECT_LIMIT = 72;
 
+  let summaryInput = $state<HTMLInputElement>();
   let textarea = $state<HTMLTextAreaElement>();
   let canAmend = $state(true);
   let amendReason = $state<string | null>(null);
+  let aiDialog = $state(false);
+  let cancelBtn = $state<HTMLButtonElement>();
+  let aiBtn = $state<HTMLButtonElement>();
+  let hadFocus = false;
 
-  const submitCombo = formatCombo(SHORTCUTS.find((s) => s.id === 'commit.submit')?.combo ?? 'Mod+Enter', isMac());
+  const comboOf = (id: string, fallback: string) => formatCombo(SHORTCUTS.find((s) => s.id === id)?.combo ?? fallback, isMac());
+  const submitCombo = comboOf('commit.submit', 'Mod+Enter');
+  const aiCombo = comboOf('ai.generate', 'Mod+Shift+G');
 
-  const subject = $derived(tab.message.split('\n')[0] ?? '');
-  const subjectLen = $derived([...subject].length);
+  const ai = $derived(tab.ai);
+  const subjectLen = $derived([...tab.summary].length);
   const overLimit = $derived(subjectLen > SUBJECT_LIMIT);
-  const secondLineFilled = $derived((tab.message.split('\n')[1] ?? '').trim() !== '');
   const empty = $derived(tab.message.trim() === '');
   const nothingStaged = $derived(tab.stagedCount === 0 && !tab.amend);
   const blockedReason = $derived(
     tab.committing ? null : empty ? t('commit.reasonEmpty') : nothingStaged ? t('commit.reasonNothing') : null
   );
-  const canSubmit = $derived(!tab.committing && !empty && !nothingStaged);
+  const canSubmit = $derived(!tab.committing && !empty && !nothingStaged && !ai.generating);
   const detached = $derived(tab.snapshot?.status.isDetached === true);
+
+  // La IA describe lo PREPARADO: sin nada preparado no hay qué enviar.
+  const aiBlocked = $derived(tab.stagedCount === 0 ? t('ai.nothingStaged') : tab.committing ? t('ai.busyTitle') : null);
+  const aiDisabled = $derived(ai.state?.enabled === false);
+  const aiTitle = $derived(aiBlocked ?? t('ai.generateTitle', { shortcut: aiCombo }));
+  const notice = $derived(ai.notice);
+  const err = $derived(ai.error);
+  const needsSettings = $derived(err?.code === 'AI_DISABLED' || err?.code === 'AI_CONSENT_REQUIRED');
+  const needsCli = $derived(err?.code === 'AI_NOT_INSTALLED' || err?.code === 'AI_NOT_LOGGED_IN');
 
   // ¿Se puede corregir el último commit? (amend_draft.canAmend)
   $effect(() => {
@@ -46,68 +63,214 @@
     };
   });
 
+  // Al empezar, el foco pasa a «Cancelar» (el botón que tenía el foco desaparece y Esc dejaría
+  // de llegar al formulario); al terminar vuelve al botón de IA si el foco se había perdido.
+  $effect(() => {
+    if (ai.generating) {
+      hadFocus = true;
+      queueMicrotask(() => cancelBtn?.focus());
+    } else if (hadFocus) {
+      hadFocus = false;
+      queueMicrotask(() => {
+        const a = document.activeElement;
+        if (!a || a === document.body) aiBtn?.focus();
+      });
+    }
+  });
+
   async function submit() {
     if (!canSubmit) return;
     await tab.submit();
   }
 
-  onMount(() =>
-    registerHandlers({
+  /** Botón, atajo y paleta pasan por aquí. Devuelve `true` si el atajo queda atendido. */
+  function requestAi(): boolean {
+    if (ai.generating) return true;
+    if (aiBlocked) {
+      toasts.info(t('ai.generate'), aiBlocked);
+      return true;
+    }
+    if (aiDisabled) {
+      aiDialog = true;
+      return true;
+    }
+    void ai.generate();
+    return true;
+  }
+
+  function summaryKey(e: KeyboardEvent) {
+    // En una línea: Intro pasa a la descripción (no envía el formulario).
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && !e.isComposing) {
+      e.preventDefault();
+      textarea?.focus();
+    }
+  }
+
+  function summaryPaste(e: ClipboardEvent) {
+    const text = e.clipboardData?.getData('text') ?? '';
+    if (!/[\r\n]/.test(text)) return;
+    e.preventDefault();
+    // Un mensaje completo pegado en un campo vacío se reparte entre asunto y descripción.
+    if (tab.summary === '' && tab.description === '') tab.setMessage(text.replace(/\r\n?/g, '\n'));
+    else tab.setSummary(tab.summary + (text.split(/\r?\n/).find((l) => l.trim() !== '') ?? ''));
+  }
+
+  function formKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && ai.generating) {
+      e.preventDefault();
+      e.stopPropagation();
+      void ai.cancel();
+    }
+  }
+
+  onMount(() => {
+    void ai.loadState();
+    return registerHandlers({
       'commit.submit': () => {
         if (!canSubmit) return false;
         void submit();
         return true;
       },
       'commit.focus': () => {
-        textarea?.focus();
+        summaryInput?.focus();
         return true;
-      }
-    })
-  );
+      },
+      'ai.generate': requestAi
+    });
+  });
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <form
   class="commit"
   aria-label={t('commit.region')}
+  aria-busy={ai.generating}
   onsubmit={(e) => {
     e.preventDefault();
     void submit();
   }}
+  onkeydown={formKey}
 >
   <div class="head">
-    <label for="commit-msg-{tab.id}" class="lbl">{t('commit.message')}</label>
+    <label for="commit-summary-{tab.id}" class="lbl">{t('commit.summaryLabel')}</label>
     <span class="counter" class:over={overLimit} id="subject-count-{tab.id}">
       {#if overLimit}<Icon name="triangle-alert" size={12} />{/if}
       {t('commit.subjectCount', { n: subjectLen, max: SUBJECT_LIMIT })}
     </span>
   </div>
 
+  <div class="subject-row">
+    <input
+      id="commit-summary-{tab.id}"
+      bind:this={summaryInput}
+      type="text"
+      class="field"
+      data-scope="editor"
+      placeholder={tab.amend ? t('commit.placeholderAmend') : t('commit.summaryPlaceholder')}
+      value={tab.summary}
+      oninput={(e) => tab.setSummary(e.currentTarget.value)}
+      onkeydown={summaryKey}
+      onpaste={summaryPaste}
+      aria-describedby="subject-count-{tab.id} commit-hint-{tab.id}"
+      aria-invalid={overLimit ? 'true' : undefined}
+      autocomplete="off"
+      spellcheck="true"
+      disabled={tab.committing}
+      readonly={ai.generating}
+    />
+    {#if ai.generating}
+      <span class="ai-busy" role="status">
+        <Icon name="loader" size={16} spin /><span class="sr-only">{t('ai.generatingBtn')}</span>
+      </span>
+      <button type="button" class="btn ai-cancel" bind:this={cancelBtn} onclick={() => void ai.cancel()}>
+        {t('ai.cancel')}<kbd class="kbd">Esc</kbd>
+      </button>
+    {:else}
+      <button
+        type="button"
+        class="btn ai-btn"
+        bind:this={aiBtn}
+        class:is-disabled={!!aiBlocked}
+        aria-disabled={aiBlocked ? 'true' : undefined}
+        aria-keyshortcuts="Control+Shift+G Meta+Shift+G"
+        aria-describedby={aiBlocked ? `ai-reason-${tab.id}` : undefined}
+        title={aiTitle}
+        onclick={requestAi}
+      >
+        <Icon name="sparkles" size={14} />{t('ai.generate')}
+      </button>
+      {#if aiBlocked}<span id="ai-reason-{tab.id}" class="sr-only">{aiBlocked}</span>{/if}
+    {/if}
+  </div>
+
+  {#if notice && !ai.generating}
+    <div class="strip ok" role="status">
+      <Icon name="sparkles" size={14} />
+      <span class="msg">{t('ai.proposedBy', { provider: ai.providerName(notice.provider) })}</span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick={() => ai.undo()}>{t('ai.undo')}</button>
+      <button type="button" class="btn btn-ghost btn-icon btn-sm" aria-label={t('ai.dismiss')} onclick={() => ai.dismissNotice()}>
+        <Icon name="x" size={12} />
+      </button>
+    </div>
+    {#if ai.stale}
+      <p class="warn"><Icon name="triangle-alert" size={12} />{t('ai.stale')}</p>
+    {/if}
+  {/if}
+
+  {#if err && !ai.generating}
+    <div class="strip bad" role="alert">
+      <Icon name="circle-alert" size={14} />
+      <div class="msg">
+        <strong>{t('ai.errorTitle')}</strong>
+        <span>{err.message}</span>
+        {#if needsCli && err.detail}<code class="cmd">{t('ai.runCommand', { command: err.detail })}</code>{/if}
+      </div>
+      {#if needsSettings || needsCli}
+        <button type="button" class="btn btn-sm" onclick={() => (aiDialog = true)}>{t('ai.openSettings')}</button>
+      {:else}
+        <button type="button" class="btn btn-sm" onclick={requestAi}>{t('ai.retry')}</button>
+      {/if}
+      <button type="button" class="btn btn-ghost btn-icon btn-sm" aria-label={t('ai.dismiss')} onclick={() => ai.dismissError()}>
+        <Icon name="x" size={12} />
+      </button>
+    </div>
+  {:else if aiDisabled && !ai.generating}
+    <div class="strip info" role="status">
+      <Icon name="info" size={14} />
+      <div class="msg">
+        <strong>{t('ai.disabledTitle')}</strong>
+        <span>{t('ai.disabledBody')}</span>
+      </div>
+      <button type="button" class="btn btn-sm" onclick={() => (aiDialog = true)}>{t('ai.enable')}</button>
+    </div>
+  {/if}
+
+  <label for="commit-desc-{tab.id}" class="lbl desc-lbl">{t('commit.descriptionLabel')}</label>
   <textarea
-    id="commit-msg-{tab.id}"
+    id="commit-desc-{tab.id}"
     bind:this={textarea}
     class="field"
     rows="4"
     data-scope="editor"
-    placeholder={tab.amend ? t('commit.placeholderAmend') : t('commit.placeholder')}
-    value={tab.message}
-    oninput={(e) => tab.setMessage(e.currentTarget.value)}
-    aria-describedby="subject-count-{tab.id} commit-hint-{tab.id}"
-    aria-invalid={overLimit ? 'true' : undefined}
+    placeholder={t('commit.descriptionPlaceholder')}
+    value={tab.description}
+    oninput={(e) => tab.setDescription(e.currentTarget.value)}
+    aria-describedby="commit-hint-{tab.id}"
     spellcheck="true"
     disabled={tab.committing}
+    readonly={ai.generating}
   ></textarea>
 
   <div id="commit-hint-{tab.id}" class="hints">
     {#if overLimit}
       <p class="warn"><Icon name="triangle-alert" size={12} />{t('commit.subjectTooLong', { max: SUBJECT_LIMIT })}</p>
     {/if}
-    {#if secondLineFilled}
-      <p class="warn"><Icon name="info" size={12} />{t('commit.secondLine')}</p>
-    {/if}
     {#if detached && !tab.amend}
       <p class="warn"><Icon name="triangle-alert" size={12} />{t('commit.detached')}</p>
     {/if}
-    {#if blockedReason}
+    {#if ai.generating}
+      <p class="reason">{t('ai.fieldsBusy')}</p>
+    {:else if blockedReason}
       <p class="reason">{blockedReason}</p>
     {/if}
   </div>
@@ -139,6 +302,10 @@
   </div>
 </form>
 
+{#if aiDialog}
+  <AiConsentDialog {ai} onclose={() => (aiDialog = false)} />
+{/if}
+
 <style>
   .commit {
     display: flex;
@@ -160,6 +327,9 @@
     text-transform: uppercase;
     color: var(--text-muted);
   }
+  .desc-lbl {
+    margin-top: var(--space-1);
+  }
   .counter {
     display: inline-flex;
     align-items: center;
@@ -172,14 +342,89 @@
     color: var(--danger);
     font-weight: 600;
   }
+  .subject-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+  .subject-row .field {
+    flex: 1;
+    min-width: 0;
+  }
+  .subject-row .field[aria-invalid='true'] {
+    border-color: var(--danger);
+  }
+  .ai-btn,
+  .ai-cancel,
+  .ai-busy {
+    flex: none;
+    white-space: nowrap;
+  }
+  .ai-btn {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: var(--accent-soft);
+  }
+  .ai-btn.is-disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .ai-busy {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--accent);
+  }
   textarea {
     min-height: 88px;
     padding: var(--space-2) var(--space-3);
     resize: vertical;
     line-height: 1.45;
   }
-  textarea[aria-invalid='true'] {
-    border-color: var(--danger);
+  .field[readonly] {
+    opacity: 0.75;
+  }
+  .strip {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+  }
+  .strip .msg {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    align-self: center;
+  }
+  .strip.ok {
+    align-items: center;
+    background: var(--info-soft);
+    color: var(--text);
+  }
+  .strip.ok .msg {
+    flex-direction: row;
+  }
+  .strip.bad {
+    background: var(--danger-soft);
+  }
+  .strip.bad > :global(svg) {
+    color: var(--danger);
+    margin-top: 3px;
+  }
+  .strip.info {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+  }
+  .cmd {
+    font-family: var(--font-mono, monospace);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
   }
   .hints {
     display: flex;
@@ -194,6 +439,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    font-size: var(--text-xs);
     color: var(--warning);
   }
   .reason {
@@ -263,6 +509,11 @@
     background: color-mix(in srgb, var(--accent-fg) 18%, transparent);
     border-color: color-mix(in srgb, var(--accent-fg) 40%, transparent);
     color: var(--accent-fg);
+  }
+  .ai-cancel .kbd {
+    background: var(--bg-subtle);
+    border-color: var(--border-hover);
+    color: var(--text-muted);
   }
   @media (forced-colors: active) {
     .amend input:checked + .box {

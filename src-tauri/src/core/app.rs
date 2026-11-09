@@ -15,6 +15,7 @@ use ariadna_process::CancellationToken;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task::JoinHandle;
 
+use super::ai::AiService;
 use super::api::{
     ApiSessionEvent, ApiSnapshot, AppEvent, AppState, EventSink, GitInfo, OpenResult,
     SnapshotEvent, TabInfo,
@@ -100,6 +101,7 @@ pub(crate) struct Inner {
     pub sink: Arc<dyn EventSink>,
     pub tabs: Mutex<TabsState>,
     pub open_lock: tokio::sync::Mutex<()>,
+    pub(crate) ai: AiService,
     next_tab: AtomicU64,
 }
 
@@ -261,6 +263,7 @@ impl AppCore {
                 sink,
                 tabs: Mutex::new(TabsState::default()),
                 open_lock: tokio::sync::Mutex::new(()),
+                ai: AiService::new(&config.data_dir),
                 next_tab: AtomicU64::new(1),
             }),
         }
@@ -600,6 +603,8 @@ impl AppCore {
             }
             tab
         };
+        // Cerrar la pestaña cancela su generación de IA en curso (RF-IA8).
+        self.ai_cancel_tab_silently(tab_id);
         self.close_live(removed).await;
         self.persist();
         self.emit_tabs_changed();
@@ -652,6 +657,7 @@ impl AppCore {
         }
         // La sesión guardada conserva todas las pestañas: se guarda antes de cerrar.
         self.persist();
+        self.ai_cancel_all();
         let tabs: Vec<Tab> = std::mem::take(&mut self.inner.lock().tabs);
         for t in tabs {
             self.close_live(t).await;

@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use ariadna_git::GitError;
 
-use crate::core::error::{ApiError, ALL_CODES};
+use crate::core::error::{ApiError, AI_CODES, ALL_CODES};
 
 /// Una instancia de cada variante de `GitError` y el código que debe producir.
 pub fn every_git_error() -> Vec<(GitError, &'static str)> {
@@ -113,10 +113,15 @@ fn los_codigos_cubren_exactamente_el_contrato() {
     let mapped: BTreeSet<&str> = every_git_error().iter().map(|(_, c)| *c).collect();
     assert_eq!(mapped.len(), 21, "21 variantes, 21 códigos distintos");
     let mut expected: BTreeSet<&str> = ALL_CODES.iter().copied().collect();
-    // REPO_MISSING no viene de git: lo emite la app (pestaña ausente).
+    // No vienen de git: REPO_MISSING (pestaña ausente), los AI_* y POLICY/RATE_LIMITED.
     assert!(expected.remove("REPO_MISSING"));
+    // `merge_clean` lo produce el núcleo al abortar un merge con conflictos.
+    assert!(expected.remove("MERGE_CONFLICTS"));
+    for c in AI_CODES.iter().chain(["POLICY", "RATE_LIMITED"].iter()) {
+        assert!(expected.remove(c), "{c}");
+    }
     assert_eq!(mapped, expected);
-    assert_eq!(ALL_CODES.len(), 22);
+    assert_eq!(ALL_CODES.len(), 35);
 }
 
 #[test]

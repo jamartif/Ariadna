@@ -81,7 +81,7 @@ describe('Bienvenida', () => {
 
   it('Examinar usa el selector nativo', async () => {
     const { app } = await setup();
-    await userEvent.click(screen.getByRole('button', { name: 'Examinar…' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Examinar…/ }));
     await waitFor(() => expect(app.entries.some((e) => e.kind === 'repo' && e.info.name === 'demo-nuevo')).toBe(true));
   });
 
@@ -94,7 +94,7 @@ describe('Bienvenida', () => {
     await setup({ scenario: 'nogit' });
     expect(screen.getByText('Git no está disponible')).toBeInTheDocument();
     expect(screen.getByText(/Instala Git 2.39/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Examinar…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Examinar…/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Abrir ariadna' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Volver a comprobar' })).toBeEnabled();
   });

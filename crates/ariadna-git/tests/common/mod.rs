@@ -5,6 +5,8 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub mod http;
+
 use ariadna_git::{find_git, GitCliEngine, GitRunner, LocatorOptions, Repository};
 use tempfile::TempDir;
 
@@ -127,4 +129,30 @@ impl TestRepo {
 
 pub fn os(args: &[&str]) -> Vec<OsString> {
     args.iter().map(OsString::from).collect()
+}
+
+/// Motor sin ningún `credential.helper` heredado del sistema o del usuario.
+pub fn plain_engine() -> GitCliEngine {
+    GitCliEngine::new(GitRunner::with_path(git_path()).with_config("credential.helper", ""))
+}
+
+/// Carpeta con `repo.git` (bare, rama `main` con un commit) lista para servirse por HTTP «tonto».
+pub fn served_bare_repo() -> TempDir {
+    let work = TestRepo::with_initial_commit();
+    let root = tempfile::tempdir().unwrap();
+    let bare = root.path().join("repo.git");
+    let st = Command::new(git_path())
+        .args(["clone", "-q", "--bare"])
+        .arg(work.path())
+        .arg(&bare)
+        .status()
+        .unwrap();
+    assert!(st.success());
+    let st = Command::new(git_path())
+        .arg("update-server-info")
+        .current_dir(&bare)
+        .status()
+        .unwrap();
+    assert!(st.success());
+    root
 }

@@ -9,7 +9,7 @@ Spec §3.3. **El estado vive en Rust**; la interfaz es una vista. Este documento
 - `GitPath` viaja como **cadena** si es UTF-8 y como **lista de bytes** (`number[]`) si no lo es. La UI debe aceptar ambas (`type GitPath = string | number[]`) y devolverlas sin tocar.
 - Toda llamada de pestaña lleva `tabId` (el `session_id` de Rust). Nunca hay estado global implícito.
 - Las rutas del sistema (carpeta de repo) viajan como `string`.
-- **Errores**: un comando fallido rechaza la promesa con un objeto `ApiError { code, message, detail? }`. `code` es estable (`NOT_A_REPOSITORY`, `GIT_NOT_FOUND`, `COMMAND_FAILED`, `NOTHING_TO_COMMIT`, `EMPTY_COMMIT_MESSAGE`, `DETACHED_HEAD_COMMIT`, `CANNOT_AMEND`, `LOCAL_CHANGES_BLOCK_CHECKOUT`, `DIVERGED_LOCAL_BRANCH`, `INVALID_REFERENCE`, `HUNK_NOT_FOUND`, `NO_INTEGRATION`, `CONFIRMATION_REQUIRED`, `PATH_ESCAPES_REPOSITORY`, `TIMEOUT`, `CANCELLED`, `PARSE`, `LOCKED`, `DUBIOUS_OWNERSHIP`, `IO`, `REPO_MISSING`, `AUTH`, `AI_DISABLED`, `AI_NOT_INSTALLED`, `AI_NOT_LOGGED_IN`, `AI_QUOTA`, `AI_BAD_OUTPUT`, `AI_CONTEXT_TOO_LARGE`, `AI_TIMEOUT`, `AI_CONSENT_REQUIRED`, `AI_NO_STAGED_CHANGES`, `AI_SENSITIVE_FILE`, `NOT_FOUND`, `POLICY`, `RATE_LIMITED`, `NETWORK`). `message` ya está en español y listo para mostrar. La UI **nunca** interpreta `message`.
+- **Errores**: un comando fallido rechaza la promesa con un objeto `ApiError { code, message, detail? }`. `code` es estable (`NOT_A_REPOSITORY`, `GIT_NOT_FOUND`, `COMMAND_FAILED`, `NOTHING_TO_COMMIT`, `EMPTY_COMMIT_MESSAGE`, `DETACHED_HEAD_COMMIT`, `CANNOT_AMEND`, `LOCAL_CHANGES_BLOCK_CHECKOUT`, `DIVERGED_LOCAL_BRANCH`, `INVALID_REFERENCE`, `HUNK_NOT_FOUND`, `NO_INTEGRATION`, `CONFIRMATION_REQUIRED`, `PATH_ESCAPES_REPOSITORY`, `TIMEOUT`, `CANCELLED`, `PARSE`, `LOCKED`, `DUBIOUS_OWNERSHIP`, `IO`, `REPO_MISSING`, `AUTH`, `AI_DISABLED`, `AI_NOT_INSTALLED`, `AI_NOT_LOGGED_IN`, `AI_QUOTA`, `AI_BAD_OUTPUT`, `AI_CONTEXT_TOO_LARGE`, `AI_TIMEOUT`, `AI_CONSENT_REQUIRED`, `AI_NO_STAGED_CHANGES`, `AI_SENSITIVE_FILE`, `MERGE_CONFLICTS`, `NOT_FOUND`, `POLICY`, `RATE_LIMITED`, `NETWORK`). `message` ya está en español y listo para mostrar. La UI **nunca** interpreta `message`.
 - **Confirmaciones destructivas**: la UI **no** envía ningún "confirmed". Los comandos destructivos abren un **diálogo nativo desde Rust** que nombra repo, rama y ruta, y devuelven `{ done: false }` si el usuario cancela. Lo hacen `discard`, `write_conflict_resolution`, `abort_integration`, `checkout` cuando hay divergencia, `commit` en HEAD detached y cerrar una pestaña con trabajo pendiente.
 - **Revisión**: cada `Snapshot` lleva `revision` monótona. La UI descarta un snapshot con revisión menor que la que ya tiene.
 - Operaciones largas (`fetch`, `pull`, `push`, IA): emiten `session-event` con `OperationStarted/Finished`; la UI las muestra y puede llamar a `cancel_operation`.
@@ -28,8 +28,8 @@ Spec §3.3. **El estado vive en Rust**; la interfaz es una vista. Este documento
 | `forget_recent` | `path` | `RecentRepository[]` |
 | `cancel_operation` | `tabId, operationId` | `boolean` |
 | `open_external_url` | `url` | `void` (abre el navegador del sistema; **solo `https`** y solo hosts de una lista: `learn.microsoft.com`, `dev.azure.com`, `*.visualstudio.com`, `github.com`, `docs.github.com`, `gitlab.com`, `docs.gitlab.com`, `bitbucket.org`, `support.atlassian.com`; sirve para las ayudas de «cómo crear un PAT») |
-| `clone_repository` | `url, destination: string, branch: string \| null` | `OpenResult` (clona y abre una pestaña; emite `clone-progress`; cancelable con `cancel_operation`) |
-| `store_credential` | `url, username, secret` | `void` (entrega el secreto a `git credential approve` por stdin; **nunca** vuelve a la UI) |
+| `clone_repository` | `url, destination: string, branch: string \| null, username: string \| null, secret: string \| null` | `OpenResult` (clona y abre una pestaña; emite `clone-progress`; se cancela con `cancel_operation` pasando el `operationId` del evento y un `tabId` vacío). `secret` es un **PAT de un solo uso**, ver «Clonar y PAT» |
+| `store_credential` | `url, username, secret` | `void` (acción **explícita** de guardar: entrega el secreto a `git credential approve` por stdin; **nunca** vuelve a la UI; la UI de clonado no la usa) |
 | `test_credential` | `url` | `{ ok: boolean, code: string \| null }` (`git ls-remote`) |
 | `forget_credential` | `url, username` | `void` (`git credential reject`) |
 | `list_pull_requests` | `tabId, filter: "open" \| "mine" \| "reviewing" \| "closed", page` | `PullRequestSummary[]` |
@@ -64,11 +64,13 @@ La sesión (pestañas abiertas y orden) se guarda en `session.json` (versionado,
 | `amend_draft` | — | `{ message: string, canAmend: boolean, reason: string \| null }` |
 | `diff` | `scope: DiffScope, paths: GitPath[]` | `FileDiff[]` |
 | `log` | `limit, query: string \| null` | `Commit[]` (con `query`, busca en todo el historial) |
+| `log_page` | `skip, limit (≤ 500), query: string \| null` | `Commit[]` (página del historial de HEAD con `git log --skip`; con `query` busca por mensaje, autor o hash y pagina el resultado; cada `Commit` lleva `parents` y `refs` para pintar el grafo) |
 | `create_branch` | `name, startPoint: string \| null` | `void` |
 | `rename_branch` | `old, new` | `void` |
 | `checkout` | `reference` | `{ done: boolean }` (Rust gestiona la divergencia con diálogo) |
-| `delete_branch` | `name, force` | `void` |
-| `merge` | `branch, fastForward: "allow" \| "only" \| "never"` | `MergeResult` |
+| `delete_branch` | `name, force` | `{ done: boolean }` (confirmación nativa que nombra repo, rama y ruta; si git la considera **no fusionada** pide una segunda confirmación y reintenta con `-D`) |
+| `merge` | `branch, fastForward: "allow" \| "only" \| "never"` | `MergeResult` (si hay conflictos deja el merge en curso, para el estudio de conflictos) |
+| `merge_clean` | `branch, fastForward` | `MergeResult` sin conflictos; si los hay **aborta el merge** (el repo queda como estaba, sin diálogo) y rechaza con `MERGE_CONFLICTS` (`detail`: rutas, una por línea) |
 | `continue_integration` | — | `void` |
 | `abort_integration` | — | `{ done: boolean }` (confirmación nativa) |
 | `get_conflicts` | — | `ConflictFile[]` |
@@ -77,6 +79,19 @@ La sesión (pestañas abiertas y orden) se guarda en `session.json` (versionado,
 | `fetch` | `remote` | `void` |
 | `pull` | `remote, refspec: string \| null, rebase` | `MergeResult` |
 | `push` | `remote, refspec: string \| null, setUpstream` | `void` |
+
+Para ver los archivos y el diff de un commit se usa `diff` con `scope: { commit: sha }` (primer padre en merges; los commits raíz también). El historial de la UI es una lista virtualizada que pide `log_page` al acercarse al final; el grafo de ramas se calcula en la UI a partir de `parents` (algoritmo incremental, `ui/src/lib/util/graph.ts`).
+
+### Clonar y PAT (D20)
+
+El PAT es **de un solo uso** y no se guarda en ningún sitio:
+
+- Viaja de la UI a Rust una sola vez (`secret`, tipo `Secret`: sin `Clone`/`Serialize`, `Debug` redactado, `zeroize` al soltarlo). La UI lo borra del formulario en cuanto pulsa «Clonar», haya éxito o error.
+- Rust lo pasa a git **solo por `GIT_ASKPASS`**: un script temporal en una carpeta privada (`0700`, sin secretos dentro) imprime el usuario o el secreto leyendo dos variables de entorno que existen **solo en el proceso hijo** de git. Nunca va en `argv`, ni en la URL (las contraseñas incrustadas se rechazan), ni en `.git/config`, ni en un fichero, ni en un registro.
+- Se ejecuta con `-c credential.helper=` (lista vacía): ni el Git Credential Manager ni el llavero reciben `credential approve`, así que nada lo persiste. La carpeta temporal se borra al terminar (también al fallar o cancelar).
+- Todo texto de error se limpia (`scrub_error`: el secreto y las credenciales de URL se sustituyen por `***`) antes de salir del motor.
+- Errores: URL inválida (`INVALID_REFERENCE`), destino ocupado/relativo (`IO`), 401/403 (`AUTH`, con pista de qué hacer), cancelación (`CANCELLED`, borra solo lo creado).
+- `clone-progress` lleva `phase` ya en español y `percent`; el primer evento (fase «Preparando el clonado») trae el `operationId` para cancelar.
 
 Tras cualquier mutación con éxito, Rust ya ha programado un refresco: la UI no tiene que pedirlo, recibirá `snapshot`.
 
@@ -101,6 +116,15 @@ Reglas:
 - La sugerencia lleva `repoRevision`: si el repo cambió mientras la IA pensaba, la UI debe avisar de que puede estar obsoleta.
 - El resultado **rellena** los campos de la UI; el usuario siempre revisa y pulsa «Crear commit».
 
+Comportamiento de `ai_generate_commit_message` (el comando que genera asunto y descripción; no existe un `propose_commit_message` aparte):
+- **Contexto**: Rust lee `diff --staged` y hasta 20 asuntos recientes (`git log`); excluye sensibles, binarios y archivos que por sí solos superan el tope (`max_context_bytes`, 100 000 por defecto); redacta secretos. Si lo que queda supera el tope: `AI_CONTEXT_TOO_LARGE` sin lanzar el CLI. El prompt viaja por **stdin**, nunca por argv.
+- **Convención** (en el prompt): asunto imperativo ≤ 72 caracteres; en español salvo que `language`/historial reciente indiquen otro idioma o Conventional Commits (`style`); descripción en párrafos o viñetas.
+- **Orden de comprobaciones y errores**: IA desactivada → `AI_DISABLED`; nada preparado → `AI_NO_STAGED_CHANGES`; todo sensible → `AI_SENSITIVE_FILE`; demasiado grande → `AI_CONTEXT_TOO_LARGE`; sin proveedor habilitado e instalado → `AI_NOT_INSTALLED` (o el error de «ningún proveedor»); consentimiento rechazado → `AI_CONSENT_REQUIRED`; el CLI tarda más de 120 s → `AI_TIMEOUT`; salida ilegible → `AI_BAD_OUTPUT`; sin sesión → `AI_NOT_LOGGED_IN`; cuota → `AI_QUOTA`; cancelada → `CANCELLED`; otro fallo del CLI → `COMMAND_FAILED`.
+- **Una sola generación por pestaña**: una nueva cancela la anterior (que termina con `CANCELLED`). `ai_cancel(tabId)` y `cancel_operation(tabId, operationId)` matan el proceso hijo. Cerrar la pestaña o salir de la app también cancela.
+- **Progreso**: emite `session-event` con `OperationStarted { operationId, label: "IA: mensaje de commit" }` al empezar y `OperationFinished { ok, error }` al terminar (con `error` si falló o se canceló).
+- **Nunca aplica nada**: no hace commit, no prepara ni descarta archivos. No se registran ni el prompt ni el diff.
+- **Interfaz** (`CommitBar`): botón ✨ «Generar con IA» junto al asunto y atajo `Mod+Shift+G` (`ai.generate`, también en la paleta). Inactivo con tooltip si no hay nada preparado. Mientras genera: spinner, botón «Cancelar» (y `Esc`), campos en solo lectura. Si hay texto previo no se pierde: aviso «Propuesto por <proveedor>» con **Deshacer**. IA desactivada o `AI_CONSENT_REQUIRED`: aviso con acción que abre el diálogo de consentimiento y ajustes (`AiConsentDialog`: qué se envía y a quién, perfil Personal/Empresa, proveedor Auto/Claude/Codex/Copilot, activar/desactivar). El diálogo nativo de Rust sigue confirmando el primer envío por perfil y proveedor.
+
 ## Ventana
 
 - Windows y Linux: ventana **sin decoraciones** del sistema; la UI dibuja los controles (minimizar, maximizar/restaurar, cerrar) con `@tauri-apps/api/window` y una región arrastrable (`data-tauri-drag-region`).
@@ -115,7 +139,7 @@ Reglas:
 | `tab-updated` | `TabInfo` (rama, nº de cambios, ocupado…) |
 | `session-event` | `SessionEvent` de `ariadna-git` (`sessionId`, `revision`, `kind`) |
 | `tabs-changed` | `AppState` (abrir, cerrar, reordenar, restaurar) |
-| `clone-progress` | `{ operationId, phase: string, percent: number \| null }` |
+| `clone-progress` | `{ operationId, phase: string, percent: number \| null }` (`operationId` en un rango propio, no pertenece a ninguna pestaña) |
 
 ## Verificación del contrato
 

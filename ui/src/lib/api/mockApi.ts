@@ -14,11 +14,14 @@ import {
   giantHunk,
   longLineHunk,
   makeCommits,
+  makeHunk,
   sha,
   smallHunk
 } from './mockData';
 import {
   ApiError,
+  type AiCommitSuggestion,
+  type AiState,
   type AmendDraft,
   type ApiErrorCode,
   type ApiEvents,
@@ -26,6 +29,7 @@ import {
   type Branch,
   type Commit,
   type ConflictFile,
+  type ContextPreview,
   type DiffHunk,
   type DiffScope,
   type FileDiff,
@@ -43,7 +47,11 @@ import { pathText } from '../util/gitpath';
 export interface MockOptions {
   /** Latencia simulada por llamada en ms (por defecto 120; 0 en tests). */
   latency?: number;
-  /** `empty`, `nogit`, `slow`, `error`. */
+  /**
+   * `empty`, `nogit`, `slow`, `error` y los de IA: `ai-slow`, `ai-not-installed`,
+   * `ai-not-logged`, `ai-quota`, `ai-timeout`, `ai-bad-output`, `ai-too-large`,
+   * `ai-sensitive`, `ai-disabled`, `ai-consent-denied`, `ai-stale`.
+   */
   scenario?: string;
   /** Confirmación nativa simulada para `discard`. Por defecto `window.confirm` si existe. */
   confirm?: (message: string) => boolean;
@@ -99,6 +107,76 @@ function err(code: ApiErrorCode, message: string, detail?: string): ApiError {
 
 function branch(name: string, i: number, isHead: boolean, upstream: string | null, ahead = 0, behind = 0): Branch {
   return { name, oid: sha(i + 100), isHead, upstream, ahead, behind };
+}
+
+/**
+ * Historial sintético con ramas y merges (bloques de 5 commits) para probar el grafo y la
+ * virtualización. Los padres siempre vienen después del hijo (orden topológico, como `git log`).
+ */
+/** Hash de 40 hex único por índice (el generador de `sha()` colisiona con semillas grandes). */
+function uniqueSha(i: number): string {
+  return sha(i + 7).slice(0, 32) + i.toString(16).padStart(8, '0');
+}
+
+export function richHistory(count: number, baseDate = '2026-11-06T10:00:00+01:00'): Commit[] {
+  const base = new Date(baseDate).getTime();
+  const authors = ['Javier', 'Ana Ruiz', 'Marcos Peña', 'bot-ci'];
+  const out: Commit[] = [];
+  for (let i = 0; i < count; i++) {
+    const k = i % 5;
+    const b = i - k;
+    const at = (j: number) => (j < count ? [uniqueSha(j)] : []);
+    let parents: string[];
+    if (k === 0) parents = [...at(b + 1), ...at(b + 3)];
+    else if (k === 1) parents = at(b + 2);
+    else if (k === 2) parents = at(b + 5);
+    else if (k === 3) parents = at(b + 4);
+    else parents = at(b + 5);
+    const author = authors[i % authors.length] ?? 'Javier';
+    out.push({
+      sha: uniqueSha(i),
+      parents,
+      subject: k === 0 ? `Fusiona la rama feature/tarea-${Math.floor(i / 5)}` : `${['Corrige', 'Añade', 'Refactoriza', 'Documenta'][i % 4]} el módulo ${i % 37} (#${count - i})`,
+      body: i % 11 === 0 ? 'Detalle largo del cambio.\n\nIncluye pruebas y notas de migración.' : '',
+      authorName: author,
+      authorEmail: `${author.toLowerCase().replace(/[^a-z]+/g, '.')}@example.com`,
+      authorDateIso: new Date(base - i * 3_600_000 * 7).toISOString(),
+      refs: i === 0 ? ['HEAD -> main', 'origin/main'] : i === 3 ? ['origin/feature/payments'] : i === 40 ? ['tag: v1.2.0'] : []
+    });
+  }
+  return out;
+}
+
+/** Archivos de ejemplo de un commit simulado (determinista por hash). */
+function commitFiles(c: Commit): FileDiff[] {
+  const pool: [string, string][] = [
+    ['src/lib/api/types.ts', 'export type GitPath'],
+    ['crates/ariadna-git/src/models.rs', 'pub struct Commit'],
+    ['ui/src/App.svelte', ''],
+    ['docs/ipc.md', '## Comandos'],
+    ['README.md', '']
+  ];
+  const seed = parseInt(c.sha.slice(0, 6), 16);
+  const n = 1 + (seed % 3);
+  return Array.from({ length: n }, (_, i) => {
+    const [path, heading] = pool[(seed + i * 2) % pool.length] as [string, string];
+    return {
+      path,
+      oldPath: null,
+      isBinary: false,
+      isNewFile: i === 2,
+      isDeletedFile: false,
+      hunks: [
+        makeHunk(`${c.sha.slice(0, 7)}#${i}`, 10, 10, heading, [
+          ' contexto anterior',
+          `-versión antigua de la línea ${seed % 90}`,
+          `+${c.subject}`,
+          '+línea añadida por este commit',
+          ' contexto posterior'
+        ])
+      ]
+    };
+  });
 }
 
 function buildAriadna(): MockRepo {
@@ -212,7 +290,7 @@ function buildGigante(): MockRepo {
     remoteBranches: [branch('origin/main', 22, false, null)],
     remotes: [{ name: 'origin', fetchUrl: 'git@example.com:mono.git', pushUrl: 'git@example.com:mono.git' }],
     integration: 'none',
-    commits: makeCommits(['Actualiza dependencias', 'Mueve utilidades a pkg-00']),
+    commits: richHistory(1500),
     revision: 1,
     busy: null,
     ahead: 0,
@@ -295,6 +373,23 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
   let newCounter = 1;
   let opCounter = 0;
   const listeners = new Map<string, Set<(p: never) => void>>();
+
+  // ---- IA simulada (ipc.md «Comandos de IA») ----
+  let ai: AiState = {
+    enabled: scenario !== 'ai-disabled',
+    profile: { name: 'Personal', kind: 'personal' },
+    choice: 'auto',
+    providers: [
+      { id: 'claude', displayName: 'Claude', availability: scenario === 'ai-not-installed' ? 'missing' : 'available', version: scenario === 'ai-not-installed' ? null : '2.1.319', hint: scenario === 'ai-not-logged' ? 'Sin sesión iniciada' : null, enabled: true, consented: false, loginCommand: 'claude' },
+      { id: 'codex', displayName: 'Codex', availability: 'missing', version: null, hint: 'No se encontró el comando «codex»', enabled: true, consented: false, loginCommand: 'codex login' },
+      { id: 'copilot', displayName: 'Copilot', availability: 'failed', version: '1.0.4', hint: 'Sin sesión iniciada', enabled: true, consented: false, loginCommand: 'copilot login' }
+    ]
+  };
+  /** Cancelaciones pendientes por pestaña (`ai_cancel`). */
+  const aiCancelled = new Map<string, () => void>();
+  /** Credenciales «guardadas» por host: solo si el token era válido; el secreto NO se conserva. */
+  const credentials = new Map<string, { username: string; valid: boolean }>();
+  const cloneOps = new Map<number, () => void>();
 
   if (scenario !== 'empty' && scenario !== 'nogit' && scenario !== 'error') {
     for (const r of [buildAriadna(), buildConflicts(), buildMissing()]) {
@@ -592,8 +687,105 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
       recents = recents.filter((r) => r.path !== path);
       return sortedRecents();
     },
-    async cancelOperation() {
-      return false;
+    async cancelOperation(_tabId, operationId) {
+      const stop = cloneOps.get(operationId);
+      if (!stop) return false;
+      stop();
+      return true;
+    },
+    async openExternalUrl(url) {
+      await delay(Math.min(latency, 40));
+      let u: URL;
+      try {
+        u = new URL(url);
+      } catch {
+        throw err('POLICY', 'La dirección no es válida.');
+      }
+      const ok = ['learn.microsoft.com', 'dev.azure.com', 'github.com', 'docs.github.com', 'gitlab.com', 'docs.gitlab.com', 'bitbucket.org', 'support.atlassian.com'];
+      if (u.protocol !== 'https:' || !(ok.includes(u.hostname) || u.hostname.endsWith('.visualstudio.com'))) {
+        throw err('POLICY', 'Ariadna solo abre enlaces https de proveedores conocidos.');
+      }
+      if (typeof window !== 'undefined' && typeof window.open === 'function' && scenario !== 'test') {
+        try {
+          window.open(url, '_blank', 'noopener,noreferrer');
+        } catch {
+          /* jsdom: no implementado */
+        }
+      }
+    },
+    async cloneRepository(url, destination, branchArg, auth): Promise<OpenResult> {
+      const operationId = ++opCounter;
+      let cancelled = false;
+      cloneOps.set(operationId, () => {
+        cancelled = true;
+      });
+      const phases: [string, number | null][] = [
+        ['Resolviendo el host', null],
+        ['Recibiendo objetos', 12],
+        ['Recibiendo objetos', 47],
+        ['Recibiendo objetos', 83],
+        ['Resolviendo deltas', 100]
+      ];
+      try {
+        const host = (/^[a-z]+:\/\/(?:[^@/]*@)?([^/:]+)/i.exec(url)?.[1] ?? /@([^:]+):/.exec(url)?.[1] ?? '').toLowerCase();
+        const needsAuth = /private|secreto/i.test(url) || host === 'dev.azure.com' || host.endsWith('.visualstudio.com') || host === 'ssh.dev.azure.com';
+        const step = Math.max(0, Math.min(latency, 400));
+        for (const [phase, percent] of phases) {
+          emit('clone-progress', { operationId, phase, percent });
+          await delay(step || 0);
+          if (cancelled) throw err('CANCELLED', 'Clonado cancelado.');
+          if (phase === 'Resolviendo el host' && needsAuth) {
+            // El PAT de un solo uso se valida y se descarta: nunca se guarda en `credentials`.
+            const oneShot = auth && auth.secret.length >= 8 && auth.secret !== 'invalid-token';
+            const cred = credentials.get(host);
+            if (!oneShot && (!cred || !cred.valid)) {
+              throw err('AUTH', 'Git no pudo autenticarse en el servidor. Guarda un token de acceso personal (PAT) o inicia sesión con el Git Credential Manager.', `remote: Authentication failed for '${host}'`);
+            }
+          }
+        }
+        if (/no-existe|notfound/i.test(url)) throw err('COMMAND_FAILED', 'Git no pudo clonar el repositorio: no se encontró.', 'fatal: repository not found');
+        const name = destination.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || 'repo';
+        const existing = [...repos.values()].find((r) => r.path === destination);
+        let repo = existing;
+        let alreadyOpen = true;
+        if (!repo) {
+          alreadyOpen = false;
+          repo = buildSmall(destination, newCounter++);
+          repo.name = name;
+          repo.branch = branchArg && branchArg.trim() !== '' ? branchArg.trim() : 'main';
+          repo.files = [];
+          repo.branches = [branch(repo.branch, 40 + newCounter, true, null)];
+          repo.remotes = [{ name: 'origin', fetchUrl: url, pushUrl: url }];
+          repos.set(repo.tabId, repo);
+          order.push(repo.tabId);
+        }
+        activeTabId = repo.tabId;
+        touchRecent(repo);
+        emit('tabs-changed', appState());
+        return { tab: tabInfo(repo), alreadyOpen };
+      } finally {
+        cloneOps.delete(operationId);
+      }
+    },
+    async storeCredential(url, username, secret) {
+      await delay(Math.min(latency, 80));
+      if (username.trim() === '' || secret === '') throw err('PARSE', 'Falta el usuario o el token.');
+      const host = (/^[a-z]+:\/\/(?:[^@/]*@)?([^/:]+)/i.exec(url)?.[1] ?? '').toLowerCase();
+      // El secreto no se conserva: solo se recuerda si «era válido» para simular el servidor.
+      credentials.set(host, { username, valid: secret.length >= 8 && secret !== 'invalid-token' });
+    },
+    async testCredential(url) {
+      await delay(Math.min(latency * 4, 700));
+      const host = (/^[a-z]+:\/\/(?:[^@/]*@)?([^/:]+)/i.exec(url)?.[1] ?? '').toLowerCase();
+      const c = credentials.get(host);
+      if (c?.valid) return { ok: true, code: null };
+      const needs = /private|secreto/i.test(url) || host === 'dev.azure.com' || host.endsWith('.visualstudio.com');
+      return needs || c ? { ok: false, code: 'AUTH' } : { ok: true, code: null };
+    },
+    async forgetCredential(url, username) {
+      await delay(Math.min(latency, 60));
+      const host = (/^[a-z]+:\/\/(?:[^@/]*@)?([^/:]+)/i.exec(url)?.[1] ?? '').toLowerCase();
+      if (credentials.get(host)?.username === username) credentials.delete(host);
     },
 
     async getSnapshot(tabId) {
@@ -721,7 +913,13 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
     async diff(tabId, scope: DiffScope, paths): Promise<FileDiff[]> {
       await delay(Math.min(latency, 80));
       const r = repoOf(tabId);
-      if (typeof scope !== 'string') return [];
+      if (typeof scope !== 'string') {
+        if ('commit' in scope) {
+          const c = r.commits.find((x) => x.sha === scope.commit || x.sha.startsWith(scope.commit));
+          return c ? clone(commitFiles(c)) : [];
+        }
+        return [];
+      }
       return paths.map((p) => {
         const f = findFile(r, p);
         const hunks = scope === 'staged' ? f.staged : f.unstaged;
@@ -741,9 +939,19 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
       const q = query?.toLowerCase();
       return clone(r.commits.filter((c) => !q || c.subject.toLowerCase().includes(q)).slice(0, limit));
     },
+    async logPage(tabId, skip, limit, query) {
+      await delay();
+      const r = repoOf(tabId);
+      const q = query?.trim().toLowerCase();
+      const list = r.commits.filter(
+        (c) => !q || c.subject.toLowerCase().includes(q) || c.authorName.toLowerCase().includes(q) || c.sha.startsWith(q)
+      );
+      return clone(list.slice(skip, skip + Math.min(limit, 500)));
+    },
     async createBranch(tabId, name) {
       const r = repoOf(tabId);
       await delay();
+      if (r.branches.some((b) => b.name === name)) throw err('COMMAND_FAILED', `Ya existe una rama llamada ${name}.`, `fatal: a branch named '${name}' already exists`);
       r.branches.push(branch(name, r.branches.length + 60, false, null));
       publish(r);
     },
@@ -765,12 +973,43 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
     async deleteBranch(tabId, name) {
       const r = repoOf(tabId);
       await delay();
+      if (r.branches.find((b) => b.name === name)?.isHead) {
+        throw err('COMMAND_FAILED', 'No se puede borrar la rama actual.', `error: Cannot delete branch '${name}' checked out`);
+      }
+      if (!confirmFn(`¿Borrar la rama «${name}» de ${r.name}?`)) return { done: false };
       r.branches = r.branches.filter((b) => b.name !== name);
       publish(r);
+      return { done: true };
     },
     async merge() {
       await delay();
       return 'upToDate';
+    },
+    async mergeClean(tabId, branchName) {
+      const r = repoOf(tabId);
+      await delay();
+      if (!r.branches.some((b) => b.name === branchName) && !r.remoteBranches.some((b) => b.name === branchName)) {
+        throw err('INVALID_REFERENCE', `No existe la referencia ${branchName}.`);
+      }
+      if (/conflict|choca/i.test(branchName)) {
+        throw err('MERGE_CONFLICTS', `Hay conflictos al fusionar «${branchName}» (2 archivo(s)). La fusión se ha cancelado y no se ha cambiado nada; la resolución de conflictos llegará en una versión posterior.`, 'src/lib/api/types.ts\ndocs/ipc.md');
+      }
+      const target = r.branches.find((b) => b.name === branchName);
+      if (target && r.branches.find((b) => b.isHead)?.oid === target.oid) return 'upToDate';
+      const newHead = sha(r.commits.length + 90 + r.revision);
+      const c: Commit = {
+        sha: newHead,
+        parents: [r.commits[0]?.sha ?? ''].filter(Boolean),
+        subject: `Fusiona la rama '${branchName}' en ${r.branch ?? 'HEAD'}`,
+        body: '',
+        authorName: 'Javier',
+        authorEmail: 'javier@example.com',
+        authorDateIso: now().toISOString(),
+        refs: [`HEAD -> ${r.branch ?? 'main'}`]
+      };
+      r.commits = [c, ...r.commits.map((x) => ({ ...x, refs: x.refs.filter((f) => !f.startsWith('HEAD')) }))];
+      publish(r);
+      return { merged: { new_head: newHead } };
     },
     async continueIntegration(tabId) {
       const r = repoOf(tabId);
@@ -813,6 +1052,118 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
     },
     async push() {
       await delay(latency * 3);
+    },
+
+    async aiState(tabId) {
+      await delay(Math.min(latency, 60));
+      repoOf(tabId);
+      return clone(ai);
+    },
+    async aiUpdateSettings(patch) {
+      await delay(Math.min(latency, 60));
+      if (patch.enabled !== undefined) ai.enabled = patch.enabled;
+      if (patch.choice !== undefined) ai.choice = patch.choice as AiState['choice'];
+      if (patch.profile !== undefined) {
+        ai.profile = { name: patch.profile === 'empresa' ? 'Empresa' : 'Personal', kind: patch.profile };
+        // Perfil Empresa: Claude desactivado por defecto (spec §5.1.1).
+        ai.providers = ai.providers.map((p) => (p.id === 'claude' ? { ...p, enabled: patch.profile !== 'empresa' } : p));
+      }
+      if (patch.providerEnabled) {
+        const { id, enabled } = patch.providerEnabled;
+        ai.providers = ai.providers.map((p) => (p.id === id ? { ...p, enabled } : p));
+      }
+      return clone(ai);
+    },
+    async aiPreviewContext(tabId): Promise<ContextPreview> {
+      await delay(Math.min(latency, 80));
+      const r = repoOf(tabId);
+      const staged = r.files.filter(hasStaged);
+      const sizeOf = (f: MockFile) => f.staged.reduce((n, h) => n + h.lines.reduce((m, l) => m + l.text.length + 1, 0), 0) + 180;
+      const sensitive = staged.filter((f) => /(^|\/)\.env|\.pem$|\.key$|id_rsa/.test(f.path));
+      const binary = staged.filter((f) => f.binary);
+      const big = staged.filter((f) => !sensitive.includes(f) && !binary.includes(f) && sizeOf(f) > 90_000);
+      const sent = staged.filter((f) => !sensitive.includes(f) && !binary.includes(f) && !big.includes(f));
+      const chosen = ai.choice === 'auto' ? ai.providers.find((p) => p.enabled && p.availability === 'available') : ai.providers.find((p) => p.id === ai.choice);
+      return {
+        provider: chosen?.id ?? null,
+        bytes: sent.reduce((n, f) => n + sizeOf(f), 0) + (scenario === 'ai-too-large' ? 120_000 : 0),
+        maxBytes: 100_000,
+        files: sent.map((f) => ({ path: f.path, bytes: sizeOf(f) })),
+        excluded: [
+          ...sensitive.map((f) => ({ path: f.path, reason: 'sensitive' as const })),
+          ...binary.map((f) => ({ path: f.path, reason: 'binary' as const })),
+          ...big.map((f) => ({ path: f.path, reason: 'too-large' as const }))
+        ],
+        redactions: sent.length > 0 ? 2 : 0,
+        recentSubjects: Math.min(20, r.commits.length)
+      };
+    },
+    async aiGenerateCommitMessage(tabId, options): Promise<AiCommitSuggestion> {
+      const r = repoOf(tabId);
+      if (!ai.enabled) throw err('AI_DISABLED', 'La IA está desactivada en los ajustes de Ariadna.');
+      const staged = r.files.filter(hasStaged);
+      if (staged.length === 0) throw err('AI_NO_STAGED_CHANGES', 'No hay nada preparado: prepara cambios para que la IA pueda proponer un mensaje.');
+      if (scenario === 'ai-sensitive') throw err('AI_SENSITIVE_FILE', 'Todo lo preparado son archivos sensibles (.env, claves) y no se envían a la IA.');
+      const wanted = ai.choice === 'auto' ? (ai.providers.find((p) => p.enabled && p.availability !== 'missing') ?? ai.providers[0]) : ai.providers.find((p) => p.id === ai.choice);
+      const provider = wanted as AiState['providers'][number];
+      if (provider.availability === 'missing') {
+        throw err('AI_NOT_INSTALLED', `No se encontró el comando «${provider.id}» en el equipo.`, provider.loginCommand);
+      }
+      if (provider.availability === 'failed' || scenario === 'ai-not-logged') {
+        throw err('AI_NOT_LOGGED_IN', `${provider.displayName} no tiene una sesión iniciada.`, provider.loginCommand);
+      }
+      // Primer uso por perfil y proveedor: diálogo NATIVO de Rust (aquí, el `confirm` simulado).
+      if (!provider.consented) {
+        const okConsent = scenario === 'ai-consent-denied' ? false : confirmFn(`¿Permites que Ariadna envíe a ${provider.displayName} el diff preparado de ${r.name}? Se excluyen archivos sensibles y se redactan secretos.`);
+        if (!okConsent) throw err('AI_CONSENT_REQUIRED', 'Sin tu permiso Ariadna no envía nada a la IA.');
+        ai.providers = ai.providers.map((p) => (p.id === provider.id ? { ...p, consented: true } : p));
+      }
+      const op = ++opCounter;
+      emit('session-event', { sessionId: r.tabId, revision: r.revision, kind: { type: 'operationStarted', operationId: op, label: `Generando mensaje con ${provider.displayName}` } });
+      const think = scenario === 'ai-slow' ? 9000 : Math.max(latency * 8, latency === 0 ? 0 : 900);
+      try {
+        const revisionAtStart = r.revision;
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, think);
+          aiCancelled.set(tabId, () => {
+            clearTimeout(timer);
+            reject(err('CANCELLED', 'Generación cancelada.'));
+          });
+        });
+        if (scenario === 'ai-quota') throw err('AI_QUOTA', `${provider.displayName} ha alcanzado su límite de uso. Vuelve a intentarlo más tarde o elige otro proveedor.`);
+        if (scenario === 'ai-timeout') throw err('AI_TIMEOUT', `${provider.displayName} no respondió en 120 s.`);
+        if (scenario === 'ai-bad-output') throw err('AI_BAD_OUTPUT', 'El proveedor devolvió un formato que Ariadna no reconoce.');
+        if (scenario === 'ai-too-large') throw err('AI_CONTEXT_TOO_LARGE', 'Lo preparado supera el tope de 100 000 bytes que se envían a la IA.');
+        if (scenario === 'ai-stale') publish(r); // el repo cambia mientras la IA piensa
+        const names = staged.map((f) => f.path.split('/').pop() as string);
+        const en = options.language === 'en';
+        const conv = options.style === 'conventional';
+        const hasTypes = staged.some((f) => f.path.endsWith('types.ts'));
+        let subject = hasTypes
+          ? en ? 'Add AI and clone types to the IPC contract' : 'Añade los tipos de IA y clonado al contrato IPC'
+          : en ? `Update ${names.slice(0, 2).join(' and ')}` : `Actualiza ${names.slice(0, 2).join(' y ')}`;
+        if (conv) subject = `${hasTypes ? 'feat(ui)' : 'chore'}: ${subject.charAt(0).toLowerCase()}${subject.slice(1)}`;
+        const body = staged
+          .slice(0, 4)
+          .map((f) => `- ${f.path.split('/').pop()}: ${en ? (f.base === 'A' ? 'new file' : f.base === 'R' ? 'renamed' : 'updated') : f.base === 'A' ? 'archivo nuevo' : f.base === 'R' ? 'renombrado' : 'actualizado'}`)
+          .join('\n');
+        return {
+          subject,
+          body: (en ? 'Keeps the interface in sync with the backend contract.\n\n' : 'Mantiene la interfaz alineada con el contrato del backend.\n\n') + body,
+          provider: provider.id,
+          commandSummary: `${provider.id} -p --output-format json (stdin)`,
+          repoRevision: revisionAtStart
+        };
+      } finally {
+        aiCancelled.delete(tabId);
+        emit('session-event', { sessionId: r.tabId, revision: r.revision, kind: { type: 'operationFinished', operationId: op, label: 'ai.generate', ok: true, error: null } });
+      }
+    },
+    async aiCancel(tabId) {
+      const stop = aiCancelled.get(tabId);
+      if (!stop) return false;
+      stop();
+      return true;
     },
 
     async listen<K extends keyof ApiEvents>(event: K, handler: (payload: ApiEvents[K]) => void): Promise<Unlisten> {

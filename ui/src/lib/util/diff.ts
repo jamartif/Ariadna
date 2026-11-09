@@ -1,4 +1,5 @@
 import type { DiffHunk, DiffLine, FileDiff } from '$lib/api/types';
+import { pairLines } from './intraline';
 
 /** Umbrales de NF-5 (spec §9). */
 export const GIANT_LINES = 5000;
@@ -35,14 +36,15 @@ export function diffStats(d: FileDiff): { additions: number; deletions: number }
 
 export type DiffRow =
   | { type: 'hunk'; hunkIndex: number; hunk: DiffHunk }
-  | { type: 'line'; hunkIndex: number; line: DiffLine };
+  | { type: 'line'; hunkIndex: number; line: DiffLine; /** Línea emparejada (borrada ↔ añadida) para el resaltado intra-línea. */ partner: DiffLine | null };
 
 /** Aplana hunks en filas para la lista virtualizada. */
 export function flattenDiff(d: FileDiff): DiffRow[] {
   const rows: DiffRow[] = [];
   d.hunks.forEach((hunk, hunkIndex) => {
     rows.push({ type: 'hunk', hunkIndex, hunk });
-    for (const line of hunk.lines) rows.push({ type: 'line', hunkIndex, line });
+    const pairs = pairLines(hunk.lines);
+    for (const line of hunk.lines) rows.push({ type: 'line', hunkIndex, line, partner: pairs.get(line.id) ?? null });
   });
   return rows;
 }
@@ -54,4 +56,9 @@ export function hunkHeader(h: DiffHunk): string {
 export function truncateLine(text: string, expanded: boolean): { text: string; truncated: boolean } {
   if (expanded || text.length <= LONG_LINE) return { text, truncated: false };
   return { text: text.slice(0, LONG_LINE), truncated: true };
+}
+
+/** Acorta el contexto de función de un hunk (`heading`) para la cabecera. */
+export function hunkContext(h: DiffHunk): string {
+  return h.heading.trim();
 }

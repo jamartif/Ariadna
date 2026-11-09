@@ -4,7 +4,10 @@
  * mismas claves (el tipo `MessageKey` lo exige) y registrarlo en `i18n/index.ts`.
  * Un test comprueba que toda clave usada en el código existe aquí.
  */
+import { esScreens } from './es.screens';
+
 export const es = {
+  ...esScreens,
   // Aplicación
   'app.loading': 'Cargando Ariadna…',
   'app.errorTitle': 'No se pudo iniciar Ariadna',
@@ -60,6 +63,19 @@ export const es = {
   'welcome.recheck': 'Volver a comprobar',
   'welcome.tipPalette': 'paleta de comandos',
   'welcome.tipNewTab': 'nueva pestaña',
+  'welcome.browseDesc': 'Elige una carpeta con un repositorio de Git.',
+  'welcome.clone': 'Clonar…',
+  'welcome.cloneDesc': 'Descarga un repositorio desde una URL.',
+  'welcome.pasteDesc': 'Escribe o pega la ruta de un repositorio.',
+  'welcome.changes.one': '1 cambio',
+  'welcome.changes.other': '{n} cambios',
+
+  // Ventana propia (barra de título)
+  'window.controls': 'Controles de la ventana',
+  'window.minimize': 'Minimizar',
+  'window.maximize': 'Maximizar',
+  'window.restore': 'Restaurar',
+  'window.close': 'Cerrar',
 
   // Panel, barra lateral y diseño
   'panel.list': 'Secciones del repositorio',
@@ -146,6 +162,20 @@ export const es = {
   'changes.clearFilter': 'Borrar filtro',
   'changes.summary.one': '1 archivo con cambios',
   'changes.summary.other': '{n} archivos con cambios',
+  'changes.view': 'Vista de archivos',
+  'changes.viewList': 'Ver como lista',
+  'changes.viewTree': 'Ver como árbol',
+  'changes.selectionBar': 'Acciones sobre la selección',
+  'changes.selected.one': '1 seleccionado',
+  'changes.selected.other': '{n} seleccionados',
+  'changes.stageSelected': 'Preparar',
+  'changes.unstageSelected': 'Quitar',
+  'changes.discardSelected': 'Descartar',
+  'changes.clearSelection': 'Borrar selección',
+  'changes.stageDir': 'Preparar la carpeta {name}',
+  'changes.unstageDir': 'Quitar de preparados la carpeta {name}',
+  'changes.stageOne': 'Preparar',
+  'changes.unstageOne': 'Quitar de preparados',
 
   // Operaciones
   'op.stageFailed': 'No se pudo preparar',
@@ -210,6 +240,66 @@ export const es = {
   'commit.created': 'Commit creado',
   'commit.amended': 'Commit corregido',
   'commit.failed': 'No se pudo crear el commit',
+  'commit.summaryLabel': 'Asunto',
+  'commit.summaryPlaceholder': 'Asunto del commit',
+  'commit.descriptionLabel': 'Descripción',
+  'commit.descriptionPlaceholder': 'Descripción opcional…',
+
+  // IA: mensaje de commit (ipc.md «Comandos de IA»)
+  'shortcut.aiGenerate': 'Generar mensaje de commit con IA',
+  'ai.generate': 'Generar con IA',
+  'ai.generateTitle': 'Genera asunto y descripción con IA a partir de lo preparado ({shortcut})',
+  'ai.nothingStaged': 'Prepara cambios para que la IA pueda describirlos.',
+  'ai.busyTitle': 'Espera a que termine la operación en curso.',
+  'ai.generating': 'Generando mensaje con IA…',
+  'ai.generatingBtn': 'Generando…',
+  'ai.cancel': 'Cancelar',
+  'ai.cancelled': 'Generación cancelada.',
+  'ai.filled': 'Mensaje propuesto por {provider}. Revísalo antes de crear el commit.',
+  'ai.proposedBy': 'Propuesto por {provider}. Revísalo antes de confirmar.',
+  'ai.undo': 'Deshacer',
+  'ai.undone': 'Se ha restaurado el texto anterior.',
+  'ai.dismiss': 'Descartar aviso',
+  'ai.stale': 'El repositorio cambió mientras la IA pensaba: la propuesta puede estar obsoleta.',
+  'ai.settingsFailed': 'No se pudieron guardar los ajustes de IA',
+  'ai.errorTitle': 'No se pudo generar el mensaje',
+  'ai.retry': 'Reintentar',
+  'ai.runCommand': 'Ejecuta en una terminal: {command}',
+  'ai.disabledTitle': 'La IA está desactivada',
+  'ai.disabledBody': 'Actívala para que Ariadna proponga el asunto y la descripción a partir de lo preparado.',
+  'ai.enable': 'Activar IA…',
+  'ai.openSettings': 'Ajustes de IA',
+  'ai.fieldsBusy': 'Generando el mensaje: los campos se desbloquean al terminar.',
+
+  // IA: diálogo de consentimiento y ajustes
+  'ai.dialog.title': 'IA para el mensaje de commit',
+  'ai.dialog.subtitle': 'Ariadna usa el CLI oficial que elijas, con tu propia sesión.',
+  'ai.dialog.close': 'Cerrar',
+  'ai.dialog.whatTitle': 'Qué se envía',
+  'ai.dialog.what1': 'El diff de los archivos preparados (staged), con un tope de tamaño.',
+  'ai.dialog.what2': 'Los asuntos de los últimos commits, para imitar tu idioma y estilo.',
+  'ai.dialog.what3': 'Nunca se envían .env, claves, certificados ni binarios, y se ocultan los secretos detectados.',
+  'ai.dialog.what4': 'La IA solo propone: nunca hace commit ni modifica el repositorio.',
+  'ai.dialog.whom': 'El contenido sale de tu equipo hacia el proveedor elegido. La primera vez por perfil y proveedor, Ariadna te pedirá confirmación antes de enviar nada.',
+  'ai.dialog.profile': 'Perfil',
+  'ai.dialog.profile.personal': 'Personal',
+  'ai.dialog.profile.empresa': 'Empresa',
+  'ai.dialog.profileHint': 'En el perfil Empresa, Claude queda desactivado hasta que lo habilites.',
+  'ai.dialog.provider': 'Proveedor',
+  'ai.dialog.provider.auto': 'Automático',
+  'ai.dialog.provider.autoHint': 'Prueba Claude, luego Codex y luego Copilot: el primero instalado y habilitado.',
+  'ai.dialog.availability.available': 'Disponible',
+  'ai.dialog.availability.missing': 'No instalado',
+  'ai.dialog.availability.failed': 'Con error o sin sesión',
+  'ai.dialog.consented': 'Permiso concedido',
+  'ai.dialog.notConsented': 'Se pedirá permiso la primera vez',
+  'ai.dialog.disabledByProfile': 'Desactivado en este perfil',
+  'ai.dialog.enable': 'Activar IA',
+  'ai.dialog.save': 'Guardar',
+  'ai.dialog.disable': 'Desactivar IA',
+  'ai.dialog.cancel': 'Cancelar',
+  'ai.dialog.saved': 'Ajustes de IA guardados',
+  'ai.dialog.loading': 'Comprobando los CLI instalados…',
 
   // Paleta
   'palette.open': 'Abrir paleta de comandos',
@@ -285,7 +375,8 @@ export const es = {
   'shortcut.stageAll': 'Preparar todo',
   'shortcut.unstageAll': 'Quitar todo de preparados',
   'shortcut.focusCommit': 'Ir al mensaje de commit',
-  'shortcut.commit': 'Crear commit'
+  'shortcut.commit': 'Crear commit',
+  'shortcut.clone': 'Clonar repositorio…'
 } as const;
 
 export type MessageKey = keyof typeof es;

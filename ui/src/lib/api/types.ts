@@ -211,6 +211,87 @@ export interface DoneResult {
   done: boolean;
 }
 
+// ---- Credenciales y clonado (ipc.md, `clone_repository`, `*_credential`) ---------
+
+/** PAT de un solo uso para clonar. Nunca se guarda ni se registra. */
+export interface CloneAuth {
+  username: string;
+  secret: string;
+}
+
+export interface CredentialTest {
+  ok: boolean;
+  code: string | null;
+}
+
+/** Evento `clone-progress`. `percent` es `null` si git no informa de porcentaje. */
+export interface CloneProgress {
+  operationId: number;
+  phase: string;
+  percent: number | null;
+}
+
+// ---- IA (ipc.md, «Comandos de IA») ----------------------------------------------------
+
+export type AiProviderId = 'claude' | 'codex' | 'copilot';
+export type AiChoice = 'auto' | AiProviderId;
+export type AiProfileKind = 'personal' | 'empresa';
+export type AiAvailability = 'available' | 'missing' | 'failed';
+export type AiLanguage = 'auto' | 'es' | 'en';
+export type AiStyle = 'plain' | 'conventional';
+
+export interface ProviderState {
+  id: AiProviderId | string;
+  displayName: string;
+  availability: AiAvailability;
+  version: string | null;
+  hint: string | null;
+  enabled: boolean;
+  consented: boolean;
+  loginCommand: string;
+}
+
+export interface AiState {
+  enabled: boolean;
+  profile: { name: string; kind: AiProfileKind };
+  choice: AiChoice;
+  providers: ProviderState[];
+}
+
+export interface AiSettingsPatch {
+  enabled?: boolean;
+  choice?: string;
+  profile?: AiProfileKind;
+  providerEnabled?: { id: string; enabled: boolean };
+  binaryPath?: { id: string; path: string | null };
+}
+
+export type ExcludedReason = 'sensitive' | 'binary' | 'too-large';
+
+export interface ContextPreview {
+  provider: string | null;
+  bytes: number;
+  maxBytes: number;
+  files: { path: GitPath; bytes: number }[];
+  excluded: { path: GitPath; reason: ExcludedReason }[];
+  redactions: number;
+  recentSubjects: number;
+}
+
+export interface AiGenerateOptions {
+  template: string | null;
+  language: AiLanguage;
+  style: AiStyle;
+}
+
+export interface AiCommitSuggestion {
+  subject: string;
+  body: string;
+  provider: string;
+  commandSummary: string;
+  repoRevision: number;
+}
+
 // ---- Errores -----------------------------------------------------------------
 
 export const API_ERROR_CODES = [
@@ -234,9 +315,47 @@ export const API_ERROR_CODES = [
   'LOCKED',
   'DUBIOUS_OWNERSHIP',
   'AUTH',
+  'MERGE_CONFLICTS',
   'IO',
-  'REPO_MISSING'
+  'REPO_MISSING',
+  'AI_DISABLED',
+  'AI_NOT_INSTALLED',
+  'AI_NOT_LOGGED_IN',
+  'AI_QUOTA',
+  'AI_BAD_OUTPUT',
+  'AI_CONTEXT_TOO_LARGE',
+  'AI_TIMEOUT',
+  'AI_CONSENT_REQUIRED',
+  'AI_NO_STAGED_CHANGES',
+  'AI_SENSITIVE_FILE',
+  'NOT_FOUND',
+  'POLICY',
+  'RATE_LIMITED',
+  'NETWORK'
 ] as const;
+
+/**
+ * Códigos que el contrato IPC añade en esta oleada y que `src-tauri` todavía puede no
+ * haber volcado a `fixtures/api-error-codes.json`. El test de contrato los tolera
+ * ausentes en el fixture, pero no al revés.
+ */
+export const CODES_ADDED_IN_WAVE_2: readonly ApiErrorCode[] = [
+  'MERGE_CONFLICTS',
+  'AI_DISABLED',
+  'AI_NOT_INSTALLED',
+  'AI_NOT_LOGGED_IN',
+  'AI_QUOTA',
+  'AI_BAD_OUTPUT',
+  'AI_CONTEXT_TOO_LARGE',
+  'AI_TIMEOUT',
+  'AI_CONSENT_REQUIRED',
+  'AI_NO_STAGED_CHANGES',
+  'AI_SENSITIVE_FILE',
+  'NOT_FOUND',
+  'POLICY',
+  'RATE_LIMITED',
+  'NETWORK'
+];
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
@@ -313,4 +432,5 @@ export interface ApiEvents {
   'tab-updated': TabInfo;
   'session-event': SessionEvent;
   'tabs-changed': AppState;
+  'clone-progress': CloneProgress;
 }

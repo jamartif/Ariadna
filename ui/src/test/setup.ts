@@ -8,3 +8,32 @@ class ResizeObserverStub {
   disconnect() {}
 }
 globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+
+
+// jsdom no implementa Element.animate (transiciones de Svelte y reordenado de pestañas):
+// stub mínimo que termina al instante.
+if (typeof Element !== 'undefined' && !Element.prototype.animate) {
+  Element.prototype.animate = function () {
+    const anim = {
+      onfinish: null as null | (() => void),
+      oncancel: null as null | (() => void),
+      cancel() {},
+      finish() {},
+      play() {},
+      pause() {},
+      reverse() {},
+      commitStyles() {},
+      persist() {},
+      currentTime: 0,
+      playState: 'finished',
+      finished: Promise.resolve(),
+      addEventListener() {},
+      removeEventListener() {}
+    };
+    queueMicrotask(() => anim.onfinish?.());
+    return anim as unknown as Animation;
+  };
+}
+if (typeof Element !== 'undefined' && !Element.prototype.getAnimations) {
+  Element.prototype.getAnimations = () => [];
+}

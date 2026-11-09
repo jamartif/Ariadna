@@ -422,6 +422,25 @@ impl GitCliEngine {
         Ok(parse_commit_log(&out.stdout))
     }
 
+    /// Página del historial de HEAD: `limit` commits tras saltar `skip` (`git log --skip`).
+    pub async fn log_page(
+        &self,
+        repo: &Repository,
+        skip: usize,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        if !self.has_head(repo).await? {
+            return Ok(Vec::new());
+        }
+        let capped = limit.clamp(1, MAX_LOG);
+        let mut args = os(&["log", "-n"]);
+        args.push(OsString::from(capped.to_string()));
+        args.push(OsString::from(format!("--skip={}", skip.min(10_000_000))));
+        args.extend(os(&["--no-color", "--no-show-signature", LOG_FORMAT]));
+        let out = self.read(repo, &args).await?;
+        Ok(parse_commit_log(&out.stdout))
+    }
+
     /// Busca (sin distinguir mayúsculas, texto literal) en mensaje, autor y prefijo de hash
     /// dentro del historial de HEAD. `--grep` y `--author` se combinan con AND en git; aquí
     /// se quiere OR, por eso son dos pasadas. De más nuevo a más viejo, sin duplicados.

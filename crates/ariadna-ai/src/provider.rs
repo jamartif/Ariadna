@@ -18,7 +18,7 @@ use crate::commands::{build_args, command_summary, prompt_via_stdin, version_arg
 use crate::env::{provider_env, EnvOptions};
 use crate::models::{
     new_suggestion_id, now_millis, AiContextPolicy, AiError, AiSuggestion, Availability,
-    ProviderId, SuggestionKind, SuggestionStatus, SummaryStyle,
+    CommitOptions, ProviderId, SuggestionKind, SuggestionStatus, SummaryStyle,
 };
 use crate::parse::{
     error_from_failed_run, parse_conflict_proposal, parse_output, split_commit_message,
@@ -74,6 +74,17 @@ pub trait AiProvider: Send + Sync {
         diff: &str,
         template: Option<&str>,
     ) -> Result<AiSuggestion, AiError>;
+    /// Como [`suggest_commit_message`](Self::suggest_commit_message) pero con idioma, estilo
+    /// y asuntos recientes. Por defecto ignora todo salvo la plantilla.
+    async fn suggest_commit_message_with(
+        &self,
+        ctx: &CallContext,
+        diff: &str,
+        opts: &CommitOptions,
+    ) -> Result<AiSuggestion, AiError> {
+        self.suggest_commit_message(ctx, diff, opts.template.as_deref())
+            .await
+    }
     async fn summarize_diff(
         &self,
         ctx: &CallContext,
@@ -375,7 +386,20 @@ impl AiProvider for CliProvider {
         diff: &str,
         template: Option<&str>,
     ) -> Result<AiSuggestion, AiError> {
-        let preview = PromptBuilder::commit_message(diff, template);
+        let opts = CommitOptions {
+            template: template.map(String::from),
+            ..CommitOptions::default()
+        };
+        self.suggest_commit_message_with(ctx, diff, &opts).await
+    }
+
+    async fn suggest_commit_message_with(
+        &self,
+        ctx: &CallContext,
+        diff: &str,
+        opts: &CommitOptions,
+    ) -> Result<AiSuggestion, AiError> {
+        let preview = PromptBuilder::commit_message_with(diff, opts);
         let reply = self.complete(ctx, &preview).await?;
         let (subject, body) = split_commit_message(&reply.text);
         if subject.is_empty() {

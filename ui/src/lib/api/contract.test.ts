@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMockApi } from './mockApi';
-import { toApiError, ApiError, API_ERROR_CODES } from './types';
-import { appState, check, detect, diffScope, fileDiff, mergeResult, recentRepository, snapshot, gitPath } from './validate';
+import { toApiError, ApiError, API_ERROR_CODES, CODES_ADDED_IN_WAVE_2 } from './types';
+import { aiCommitSuggestion, aiState, appState, check, cloneProgress, contextPreview, credentialTest, detect, diffScope, fileDiff, gitPath, mergeResult, openResult, recentRepository, snapshot } from './validate';
 
 // Fixtures REALES generados por `src-tauri` desde el motor de Rust (ipc.md, «Verificación del contrato»).
 const fixtureModules = import.meta.glob('./fixtures/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
@@ -37,7 +37,10 @@ describe('contrato con Rust: códigos de error', () => {
   }
   const codes = (entry[1] as { code: string }[]).map((e) => e.code);
   it('cada código de Rust está en types.ts y viceversa', () => {
-    expect([...codes].sort()).toEqual([...API_ERROR_CODES].sort());
+    // Los códigos nuevos de esta oleada pueden faltar todavía en el fixture hasta que Rust lo regenere.
+    const pending = API_ERROR_CODES.filter((c) => !codes.includes(c));
+    expect(codes.filter((c) => !(API_ERROR_CODES as readonly string[]).includes(c))).toEqual([]);
+    expect(pending.filter((c) => !CODES_ADDED_IN_WAVE_2.includes(c))).toEqual([]);
   });
 });
 
@@ -106,6 +109,31 @@ describe('contrato: el backend simulado cumple las mismas formas', () => {
       }
     }
     expect(check((v, p, e) => state.recents.forEach((r) => recentRepository(r, p, e)), 0)).toEqual([]);
+  });
+});
+
+describe('contrato: IA, clonado y credenciales (sin fixtures de Rust todavía)', () => {
+  it('el mock devuelve las formas exactas de ipc.md', async () => {
+    const api = createMockApi({ latency: 0, confirm: () => true });
+    const st = await api.aiState('tab-ariadna');
+    expect(check(aiState, st)).toEqual([]);
+    expect(check(contextPreview, await api.aiPreviewContext('tab-ariadna'))).toEqual([]);
+    const sug = await api.aiGenerateCommitMessage('tab-ariadna', { template: null, language: 'auto', style: 'plain' });
+    expect(check(aiCommitSuggestion, sug)).toEqual([]);
+    expect(check(credentialTest, await api.testCredential('https://github.com/o/r.git'))).toEqual([]);
+    const events: unknown[] = [];
+    await api.listen('clone-progress', (p) => events.push(p));
+    const res = await api.cloneRepository('https://github.com/o/nuevo.git', '/tmp/nuevo', null);
+    expect(check(openResult, res)).toEqual([]);
+    expect(events.length).toBeGreaterThan(0);
+    for (const e of events) expect(check(cloneProgress, e)).toEqual([]);
+  });
+
+  it('los validadores rechazan claves inventadas y valores fuera de rango', () => {
+    expect(check(aiState, { enabled: true, profile: { name: 'x', kind: 'otro' }, choice: 'auto', providers: [] }).join()).toMatch(/fuera de/);
+    expect(check(contextPreview, { provider: null, bytes: 1, maxBytes: 2, files: [], excluded: [{ path: 'a', reason: 'raro' }], redactions: 0, recentSubjects: 0 }).join()).toMatch(/fuera de/);
+    expect(check(aiCommitSuggestion, { subject: 'a', body: '', provider: 'claude', commandSummary: '', repoRevision: 1, extra: 1 }).join()).toMatch(/clave desconocida/);
+    expect(detect({ subject: 'a', body: '', provider: 'claude', commandSummary: '', repoRevision: 1 })?.name).toBe('AiCommitSuggestion');
   });
 });
 

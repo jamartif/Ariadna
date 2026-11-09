@@ -712,6 +712,11 @@ impl GitCliEngine {
         let before = self.bo_rev(repo, "HEAD").await?;
         let out = self.bo_raw(repo, CommandKind::Network, &args).await?;
         if !out.success() {
+            // Fallo de credenciales (única excepción documentada en `auth`): antes que conflictos.
+            let os_args: Vec<OsString> = args.iter().map(OsString::from).collect();
+            if let Some(e) = self.runner.auth_error(&repo.path, &os_args, &out).await {
+                return Err(e);
+            }
             return self.bo_conflicts_or_error(repo, "pull", &out).await;
         }
         let Some(after) = self.bo_rev(repo, "HEAD").await? else {

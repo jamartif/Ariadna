@@ -53,7 +53,7 @@ impl AppCore {
     }
 
     /// Rama actual y nombre del repo, para los diálogos.
-    fn context(session: &RepositorySession, meta: &TabMeta) -> String {
+    pub(crate) fn context(session: &RepositorySession, meta: &TabMeta) -> String {
         let snap = session.snapshot();
         let branch = match (&snap.status.branch_name, snap.status.is_detached) {
             (Some(b), _) => format!("rama {b}"),
@@ -63,7 +63,13 @@ impl AppCore {
         format!("{} ({branch})", meta.name)
     }
 
-    async fn mutate_op<T, A, F>(&self, tab_id: &str, label: &str, args: A, f: F) -> ApiResult<T>
+    pub(crate) async fn mutate_op<T, A, F>(
+        &self,
+        tab_id: &str,
+        label: &str,
+        args: A,
+        f: F,
+    ) -> ApiResult<T>
     where
         T: Send + 'static,
         A: Clone + Send + Sync + 'static,
@@ -75,7 +81,7 @@ impl AppCore {
             .map_err(Into::into)
     }
 
-    async fn read_op<T, F>(&self, tab_id: &str, label: &str, f: F) -> ApiResult<T>
+    pub(crate) async fn read_op<T, F>(&self, tab_id: &str, label: &str, f: F) -> ApiResult<T>
     where
         T: Send + 'static,
         F: FnOnce(Arc<dyn GitServing>, Repository) -> OpFuture<T> + Send + 'static,
@@ -88,7 +94,7 @@ impl AppCore {
 
     /// Último snapshot. Si una mutación acaba de subir la revisión y el refresco aún no ha
     /// publicado, espera a ese refresco para no devolver un estado viejo.
-    async fn fresh_snapshot(s: &RepositorySession) -> Arc<ariadna_git::Snapshot> {
+    pub(crate) async fn fresh_snapshot(s: &RepositorySession) -> Arc<ariadna_git::Snapshot> {
         let snap = s.snapshot();
         if snap.revision == 0 || snap.revision != s.revision() {
             let _ = s.refresh().await;
@@ -364,13 +370,6 @@ impl AppCore {
         }
     }
 
-    pub async fn delete_branch(&self, tab_id: &str, name: String, force: bool) -> ApiResult<()> {
-        self.mutate_op(tab_id, "borrar rama", (name, force), |e, r, (n, f)| {
-            Box::pin(async move { e.delete_branch(&r, &n, f).await })
-        })
-        .await
-    }
-
     // --- integración -----------------------------------------------------------------------
 
     pub async fn merge(
@@ -514,7 +513,15 @@ impl AppCore {
 
     /// Cancela una operación en curso o en cola de la pestaña (por el id de `session-event`).
     pub fn cancel_operation(&self, tab_id: &str, operation_id: u64) -> ApiResult<bool> {
+        // Los clonados no pertenecen a ninguna pestaña: se cancelan por id.
+        if super::clone_ops::cancel_clone(operation_id) {
+            return Ok(true);
+        }
         let (s, _) = self.live(tab_id)?;
+        // Las operaciones de IA llevan su propio rango de ids (`session-event`).
+        if self.ai_cancel_operation(tab_id, operation_id) {
+            return Ok(true);
+        }
         let found = s
             .pending_operations()
             .into_iter()

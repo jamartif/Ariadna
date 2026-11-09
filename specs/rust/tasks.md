@@ -71,6 +71,8 @@
 
 ## M4 — Shell de la app
 
+> Segunda oleada hecha: rediseño visual con barra de título propia, botón de IA para el commit (`ai_generate_commit_message`, consentimiento Personal/Empresa), clonado con PAT (askpass temporal, nunca guardado), historial virtualizado con grafo y ramas (crear, cambiar, renombrar, borrar, fusionar sin conflictos). Deuda: test de cancelar clonado ignorado con git 2.53; retirar el aviso de la barra lateral sobre ramas; resolución de conflictos; panel de remotos.
+
 > Estado: backend Tauri (`AppCore`, pestañas, 34 comandos IPC, `session.json`, fixtures) e interfaz Svelte (diseño claro/oscuro, pestañas, bienvenida, cambios, diff por hunk, commit, paleta) **hechos y validados en CI** (Windows x64/ARM64, macOS 15, Ubuntu); el instalador NSIS y el `.dmg` se construyen. Pendiente: vigilancia de archivos (`notify`), hibernación de pestañas, pantalla de recuperación, clonado (D20) en la bienvenida, `opener`.
 - [x] Proyecto Tauri 2 + Svelte 5 + TS; `tauri-specta`; CI falla si el binding difiere
 - [x] CSP estricta y capabilities mínimas; sin `{@html}`

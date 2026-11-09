@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import CloneDialog from '$lib/components/CloneDialog.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import Icon from '$lib/components/Icon.svelte';
-  import TabStrip from '$lib/components/TabStrip.svelte';
   import TitleBar from '$lib/components/TitleBar.svelte';
   import Toasts from '$lib/components/Toasts.svelte';
   import Welcome from '$lib/components/Welcome.svelte';
@@ -18,6 +18,11 @@
 
   const entry = $derived(app.activeEntry);
   const title = $derived(entry?.kind === 'repo' ? `${entry.info.name}${entry.info.branch ? ` — ${entry.info.branch}` : ''}` : '');
+
+  // El título de la ventana (barra de tareas, Alt+Tab) refleja el repo activo.
+  $effect(() => {
+    document.title = title ? `${title} · Ariadna` : 'Ariadna';
+  });
 
   onMount(() => {
     settings.apply();
@@ -36,6 +41,7 @@
       'tab.next': () => (app.step(1), true),
       'tab.prev': () => (app.step(-1), true),
       'palette.open': () => ((app.paletteOpen = !app.paletteOpen), true),
+      'clone.open': () => (app.openClone(), true),
       'changes.refresh': () => {
         const tab = entry?.kind === 'repo' ? app.activeTab : null;
         if (!tab) return false;
@@ -64,24 +70,29 @@
 </script>
 
 <div class="window">
-  <TitleBar {title} onpalette={() => (app.paletteOpen = true)} />
-  <TabStrip
+  <TitleBar
     entries={app.entries}
     activeId={app.activeId}
     onactivate={(id) => app.activate(id)}
     onclose={(id) => void app.close(id)}
     onnew={() => app.newTab()}
     onreorder={(ids) => app.reorder(ids)}
+    onpalette={() => (app.paletteOpen = true)}
   />
 
   <div id="tabpanel-main" class="main" role="tabpanel" aria-labelledby={app.activeId ? `tab-${app.activeId}` : undefined} tabindex="-1">
+   <div class="stage">
     {#if app.status === 'loading'}
       <div class="boot" aria-busy="true" aria-label={t('app.loading')}>
         <div class="boot-col">
-          <span class="skeleton" style:width="56px" style:height="56px"></span>
-          <span class="skeleton" style:width="260px" style:height="24px"></span>
-          <span class="skeleton" style:width="100%" style:height="64px"></span>
-          <span class="skeleton" style:width="100%" style:height="160px"></span>
+          <span class="skeleton" style:width="48px" style:height="48px" style:border-radius="14px"></span>
+          <span class="skeleton" style:width="260px" style:height="26px"></span>
+          <div class="boot-cards">
+            <span class="skeleton" style:height="112px" style:border-radius="14px"></span>
+            <span class="skeleton" style:height="112px" style:border-radius="14px"></span>
+            <span class="skeleton" style:height="112px" style:border-radius="14px"></span>
+          </div>
+          <span class="skeleton" style:width="100%" style:height="72px" style:border-radius="12px"></span>
         </div>
       </div>
     {:else if app.status === 'error'}
@@ -110,8 +121,13 @@
         {/if}
       {/key}
     {/if}
+   </div>
   </div>
 </div>
+
+{#if app.cloneOpen}
+  <CloneDialog {app} onclose={() => (app.cloneOpen = false)} />
+{/if}
 
 {#if app.paletteOpen}
   <CommandPalette actions={buildActions(app)} onclose={() => (app.paletteOpen = false)} />
@@ -125,25 +141,38 @@
     flex-direction: column;
     height: 100%;
     min-width: 0;
+    background: var(--bg-app);
   }
   .main {
     flex: 1;
     min-height: 0;
-    background: var(--bg-surface);
-    border-top: 0;
+    padding: 0 8px 8px;
+    background: var(--bg-app);
+  }
+  /* Tarjeta principal: panel en la capa «superficie» sobre el fondo de la ventana. */
+  .stage {
+    height: 100%;
     overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-surface);
+    box-shadow: var(--elev-1);
   }
   .boot {
     display: grid;
     place-items: center;
     height: 100%;
-    background: var(--bg-app);
   }
   .boot-col {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
-    width: min(560px, 90%);
+    width: min(720px, 90%);
+  }
+  .boot-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
   }
   .err-detail {
     max-width: 60ch;

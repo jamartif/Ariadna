@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use ariadna_process::{
-    run, CancellationToken, EnvPolicy, ProcessError, ProcessOutput, ProcessSpec,
+    run, run_streaming, CancellationToken, EnvPolicy, ProcessError, ProcessOutput, ProcessSpec,
 };
 use regex::Regex;
 
+use crate::auth::classify_auth_failure;
 use crate::error::{truncate, GitError, GitResult};
 use crate::git_locator::GitInstall;
 
@@ -31,6 +32,8 @@ pub struct GitRunner {
     local_timeout: Duration,
     max_output_bytes: usize,
     cancel: CancellationToken,
+    /// Pares `-c clave=valor` extra, antes del subcomando (p. ej. un `credential.helper`).
+    extra_config: Vec<(String, String)>,
 }
 
 impl GitRunner {
@@ -45,7 +48,16 @@ impl GitRunner {
             local_timeout: Duration::from_secs(180),
             max_output_bytes: 64 * 1024 * 1024,
             cancel: CancellationToken::new(),
+            extra_config: Vec::new(),
         }
+    }
+
+    /// Añade `-c clave=valor` a **todas** las llamadas de este ejecutor (después de los flags de
+    /// seguridad). Sirve para forzar un `credential.helper` concreto o `credential.useHttpPath`;
+    /// el valor no debe llevar secretos (acabaría en el argv del proceso).
+    pub fn with_config(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.extra_config.push((key.into(), value.into()));
+        self
     }
 
     /// Token que cancela todas las llamadas en curso de este ejecutor (lo da la sesión).
@@ -64,7 +76,7 @@ impl GitRunner {
     }
 
     /// Argumentos globales (antes del subcomando) según el tipo de comando.
-    fn global_args(kind: CommandKind) -> Vec<OsString> {
+    fn global_args(&self, kind: CommandKind) -> Vec<OsString> {
         let mut v: Vec<&str> = vec![
             "-c",
             "core.quotepath=false",
@@ -78,15 +90,29 @@ impl GitRunner {
             // ni en lecturas ni en mutaciones (spec §4.1).
             "-c",
             "core.fsmonitor=false",
+            // Nunca transportes con ayudante (`ext::`): ejecutan programas arbitrarios.
+            "-c",
+            "protocol.ext.allow=never",
         ];
         if kind == CommandKind::Read {
             v.push("--no-optional-locks");
         }
-        v.into_iter().map(OsString::from).collect()
+        let mut out: Vec<OsString> = v.into_iter().map(OsString::from).collect();
+        for (k, val) in &self.extra_config {
+            out.push("-c".into());
+            out.push(format!("{k}={val}").into());
+        }
+        out
     }
 
-    fn base_spec(&self, cwd: &Path, kind: CommandKind, args: &[OsString]) -> ProcessSpec {
-        let mut all = Self::global_args(kind);
+    fn base_spec(
+        &self,
+        cwd: &Path,
+        kind: CommandKind,
+        args: &[OsString],
+        env: &[(&str, &str)],
+    ) -> ProcessSpec {
+        let mut all = self.global_args(kind);
         all.extend(args.iter().cloned());
         let mut spec = ProcessSpec::new(&self.git)
             .args(all)
@@ -108,7 +134,26 @@ impl GitRunner {
         if kind == CommandKind::Read {
             spec = spec.env("GIT_OPTIONAL_LOCKS", "0");
         }
+        for (k, v) in env {
+            spec = spec.env(*k, *v);
+        }
         spec
+    }
+
+    fn map_run(
+        command: String,
+        res: Result<ProcessOutput, ProcessError>,
+    ) -> GitResult<ProcessOutput> {
+        match res {
+            Ok(out) if out.timed_out => Err(GitError::Timeout { command }),
+            Ok(out) if out.cancelled => Err(GitError::Cancelled),
+            Ok(out) => Ok(out),
+            Err(ProcessError::Spawn { program, source }) => Err(GitError::GitNotFound(format!(
+                "{}: {source}",
+                program.display()
+            ))),
+            Err(ProcessError::Io(e)) => Err(GitError::Io(e.to_string())),
+        }
     }
 
     /// Ejecuta y devuelve la salida **aunque el código de salida sea distinto de 0**.
@@ -120,21 +165,51 @@ impl GitRunner {
         args: &[OsString],
         stdin: Option<Vec<u8>>,
     ) -> GitResult<ProcessOutput> {
-        let mut spec = self.base_spec(cwd, kind, args);
+        self.run_with_env(cwd, kind, args, stdin, &[]).await
+    }
+
+    /// Como [`run`](Self::run) con variables de entorno extra (se fijan al final; ganan siempre).
+    /// Útil para `GCM_INTERACTIVE=never` en sondeos no interactivos.
+    pub async fn run_with_env(
+        &self,
+        cwd: &Path,
+        kind: CommandKind,
+        args: &[OsString],
+        stdin: Option<Vec<u8>>,
+        env: &[(&str, &str)],
+    ) -> GitResult<ProcessOutput> {
+        let mut spec = self.base_spec(cwd, kind, args, env);
         if let Some(s) = stdin {
             spec = spec.stdin(s);
         }
-        let command = describe(args);
-        match run(spec, self.cancel.clone()).await {
-            Ok(out) if out.timed_out => Err(GitError::Timeout { command }),
-            Ok(out) if out.cancelled => Err(GitError::Cancelled),
-            Ok(out) => Ok(out),
-            Err(ProcessError::Spawn { program, source }) => Err(GitError::GitNotFound(format!(
-                "{}: {source}",
-                program.display()
-            ))),
-            Err(ProcessError::Io(e)) => Err(GitError::Io(e.to_string())),
-        }
+        Self::map_run(describe(args), run(spec, self.cancel.clone()).await)
+    }
+
+    /// Como [`run_with_env`](Self::run_with_env) pero entrega el **stderr en streaming** a
+    /// `on_stderr` (trozos de bytes; ver `ariadna_process::run_streaming`). Se cancela con el
+    /// token del ejecutor **o** con `cancel`, lo que ocurra primero.
+    pub async fn run_streaming<F>(
+        &self,
+        cwd: &Path,
+        kind: CommandKind,
+        args: &[OsString],
+        env: &[(&str, &str)],
+        cancel: &CancellationToken,
+        on_stderr: F,
+    ) -> GitResult<ProcessOutput>
+    where
+        F: FnMut(&[u8]) + Send,
+    {
+        let spec = self.base_spec(cwd, kind, args, env);
+        let token = self.cancel.child_token();
+        let (inner, outer) = (token.clone(), cancel.clone());
+        let watcher = tokio::spawn(async move {
+            outer.cancelled().await;
+            inner.cancel();
+        });
+        let res = run_streaming(spec, token, on_stderr).await;
+        watcher.abort();
+        Self::map_run(describe(args), res)
     }
 
     /// Como [`run`](Self::run) pero convierte un código distinto de 0 en [`GitError`].
@@ -149,7 +224,84 @@ impl GitRunner {
         if out.success() {
             return Ok(out);
         }
-        Err(classify_failure(cwd, args, &out))
+        Err(self.failure_error(cwd, kind, args, &out).await)
+    }
+
+    /// Error tipado de un comando que terminó con código ≠ 0. Para `Network` reconoce antes el
+    /// fallo de autenticación ([`GitError::Auth`]); el resto va a `classify_failure`.
+    pub async fn failure_error(
+        &self,
+        cwd: &Path,
+        kind: CommandKind,
+        args: &[OsString],
+        out: &ProcessOutput,
+    ) -> GitError {
+        if kind == CommandKind::Network {
+            if let Some(e) = self.auth_error(cwd, args, out).await {
+                return e;
+            }
+        }
+        classify_failure(cwd, args, out)
+    }
+
+    /// `Some(Auth)` si el comando de red fallido es un problema de credenciales. Averigua la URL
+    /// del remoto (argumento o `git remote get-url`) solo para sacar host y proveedor.
+    pub async fn auth_error(
+        &self,
+        cwd: &Path,
+        args: &[OsString],
+        out: &ProcessOutput,
+    ) -> Option<GitError> {
+        let stderr = out.stderr_lossy();
+        // git ≥ 2.50 sale con 1 (no 128) cuando el `fetch` interno de `git pull` falla con `fatal:`.
+        let is_pull = args.first().is_some_and(|a| a == "pull");
+        let code = if out.code == Some(1) && is_pull && stderr.contains("fatal:") {
+            Some(128)
+        } else {
+            out.code
+        };
+        if code != Some(128) {
+            return None;
+        }
+        let url = self.remote_url_for(cwd, args).await;
+        classify_auth_failure(code, &stderr, url.as_deref())
+    }
+
+    /// URL del remoto al que apunta un `clone`/`ls-remote`/`fetch`/`pull`/`push`.
+    async fn remote_url_for(&self, cwd: &Path, args: &[OsString]) -> Option<String> {
+        let strs: Vec<String> = args
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let first_plain = || strs.iter().skip(1).find(|a| !a.starts_with('-')).cloned();
+        match strs.first()?.as_str() {
+            "clone" | "ls-remote" => match strs.iter().position(|a| a == "--") {
+                Some(i) => strs.get(i + 1).cloned(),
+                None => first_plain(),
+            },
+            "fetch" | "pull" | "push" => {
+                let name = first_plain().unwrap_or_else(|| "origin".to_string());
+                if name.contains("://") || name.contains(':') {
+                    return Some(name);
+                }
+                let out = self
+                    .run(
+                        cwd,
+                        CommandKind::Read,
+                        &[
+                            OsString::from("remote"),
+                            OsString::from("get-url"),
+                            OsString::from(name),
+                        ],
+                        None,
+                    )
+                    .await
+                    .ok()?;
+                let url = out.stdout_lossy().trim().to_string();
+                (out.success() && !url.is_empty()).then_some(url)
+            }
+            _ => None,
+        }
     }
 
     /// Atajo: argumentos como `&str`.
@@ -290,16 +442,34 @@ mod tests {
     #[test]
     fn fsmonitor_se_desactiva_en_todos_los_tipos() {
         for k in [CommandKind::Read, CommandKind::Mutate, CommandKind::Network] {
-            let v = GitRunner::global_args(k);
+            let v = runner().global_args(k);
             assert!(v.iter().any(|a| a == "core.fsmonitor=false"), "{k:?}");
         }
     }
 
     #[test]
+    fn ext_queda_prohibido_y_la_config_extra_se_anade_al_final() {
+        let r = runner()
+            .with_config("credential.helper", "")
+            .with_config("a.b", "c");
+        let v: Vec<String> = r
+            .global_args(CommandKind::Network)
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(v
+            .windows(2)
+            .any(|w| w[0] == "-c" && w[1] == "protocol.ext.allow=never"));
+        let tail = &v[v.len() - 4..];
+        assert_eq!(tail, ["-c", "credential.helper=", "-c", "a.b=c"]);
+    }
+
+    #[test]
     fn global_args_de_lectura_incluyen_no_optional_locks() {
-        let v = GitRunner::global_args(CommandKind::Read);
+        let v = runner().global_args(CommandKind::Read);
         assert!(v.iter().any(|a| a == "--no-optional-locks"));
-        assert!(!GitRunner::global_args(CommandKind::Mutate)
+        assert!(!runner()
+            .global_args(CommandKind::Mutate)
             .iter()
             .any(|a| a == "--no-optional-locks"));
     }

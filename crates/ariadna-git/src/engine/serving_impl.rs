@@ -58,6 +58,14 @@ impl GitServing for GitCliEngine {
     async fn log(&self, repo: &Repository, limit: usize) -> GitResult<Vec<Commit>> {
         self.log(repo, limit).await
     }
+    async fn log_page(
+        &self,
+        repo: &Repository,
+        skip: usize,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        self.log_page(repo, skip, limit).await
+    }
     async fn search_log(
         &self,
         repo: &Repository,

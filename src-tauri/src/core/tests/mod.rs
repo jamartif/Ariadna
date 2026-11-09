@@ -1,6 +1,8 @@
 //! Pruebas del núcleo sin ventana: git real en carpetas temporales y un `Prompter` falso.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod ai;
+mod clone_history;
 mod destructive;
 mod errors;
 mod fixtures;
@@ -30,7 +32,7 @@ pub struct Asked {
 
 /// Doble del diálogo nativo: contesta lo que se le diga (por turnos o por defecto).
 pub struct FakePrompter {
-    answers: Mutex<VecDeque<bool>>,
+    pub answers: Mutex<VecDeque<bool>>,
     default: AtomicBool,
     pub asked: Mutex<Vec<Asked>>,
     pub folder: Mutex<Option<PathBuf>>,

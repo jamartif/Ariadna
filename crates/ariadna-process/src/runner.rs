@@ -6,11 +6,14 @@ use std::time::Duration;
 use command_group::AsyncCommandGroup;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
+use zeroize::Zeroize;
 
 use crate::env::{build_env, EnvPolicy};
 
 /// Qué lanzar y con qué límites.
-#[derive(Debug, Clone)]
+///
+/// `Debug` no muestra el contenido de `stdin` (puede llevar secretos): solo su tamaño.
+#[derive(Clone)]
 pub struct ProcessSpec {
     pub program: PathBuf,
     pub args: Vec<OsString>,
@@ -24,6 +27,27 @@ pub struct ProcessSpec {
     pub timeout: Option<Duration>,
     /// Tope de bytes que se conservan de stdout y de stderr, por separado.
     pub max_output_bytes: usize,
+}
+
+impl std::fmt::Debug for ProcessSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProcessSpec")
+            .field("program", &self.program)
+            .field("args", &self.args)
+            .field("cwd", &self.cwd)
+            .field("env_policy", &self.env_policy)
+            .field(
+                "extra_env",
+                &self.extra_env.iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            )
+            .field(
+                "stdin",
+                &self.stdin.as_ref().map(|s| format!("<{} bytes>", s.len())),
+            )
+            .field("timeout", &self.timeout)
+            .field("max_output_bytes", &self.max_output_bytes)
+            .finish()
+    }
 }
 
 impl ProcessSpec {
@@ -136,12 +160,70 @@ async fn drain<R: AsyncRead + Unpin>(mut r: R, cap: usize) -> (Vec<u8>, bool) {
     (buf, truncated)
 }
 
+/// Receptor opcional de trozos de salida a medida que llegan.
+type ChunkSink<'a> = Option<&'a mut (dyn FnMut(&[u8]) + Send)>;
+
+/// Como [`drain`], pero entrega cada trozo leído (aunque supere el tope) a `on_chunk`.
+async fn drain_streaming<R: AsyncRead + Unpin>(
+    mut r: R,
+    cap: usize,
+    on_chunk: ChunkSink<'_>,
+) -> (Vec<u8>, bool) {
+    let mut on_chunk = on_chunk;
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 16 * 1024];
+    let mut truncated = false;
+    loop {
+        match r.read(&mut chunk).await {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                if let Some(cb) = on_chunk.as_deref_mut() {
+                    cb(&chunk[..n]);
+                }
+                let room = cap.saturating_sub(buf.len());
+                if room >= n {
+                    buf.extend_from_slice(&chunk[..n]);
+                } else {
+                    buf.extend_from_slice(&chunk[..room]);
+                    truncated = true;
+                }
+            }
+        }
+    }
+    (buf, truncated)
+}
+
 /// Lanza el proceso y espera a que termine, caduque o se cancele.
 ///
 /// Al caducar o cancelar se termina el árbol completo y se devuelve lo leído hasta entonces.
 pub async fn run(
     spec: ProcessSpec,
     cancel: CancellationToken,
+) -> Result<ProcessOutput, ProcessError> {
+    run_impl(spec, cancel, None).await
+}
+
+/// Como [`run`], pero además entrega el **stderr en streaming**: `on_stderr` se llama con cada
+/// trozo de bytes según llega (sin cortar por líneas; un trozo puede acabar a mitad de una
+/// línea o de un carácter UTF-8, y los avances de progreso de git se separan con `\r`).
+///
+/// El stderr completo también se devuelve en [`ProcessOutput::stderr`] (con el mismo tope).
+/// El callback no necesita ser `'static`: se ejecuta en la propia tarea que espera al proceso.
+pub async fn run_streaming<F>(
+    spec: ProcessSpec,
+    cancel: CancellationToken,
+    mut on_stderr: F,
+) -> Result<ProcessOutput, ProcessError>
+where
+    F: FnMut(&[u8]) + Send,
+{
+    run_impl(spec, cancel, Some(&mut on_stderr)).await
+}
+
+async fn run_impl(
+    spec: ProcessSpec,
+    cancel: CancellationToken,
+    on_stderr: ChunkSink<'_>,
 ) -> Result<ProcessOutput, ProcessError> {
     let env = build_env(std::env::vars_os(), &spec.env_policy, &spec.extra_env);
 
@@ -182,10 +264,12 @@ pub async fn run(
     let stderr = child.stderr.take();
 
     let stdin_task = tokio::spawn(async move {
-        if let (Some(mut s), Some(data)) = (stdin, spec.stdin) {
+        if let (Some(mut s), Some(mut data)) = (stdin, spec.stdin) {
             // Un BrokenPipe es normal si el proceso no lee todo su stdin.
             let _ = s.write_all(&data).await;
             let _ = s.shutdown().await;
+            // El stdin puede llevar un secreto (credential helper): se borra al terminar.
+            data.zeroize();
         }
     });
     let cap = spec.max_output_bytes;
@@ -195,12 +279,13 @@ pub async fn run(
             None => (Vec::new(), false),
         }
     });
-    let err_task = tokio::spawn(async move {
+    // stderr se drena sin `spawn` para que el callback pueda tomar prestado (no `'static`).
+    let err_fut = async move {
         match stderr {
-            Some(r) => drain(r, cap).await,
+            Some(r) => drain_streaming(r, cap, on_stderr).await,
             None => (Vec::new(), false),
         }
-    });
+    };
 
     let sleep = async {
         match spec.timeout {
@@ -209,26 +294,30 @@ pub async fn run(
         }
     };
 
-    let mut result = ProcessOutput::default();
-    tokio::select! {
-        status = group.wait() => {
-            result.code = status?.code();
+    let main_fut = async {
+        let mut result = ProcessOutput::default();
+        tokio::select! {
+            status = group.wait() => {
+                result.code = status?.code();
+            }
+            _ = sleep => {
+                result.timed_out = true;
+                let _ = group.kill().await;
+                let _ = group.wait().await;
+            }
+            _ = cancel.cancelled() => {
+                result.cancelled = true;
+                let _ = group.kill().await;
+                let _ = group.wait().await;
+            }
         }
-        _ = sleep => {
-            result.timed_out = true;
-            let _ = group.kill().await;
-            let _ = group.wait().await;
-        }
-        _ = cancel.cancelled() => {
-            result.cancelled = true;
-            let _ = group.kill().await;
-            let _ = group.wait().await;
-        }
-    }
+        Ok::<ProcessOutput, ProcessError>(result)
+    };
+    let (main_res, (stderr, t2)) = tokio::join!(main_fut, err_fut);
+    let mut result = main_res?;
 
     let _ = stdin_task.await;
     let (stdout, t1) = out_task.await.unwrap_or_default();
-    let (stderr, t2) = err_task.await.unwrap_or_default();
     result.stdout = stdout;
     result.stderr = stderr;
     result.truncated = t1 || t2;

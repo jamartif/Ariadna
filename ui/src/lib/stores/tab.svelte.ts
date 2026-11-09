@@ -12,6 +12,7 @@ import {
 import { t } from '$lib/i18n';
 import { groupEntries, SECTION_ORDER, type SectionId } from '$lib/util/changes';
 import { pathKey, pathText } from '$lib/util/gitpath';
+import { AiController } from './ai.svelte';
 import { toasts } from './toasts.svelte';
 
 export interface Selection {
@@ -20,9 +21,41 @@ export interface Selection {
   path: GitPath;
 }
 
-export type Panel = 'changes' | 'history';
+export type Panel = 'changes' | 'history' | 'branches';
 
 const DRAFT_PREFIX = 'ariadna.draft:';
+
+/** Une resumen y descripción: sin línea en blanco sobrante si no hay descripción. */
+export function joinMessage(summary: string, description: string): string {
+  const s = summary.trim();
+  const d = description.trim();
+  return d === '' ? s : `${s}\n\n${d}`;
+}
+
+/** Separa un mensaje completo en resumen (1.ª línea) y descripción (el resto, sin blancos iniciales). */
+export function splitMessage(message: string): { summary: string; description: string } {
+  const i = message.indexOf('\n');
+  if (i < 0) return { summary: message, description: '' };
+  return { summary: message.slice(0, i), description: message.slice(i + 1).replace(/^\s*\n/, '').trimEnd() };
+}
+
+function loadDraft(path: string): { summary: string; description: string } {
+  try {
+    const raw = localStorage.getItem(DRAFT_PREFIX + path);
+    if (!raw) return { summary: '', description: '' };
+    try {
+      const o = JSON.parse(raw) as { summary?: unknown; description?: unknown };
+      if (o && typeof o === 'object' && typeof o.summary === 'string') {
+        return { summary: o.summary, description: typeof o.description === 'string' ? o.description : '' };
+      }
+    } catch {
+      /* borrador antiguo: texto plano */
+    }
+    return splitMessage(raw);
+  } catch {
+    return { summary: '', description: '' };
+  }
+}
 
 /**
  * Estado de UNA pestaña de repositorio. La verdad vive en Rust: esto es una vista
@@ -41,11 +74,15 @@ export class TabState {
   /** Claves `sección:ruta` con una operación en curso hasta el próximo snapshot. */
   pending = $state.raw<ReadonlySet<string>>(new Set());
   operations = $state.raw<{ id: number; label: string }[]>([]);
-  message = $state('');
+  /** Primera línea del commit («Resumen») y cuerpo («Descripción»): dos campos separados. */
+  summary = $state('');
+  description = $state('');
   amend = $state(false);
-  /** Mensaje que había antes de activar «amend», para restaurarlo al desactivar. */
-  private savedMessage = '';
+  /** Lo que había antes de activar «amend», para restaurarlo al desactivar. */
+  private savedFields = { summary: '', description: '' };
   committing = $state(false);
+  /** Generación de mensajes con IA (solo propone; nunca crea el commit). */
+  readonly ai: AiController;
 
   /** Descartados (para tests y depuración). */
   discardedSnapshots = 0;
@@ -63,11 +100,15 @@ export class TabState {
     info: TabInfo
   ) {
     this.info = info;
-    try {
-      this.message = localStorage.getItem(DRAFT_PREFIX + info.path) ?? '';
-    } catch {
-      /* sin almacenamiento */
-    }
+    const d = loadDraft(info.path);
+    this.summary = d.summary;
+    this.description = d.description;
+    this.ai = new AiController(this);
+  }
+
+  /** Mensaje completo que se envía a `commit`: `resumen + "\n\n" + descripción`. */
+  get message(): string {
+    return joinMessage(this.summary, this.description);
   }
 
   get id(): string {
@@ -101,6 +142,7 @@ export class TabState {
     this.unlisten.forEach((f) => f());
     this.unlisten = [];
     if (this.pendingTimer) clearTimeout(this.pendingTimer);
+    this.ai.dispose();
   }
 
   async load(): Promise<void> {
@@ -295,21 +337,42 @@ export class TabState {
 
   // ---- Commit ------------------------------------------------------------------------
 
-  setMessage(m: string): void {
-    this.message = m;
+  private persistDraft(): void {
     try {
-      if (m === '') localStorage.removeItem(DRAFT_PREFIX + this.info.path);
-      else localStorage.setItem(DRAFT_PREFIX + this.info.path, m);
+      if (this.summary === '' && this.description === '') localStorage.removeItem(DRAFT_PREFIX + this.info.path);
+      else localStorage.setItem(DRAFT_PREFIX + this.info.path, JSON.stringify({ summary: this.summary, description: this.description }));
     } catch {
       /* ignorar */
     }
   }
 
-  /** Activa/desactiva «corregir último commit»: rellena el mensaje con `amend_draft`. */
+  setSummary(v: string): void {
+    this.summary = v;
+    this.persistDraft();
+  }
+
+  setDescription(v: string): void {
+    this.description = v;
+    this.persistDraft();
+  }
+
+  setFields(summary: string, description: string): void {
+    this.summary = summary;
+    this.description = description;
+    this.persistDraft();
+  }
+
+  /** Atajo para tests y para «amend»: reparte un mensaje completo en los dos campos. */
+  setMessage(m: string): void {
+    const { summary, description } = splitMessage(m);
+    this.setFields(summary, description);
+  }
+
+  /** Activa/desactiva «corregir último commit»: rellena los campos con `amend_draft`. */
   async setAmend(on: boolean): Promise<void> {
     if (!on) {
       this.amend = false;
-      this.setMessage(this.savedMessage);
+      this.setFields(this.savedFields.summary, this.savedFields.description);
       return;
     }
     try {
@@ -319,7 +382,7 @@ export class TabState {
         toasts.warning(t('commit.cannotAmend'), draft.reason ?? undefined);
         return;
       }
-      this.savedMessage = this.message;
+      this.savedFields = { summary: this.summary, description: this.description };
       this.amend = true;
       this.setMessage(draft.message);
     } catch (e) {
@@ -346,8 +409,9 @@ export class TabState {
         toasts.announce(t('commit.created'));
       }
       this.amend = false;
-      this.savedMessage = '';
-      this.setMessage('');
+      this.savedFields = { summary: '', description: '' };
+      this.setFields('', '');
+      this.ai.reset();
       return true;
     } catch (e) {
       toasts.error(t('commit.failed'), e);

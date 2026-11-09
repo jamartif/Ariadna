@@ -1,21 +1,30 @@
 //! Núcleo de la aplicación, **sin** dependencia de la ventana de Tauri: toda la lógica de los
 //! comandos vive aquí y se prueba con git real y un `Prompter` falso.
 
+pub mod ai;
 pub mod api;
 mod app;
+mod clone_ops;
 mod commands;
 pub mod error;
+pub mod external;
+mod history_ops;
 pub mod prompter;
 pub mod session_file;
 
 #[cfg(test)]
 mod tests;
 
+pub use ai::{AiSettingsLoad, AiStore, StoredAi};
 pub use api::{
-    AmendDraft, ApiSessionEvent, ApiSessionEventKind, ApiSnapshot, AppEvent, AppState, Closed,
-    CommitResult, Done, EventSink, GitInfo, HunkArg, OpenResult, SnapshotEvent, TabInfo,
+    AiCommitOptions, AiCommitSuggestion, AiContextPreview, AiExcludeReason, AiExcludedFile,
+    AiPreviewFile, AiProfileInfo, AiProviderState, AiSettingsPatch, AiState, AmendDraft,
+    ApiSessionEvent, ApiSessionEventKind, ApiSnapshot, AppEvent, AppState, CloneProgressEvent,
+    Closed, CommitResult, CredentialTest, Done, EventSink, GitInfo, HunkArg, OpenResult,
+    SnapshotEvent, TabInfo,
 };
 pub use app::{default_data_dir, locate_git, AppConfig, AppCore, CLOSE_GRACE, SOFT_TAB_LIMIT};
 pub use error::{ApiError, ApiResult};
+pub use external::validate_external_url;
 pub use prompter::Prompter;
 pub use session_file::{SavedTab, SessionData, SessionLoad, SessionStore};

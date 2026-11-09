@@ -19,14 +19,36 @@ function load(): { theme: ThemeMode; density: Density } {
   return { theme: 'system', density: 'comfortable' };
 }
 
+export type ChangesView = 'list' | 'tree';
+const VIEW_KEY = 'ariadna.changesView.v1';
+
+function loadView(): ChangesView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'tree' ? 'tree' : 'list';
+  } catch {
+    return 'list';
+  }
+}
+
 class Settings {
   theme = $state<ThemeMode>('system');
   density = $state<Density>('comfortable');
+  /** Vista de la lista de cambios: plana o en árbol por carpetas (se recuerda). */
+  changesView = $state<ChangesView>(loadView());
 
   constructor() {
     const s = load();
     this.theme = s.theme;
     this.density = s.density;
+  }
+
+  setChangesView(v: ChangesView): void {
+    this.changesView = v;
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* ignorar */
+    }
   }
 
   apply(root: HTMLElement = document.documentElement): void {
@@ -64,13 +86,13 @@ class Settings {
 
   /** Alturas de fila (px) para listas virtualizadas. Deben coincidir con `--row-h` de tokens.css. */
   get rowHeight(): number {
-    return this.density === 'compact' ? 30 : 40;
+    return this.density === 'compact' ? 24 : 28;
   }
   get headerHeight(): number {
-    return this.density === 'compact' ? 30 : 36;
+    return this.density === 'compact' ? 28 : 32;
   }
   get codeLineHeight(): number {
-    return this.density === 'compact' ? 18 : 22;
+    return this.density === 'compact' ? 18 : 21;
   }
 }
 

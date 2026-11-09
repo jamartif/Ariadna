@@ -1,9 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { flip } from 'svelte/animate';
   import type { Entry } from '$lib/stores/app.svelte';
   import { SOFT_TAB_LIMIT } from '$lib/stores/app.svelte';
   import { t, tn } from '$lib/i18n';
   import { registerHandlers } from '$lib/shortcuts/registry';
+  import { repoHue } from '$lib/util/hue';
+  import { tabIn, tabOut } from '$lib/util/motion';
   import { moveItem } from '$lib/util/virtual';
   import Icon from './Icon.svelte';
 
@@ -166,20 +169,19 @@
 </script>
 
 <div class="strip" data-tauri-drag-region>
-  <div
-    class="scroller"
-    role="tablist"
-    aria-label={t('tabs.list')}
-    aria-orientation="horizontal"
-    bind:this={scroller}
-  >
+  <div class="scroller" role="tablist" aria-label={t('tabs.list')} aria-orientation="horizontal" bind:this={scroller}>
     {#each entries as entry (entry.id)}
       {@const isActive = entry.id === activeId}
       <div
         class="tab"
         class:active={isActive}
         class:dragging={dragId === entry.id}
+        class:missing={entry.kind === 'repo' && entry.info.missing}
         role="presentation"
+        style:--hue={entry.kind === 'repo' ? repoHue(entry.info.name) : 0}
+        animate:flip={{ duration: 180 }}
+        in:tabIn
+        out:tabOut
       >
         <button
           type="button"
@@ -201,178 +203,270 @@
           onauxclick={(e) => onAux(e, entry.id)}
         >
           {#if entry.kind === 'new'}
-            <Icon name="plus" size={14} />
+            <span class="glyph new"><Icon name="plus" size={13} /></span>
             <span class="name">{t('tabs.newTab')}</span>
           {:else}
             {@const i = entry.info}
-            <Icon name={i.missing ? 'triangle-alert' : 'git-branch'} size={14} />
+            <span class="glyph" aria-hidden="true">
+              {#if i.busy}
+                <Icon name="loader" size={13} spin />
+              {:else if i.missing}
+                <Icon name="triangle-alert" size={13} />
+              {:else}
+                <span class="dot"></span>
+              {/if}
+            </span>
             <span class="name">{i.name}</span>
             {#if i.branch && !i.missing}
               <span class="branch mono">{i.branch}</span>
             {/if}
-            {#if i.busy}
-              <span class="ind" title={i.busy}><Icon name="loader" size={13} spin /></span>
-            {/if}
             {#if i.conflictCount > 0}
-              <span class="chip conflict" title={tn('tabs.a11y.conflicts', i.conflictCount)}>
-                <Icon name="triangle-alert" size={11} />{i.conflictCount}
+              <span class="pill conflict" title={tn('tabs.a11y.conflicts', i.conflictCount)}>
+                <Icon name="triangle-alert" size={10} />{i.conflictCount}
               </span>
             {:else if i.changeCount > 0}
-              <span class="chip count" title={tn('tabs.a11y.changes', i.changeCount)}>{i.changeCount}</span>
+              <span class="pill count" title={tn('tabs.a11y.changes', i.changeCount)}>{i.changeCount}</span>
             {/if}
           {/if}
         </button>
         <button
           type="button"
-          class="close btn btn-ghost btn-icon btn-sm"
+          class="close"
           tabindex="-1"
           aria-label={t('tabs.close', { name: entry.kind === 'new' ? t('tabs.newTab') : entry.info.name })}
           title={t('tabs.closeHint')}
           onclick={() => onclose(entry.id)}
         >
-          <Icon name="x" size={14} />
+          <Icon name="x" size={12} />
         </button>
       </div>
     {/each}
   </div>
   <button
     type="button"
-    class="new btn btn-ghost btn-icon"
+    class="new"
     aria-label={t('tabs.new')}
     title={entries.length >= SOFT_TAB_LIMIT ? t('tabs.limitBody', { n: SOFT_TAB_LIMIT }) : t('tabs.new')}
     onclick={onnew}
   >
-    <Icon name="plus" size={16} />
+    <Icon name="plus" size={15} />
   </button>
   {#if entries.length >= SOFT_TAB_LIMIT - 4}
-    <span class="count chip" class:over={entries.length >= SOFT_TAB_LIMIT} aria-hidden="true">
-      {entries.length}/{SOFT_TAB_LIMIT}
-    </span>
+    <span class="count chip" class:over={entries.length >= SOFT_TAB_LIMIT} aria-hidden="true">{entries.length}/{SOFT_TAB_LIMIT}</span>
   {/if}
 </div>
 
 <style>
   .strip {
     display: flex;
-    align-items: stretch;
-    gap: var(--space-1);
-    height: var(--tabstrip-h);
-    padding: 0 var(--space-2);
-    background: var(--bg-app);
-    border-bottom: 1px solid var(--border);
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    flex: 0 1 auto;
+    align-self: stretch;
   }
   .scroller {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 2px;
     min-width: 0;
+    height: 100%;
     overflow-x: auto;
     overflow-y: hidden;
-    padding-top: 6px;
     scrollbar-width: none;
   }
   .scroller::-webkit-scrollbar {
     display: none;
   }
   .tab {
+    --tone: hsl(var(--hue) 78% 66%);
     position: relative;
     display: flex;
     align-items: center;
     flex: 0 1 auto;
-    min-width: 168px;
-    max-width: 280px;
-    height: calc(var(--tabstrip-h) - 6px);
+    min-width: 112px;
+    max-width: 264px;
+    height: 30px;
     border: 1px solid transparent;
-    border-bottom: none;
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    border-radius: var(--radius-md);
     color: var(--text-muted);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      border-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease),
+      box-shadow var(--dur) var(--ease),
+      transform var(--dur) var(--ease);
+  }
+  :global(:root[data-theme='light']) .tab {
+    --tone: hsl(var(--hue) 70% 46%);
+  }
+  @media (prefers-color-scheme: light) {
+    :global(:root:not([data-theme])) .tab {
+      --tone: hsl(var(--hue) 70% 46%);
+    }
   }
   .tab:hover {
-    background: var(--bg-subtle);
+    background: var(--bg-hover);
+    color: var(--text);
   }
   .tab.active {
     background: var(--bg-surface);
-    border-color: var(--border);
+    border-color: var(--border-hover);
+    box-shadow: var(--elev-1);
     color: var(--text);
-    margin-bottom: -1px;
-    height: calc(var(--tabstrip-h) - 5px);
-  }
-  .tab.active::before {
-    content: '';
-    position: absolute;
-    left: 8px;
-    right: 8px;
-    top: 0;
-    height: 2px;
-    border-radius: 0 0 2px 2px;
-    background: var(--accent-brand);
   }
   .tab.dragging {
-    box-shadow: var(--elev-1);
     z-index: 2;
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: var(--elev-2);
+  }
+  .tab.missing {
+    color: var(--text-subtle);
   }
   .tab-btn {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     flex: 1;
     min-width: 0;
     height: 100%;
     padding: 0 0 0 var(--space-3);
     border: none;
+    border-radius: var(--radius-md);
     background: transparent;
     color: inherit;
     font-size: var(--text-sm);
-    font-weight: 500;
+    font-weight: 550;
     text-align: left;
     touch-action: none;
   }
+  .tab-btn:focus-visible {
+    outline-offset: -2px;
+    border-radius: var(--radius-md);
+  }
+  .glyph {
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    flex: none;
+    color: var(--accent);
+  }
+  .tab.missing .glyph {
+    color: var(--warning);
+  }
+  .glyph.new {
+    color: var(--text-subtle);
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--tone);
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--tone) 22%, transparent),
+      0 0 10px -1px color-mix(in srgb, var(--tone) 70%, transparent);
+    transition: transform var(--dur) var(--ease-out);
+  }
+  .tab.active .dot {
+    transform: scale(1.15);
+  }
   .name {
+    flex: 0 0 auto;
+    min-width: 3ch;
+    max-width: 18ch;
+    padding-right: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .branch {
-    flex: 0 1 auto;
+    flex: 0 20 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text-subtle);
-    font-size: 0.6875rem;
+    font-size: var(--text-2xs);
     font-weight: 400;
+    opacity: 0.85;
   }
-  .ind {
+  .pill {
     display: inline-flex;
-    color: var(--accent);
+    align-items: center;
+    gap: 3px;
+    flex: none;
+    height: 16px;
+    padding: 0 6px;
+    border-radius: var(--pill);
+    font-size: var(--text-2xs);
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
   }
-  .chip {
-    height: 18px;
-    font-size: 0.6875rem;
-  }
-  .chip.count {
+  .pill.count {
     background: var(--accent-soft);
     color: var(--accent);
   }
-  .chip.conflict {
-    background: var(--danger-soft);
-    color: var(--danger);
+  .pill.conflict {
+    background: var(--st-unmerged-bg);
+    color: var(--st-unmerged-fg);
   }
   .close {
-    margin: 0 var(--space-1);
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    margin: 0 5px 0 2px;
+    padding: 0;
+    flex: none;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-subtle);
     opacity: 0;
+    transform: scale(0.85);
+    transition:
+      opacity var(--dur-fast) var(--ease),
+      transform var(--dur-fast) var(--ease),
+      background-color var(--dur-fast) var(--ease);
   }
   .tab:hover .close,
   .tab.active .close,
   .close:focus-visible {
     opacity: 1;
+    transform: none;
+  }
+  .close:hover {
+    background: var(--bg-pressed);
+    color: var(--text);
+  }
+  .tab.active:not(:hover) .close {
+    opacity: 0.55;
   }
   .new {
-    align-self: center;
+    display: grid;
+    place-items: center;
     flex: none;
+    width: 28px;
+    height: 28px;
+    margin-left: 2px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-subtle);
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease),
+      transform var(--dur-fast) var(--ease);
+  }
+  .new:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+  .new:active {
+    transform: scale(0.94);
   }
   .count {
-    align-self: center;
     flex: none;
   }
   .count.over {
@@ -382,9 +476,6 @@
   @media (forced-colors: active) {
     .tab.active {
       border-color: Highlight;
-    }
-    .tab.active::before {
-      background: Highlight;
     }
   }
 </style>

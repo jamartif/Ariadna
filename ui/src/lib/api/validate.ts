@@ -200,6 +200,52 @@ export const appState = obj({
   gitProblem: nullable(str)
 });
 
+// ---- IA, clonado y credenciales (ipc.md) ---------------------------------------------
+// Aún no hay fixtures de Rust para estos tipos: los validadores los cubren igualmente
+// (el mock los cumple y los usará el test de contrato cuando existan los fixtures).
+
+export const providerState = obj({
+  id: str,
+  displayName: str,
+  availability: oneOf('available', 'missing', 'failed'),
+  version: nullable(str),
+  hint: nullable(str),
+  enabled: bool,
+  consented: bool,
+  loginCommand: str
+});
+
+export const aiState = obj({
+  enabled: bool,
+  profile: obj({ name: str, kind: oneOf('personal', 'empresa') }),
+  choice: oneOf('auto', 'claude', 'codex', 'copilot'),
+  providers: arr(providerState)
+});
+
+export const contextPreview = obj({
+  provider: nullable(str),
+  bytes: int,
+  maxBytes: int,
+  files: arr(obj({ path: gitPath, bytes: int })),
+  excluded: arr(obj({ path: gitPath, reason: oneOf('sensitive', 'binary', 'too-large') })),
+  redactions: int,
+  recentSubjects: int
+});
+
+export const aiCommitSuggestion = obj({
+  subject: str,
+  body: str,
+  provider: str,
+  commandSummary: str,
+  repoRevision: int
+});
+
+export const credentialTest = obj({ ok: bool, code: nullable(str) });
+
+export const cloneProgress = obj({ operationId: int, phase: str, percent: nullable(num) });
+
+export const openResult = obj({ tab: tabInfo, alreadyOpen: bool });
+
 export const mergeResult: V = either(
   oneOf('upToDate'),
   tagged({
@@ -260,6 +306,10 @@ export function detect(value: unknown): { name: string; validator: V } | null {
   if (has('indexStatus', 'workTreeStatus')) return { name: list ? 'StatusEntry[]' : 'StatusEntry', validator: list ? arr(statusEntry) : statusEntry };
   if (has('fetchUrl', 'pushUrl')) return { name: list ? 'Remote[]' : 'Remote', validator: list ? arr(remote) : remote };
   if (has('isHead', 'oid')) return { name: list ? 'Branch[]' : 'Branch', validator: list ? arr(branch) : branch };
+  if (!list && has('subject', 'body', 'provider', 'repoRevision')) return { name: 'AiCommitSuggestion', validator: aiCommitSuggestion };
+  if (!list && has('enabled', 'profile', 'providers')) return { name: 'AiState', validator: aiState };
+  if (!list && has('maxBytes', 'redactions')) return { name: 'ContextPreview', validator: contextPreview };
+  if (!list && has('operationId', 'phase')) return { name: 'CloneProgress', validator: cloneProgress };
   if (has('lastOpened', 'isFavorite')) return { name: list ? 'RecentRepository[]' : 'RecentRepository', validator: list ? arr(recentRepository) : recentRepository };
   if (has('tabId', 'missing')) return { name: list ? 'TabInfo[]' : 'TabInfo', validator: list ? arr(tabInfo) : tabInfo };
   if (has('ours', 'theirs', 'workingTree')) return { name: list ? 'ConflictFile[]' : 'ConflictFile', validator: list ? arr(conflictFile) : conflictFile };

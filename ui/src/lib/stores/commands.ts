@@ -84,6 +84,17 @@ export function buildActions(app: AppStore): PaletteAction[] {
     }
   }
 
+  add({ id: 'clone.open', label: t('shortcut.clone'), group: g('palette.group.repo'), shortcut: combo('clone.open'), run: () => app.openClone() });
+  if (tab && app.activeEntry?.kind === 'repo') {
+    add({
+      id: 'ai.generate',
+      label: t('shortcut.aiGenerate'),
+      group: g('palette.group.repo'),
+      shortcut: combo('ai.generate'),
+      run: () => runShortcut('ai.generate')
+    });
+  }
+
   const g3 = g('palette.group.view');
   add({ id: 'theme.system', label: t('palette.themeSystem'), group: g3, run: () => settings.setTheme('system') });
   add({ id: 'theme.light', label: t('palette.themeLight'), group: g3, run: () => settings.setTheme('light') });

@@ -1,5 +1,6 @@
 //! Proceso de prueba: se comporta según su primer argumento.
 //!   echo-stdin | args | env | sleep <ms> | flood <bytes> | exit <code> | stderr <texto>
+//!   stderr-stream <n>  (n trozos "paso-i\r" por stderr con pausas, y una línea final)
 //!   spawn-child  (lanza un nieto que duerme y luego duerme él también)
 use std::io::{Read, Write};
 
@@ -47,6 +48,16 @@ fn main() {
         Some("stderr") => {
             eprint!("{}", args.get(1).cloned().unwrap_or_default());
             std::process::exit(3);
+        }
+        Some("stderr-stream") => {
+            let n: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(3);
+            let mut e = std::io::stderr();
+            for i in 0..n {
+                let _ = write!(e, "paso-{i}\r");
+                let _ = e.flush();
+                std::thread::sleep(std::time::Duration::from_millis(40));
+            }
+            let _ = writeln!(e, "fin");
         }
         Some("spawn-child") => {
             let exe = std::env::current_exe().expect("exe");

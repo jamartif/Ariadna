@@ -9,5 +9,5 @@ mod env;
 mod runner;
 
 pub use env::{build_env, name_matches, EnvPolicy};
-pub use runner::{run, ProcessError, ProcessOutput, ProcessSpec};
+pub use runner::{run, run_streaming, ProcessError, ProcessOutput, ProcessSpec};
 pub use tokio_util::sync::CancellationToken;

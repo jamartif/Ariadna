@@ -2,10 +2,14 @@
   import { t, tn } from '$lib/i18n';
   import type { TabState, Panel } from '$lib/stores/tab.svelte';
   import Banner from './Banner.svelte';
+  import BranchDetail from './BranchDetail.svelte';
+  import BranchesPanel from './BranchesPanel.svelte';
   import ChangesPanel from './ChangesPanel.svelte';
   import CommitBar from './CommitBar.svelte';
   import DiffView from './DiffView.svelte';
   import EmptyState from './EmptyState.svelte';
+  import HistoryDetail from './HistoryDetail.svelte';
+  import HistoryPanel from './HistoryPanel.svelte';
   import Icon from './Icon.svelte';
   import Sidebar from './Sidebar.svelte';
   import Splitter from './Splitter.svelte';
@@ -47,9 +51,10 @@
     }
   }
 
-  const panels: { id: Panel; label: 'panel.changes' | 'panel.history'; icon: 'file-diff' | 'history' }[] = [
+  const panels: { id: Panel; label: 'panel.changes' | 'panel.history' | 'panel.branches'; icon: 'file-diff' | 'history' | 'git-branch' }[] = [
     { id: 'changes', label: 'panel.changes', icon: 'file-diff' },
-    { id: 'history', label: 'panel.history', icon: 'history' }
+    { id: 'history', label: 'panel.history', icon: 'history' },
+    { id: 'branches', label: 'panel.branches', icon: 'git-branch' }
   ];
 
   function panelKey(e: KeyboardEvent, i: number) {
@@ -155,8 +160,10 @@
               <div class="grow"><ChangesPanel {tab} /></div>
               <CommitBar {tab} />
             </div>
+          {:else if tab.panel === 'history'}
+            <HistoryPanel {tab} />
           {:else}
-            <EmptyState icon="history" title={t('history.title')} body={t('history.body')} />
+            <BranchesPanel {tab} />
           {/if}
         </div>
       </section>
@@ -173,7 +180,13 @@
       />
 
       <section class="col right" aria-label={t('layout.diff')}>
-        <DiffView {tab} />
+        {#if tab.panel === 'history'}
+          <HistoryDetail {tab} />
+        {:else if tab.panel === 'branches'}
+          <BranchDetail {tab} />
+        {:else}
+          <DiffView {tab} />
+        {/if}
       </section>
     </div>
 

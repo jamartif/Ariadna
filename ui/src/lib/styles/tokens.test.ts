@@ -47,7 +47,7 @@ const themes = { claro: light, oscuro: dark } as const;
 describe('tokens de diseño (spec §7.1)', () => {
   it('el tema oscuro del sistema es idéntico al oscuro explícito', () => {
     expect(systemDark).toEqual(dark);
-    expect(media).toContain("--bg-app: #0c1016");
+    expect(media).toContain('--bg-app: #080b10');
   });
 
   it('ambos temas definen exactamente las mismas variables de color', () => {
@@ -61,10 +61,23 @@ describe('tokens de diseño (spec §7.1)', () => {
     for (const [k, v] of spaces) expect(parseInt(v) % 4, `${k}=${v}`).toBe(0);
   });
 
-  it('exactamente 3 radios y 2 elevaciones', () => {
+  it('exactamente 3 radios y las elevaciones 1 y 2 (más el reborde interior)', () => {
     const all = vars(block(':root {', css.indexOf('Tokens independientes')).body);
     expect(Object.keys(all).filter((k) => k.startsWith('radius-'))).toHaveLength(3);
-    expect(Object.keys(light).filter((k) => k.startsWith('elev-'))).toHaveLength(2);
+    expect(Object.keys(light).filter((k) => k.startsWith('elev-')).sort()).toEqual(['elev-1', 'elev-2', 'elev-inset']);
+  });
+
+  it('el movimiento está entre 120 y 180 ms', () => {
+    const all = vars(block(':root {', css.indexOf('Tokens independientes')).body);
+    expect(parseInt(all['dur-fast'] as string)).toBe(120);
+    expect(parseInt(all['dur-slow'] as string)).toBe(180);
+  });
+
+  it('las superficies se apilan: app < panel < elevado < flotante (más claras en oscuro)', () => {
+    const lum = (k: string) => luminance(dark[k] as string);
+    expect(lum('bg-app')).toBeLessThan(lum('bg-surface'));
+    expect(lum('bg-surface')).toBeLessThan(lum('bg-raised'));
+    expect(lum('bg-raised')).toBeLessThan(lum('bg-float'));
   });
 
   it('la transición de tema es ≤ 150 ms', () => {
@@ -79,7 +92,7 @@ describe('tokens de diseño (spec §7.1)', () => {
 
   for (const [name, t] of Object.entries(themes)) {
     describe(`contraste en tema ${name}`, () => {
-      const surfaces = ['bg-app', 'bg-surface', 'bg-subtle', 'bg-muted', 'bg-selected'];
+      const surfaces = ['bg-app', 'bg-surface', 'bg-raised', 'bg-float', 'bg-subtle', 'bg-muted', 'bg-selected'];
       const textPairs: [string, string[]][] = [
         ['text', surfaces],
         ['text-muted', surfaces],
@@ -93,7 +106,19 @@ describe('tokens de diseño (spec §7.1)', () => {
         ['text-muted', ['diff-add-gutter', 'diff-del-gutter', 'diff-hunk-bg', 'bg-subtle']],
         ['success', ['diff-add-bg']],
         ['danger', ['diff-del-bg']],
-        ['accent-fg', ['accent', 'accent-hover']],
+        ['accent-fg', ['accent', 'accent-hover', 'accent-grad-from', 'accent-grad-to']],
+        ['text', ['diff-add-strong', 'diff-del-strong']],
+        ['tok-comment', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
+        ['tok-string', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
+        ['tok-keyword', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
+        ['tok-function', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
+        ['tok-number', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
+        ['tok-type', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
+        ['tok-property', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
+        ['tok-operator', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
+        ['tok-punct', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
+        ['tok-tag', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
+        ['tok-regex', ['bg-surface', 'diff-add-bg', 'diff-del-bg']],
         ['st-added-fg', ['st-added-bg']],
         ['st-modified-fg', ['st-modified-bg']],
         ['st-deleted-fg', ['st-deleted-bg']],

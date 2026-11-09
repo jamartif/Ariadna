@@ -50,6 +50,16 @@ impl ProviderId {
         }
     }
 
+    /// Comando exacto que hay que ejecutar para iniciar sesión (sin explicaciones),
+    /// para mostrarlo tal cual en la interfaz.
+    pub fn login_invocation(self) -> &'static str {
+        match self {
+            ProviderId::Claude => "claude",
+            ProviderId::Codex => "codex login",
+            ProviderId::Copilot => "copilot login",
+        }
+    }
+
     /// `true` si el proveedor no tiene flags verificados y se publica como experimental.
     pub fn is_experimental(self) -> bool {
         !matches!(self, ProviderId::Claude)
@@ -76,6 +86,36 @@ impl ProviderChoice {
             ProviderChoice::Auto => None,
         }
     }
+}
+
+/// Idioma del mensaje de commit. `Auto` imita el de los últimos commits del repo.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CommitLanguage {
+    #[default]
+    Auto,
+    Es,
+    En,
+}
+
+/// Estilo del mensaje de commit.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CommitStyle {
+    #[default]
+    Plain,
+    /// Conventional Commits (`tipo(ámbito): descripción`).
+    Conventional,
+}
+
+/// Opciones para pedir un mensaje de commit.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CommitOptions {
+    pub template: Option<String>,
+    pub language: CommitLanguage,
+    pub style: CommitStyle,
+    /// Asuntos de los últimos commits. Solo se envían con `language = Auto`.
+    pub recent_subjects: Vec<String>,
 }
 
 /// Qué pidió el usuario.
@@ -416,6 +456,9 @@ mod tests {
         assert!(ProviderId::Claude.login_command().contains("/login"));
         assert_eq!(ProviderId::Codex.login_command(), "codex login");
         assert_eq!(ProviderId::Copilot.login_command(), "copilot login");
+        assert_eq!(ProviderId::Claude.login_invocation(), "claude");
+        assert_eq!(ProviderId::Codex.login_invocation(), "codex login");
+        assert_eq!(ProviderId::Copilot.login_invocation(), "copilot login");
         assert!(ProviderId::Codex.is_experimental());
         assert!(!ProviderId::Claude.is_experimental());
     }

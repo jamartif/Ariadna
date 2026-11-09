@@ -138,6 +138,8 @@
     align-items: flex-start;
     padding-top: 14vh;
     background: var(--bg-overlay);
+    -webkit-backdrop-filter: blur(6px) saturate(1.1);
+    backdrop-filter: blur(6px) saturate(1.1);
     animation: fade var(--dur) var(--ease);
   }
   @keyframes fade {
@@ -152,8 +154,10 @@
     flex-direction: column;
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    background: var(--bg-surface);
-    box-shadow: var(--elev-2);
+    background: color-mix(in srgb, var(--bg-float) 92%, transparent);
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    box-shadow: var(--elev-2), var(--elev-inset);
     overflow: hidden;
   }
   .search {

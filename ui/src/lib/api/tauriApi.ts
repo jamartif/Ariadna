@@ -23,6 +23,14 @@ export function createTauriApi(): Api {
     toggleFavorite: (path) => call('toggle_favorite', { path }),
     forgetRecent: (path) => call('forget_recent', { path }),
     cancelOperation: (tabId, operationId) => call('cancel_operation', { tabId, operationId }),
+    openExternalUrl: (url) => call('open_external_url', { url }),
+    // El PAT viaja una sola vez hacia Rust (entorno del proceso git vía GIT_ASKPASS temporal); no se guarda.
+    cloneRepository: (url, destination, branch, auth) =>
+      call('clone_repository', { url, destination, branch, username: auth?.username ?? null, secret: auth?.secret ?? null }),
+    // El secreto viaja una sola vez hacia Rust (stdin de `git credential approve`) y no se devuelve.
+    storeCredential: (url, username, secret) => call('store_credential', { url, username, secret }),
+    testCredential: (url) => call('test_credential', { url }),
+    forgetCredential: (url, username) => call('forget_credential', { url, username }),
 
     getSnapshot: (tabId) => call('get_snapshot', { tabId }),
     refresh: (tabId) => call('refresh', { tabId }),
@@ -36,12 +44,14 @@ export function createTauriApi(): Api {
     amendDraft: (tabId) => call('amend_draft', { tabId }),
     diff: (tabId, scope, paths) => call('diff', { tabId, scope, paths }),
     log: (tabId, limit, query) => call('log', { tabId, limit, query }),
+    logPage: (tabId, skip, limit, query) => call('log_page', { tabId, skip, limit, query }),
     createBranch: (tabId, name, startPoint) => call('create_branch', { tabId, name, startPoint }),
     renameBranch: (tabId, oldName, newName) =>
       call('rename_branch', { tabId, old: oldName, new: newName }),
     checkout: (tabId, reference) => call('checkout', { tabId, reference }),
     deleteBranch: (tabId, name, force) => call('delete_branch', { tabId, name, force }),
     merge: (tabId, branch, fastForward) => call('merge', { tabId, branch, fastForward }),
+    mergeClean: (tabId, branch, fastForward) => call('merge_clean', { tabId, branch, fastForward }),
     continueIntegration: (tabId) => call('continue_integration', { tabId }),
     abortIntegration: (tabId) => call('abort_integration', { tabId }),
     getConflicts: (tabId) => call('get_conflicts', { tabId }),
@@ -52,6 +62,12 @@ export function createTauriApi(): Api {
     pull: (tabId, remote, refspec, rebase) => call('pull', { tabId, remote, refspec, rebase }),
     push: (tabId, remote, refspec, setUpstream) =>
       call('push', { tabId, remote, refspec, setUpstream }),
+
+    aiState: (tabId) => call('ai_state', { tabId }),
+    aiUpdateSettings: (patch) => call('ai_update_settings', { patch }),
+    aiPreviewContext: (tabId) => call('ai_preview_context', { tabId }),
+    aiGenerateCommitMessage: (tabId, options) => call('ai_generate_commit_message', { tabId, options }),
+    aiCancel: (tabId) => call('ai_cancel', { tabId }),
 
     async listen(event, handler) {
       const un = await listen<never>(event, (e) => handler(e.payload as never));

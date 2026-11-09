@@ -65,6 +65,17 @@ pub trait GitServing: Send + Sync {
     /// `git commit --amend` con comprobaciones: nunca reescribe un commit ya publicado.
     async fn amend_last_commit(&self, repo: &Repository, message: &str) -> GitResult<String>;
     async fn log(&self, repo: &Repository, limit: usize) -> GitResult<Vec<Commit>>;
+    /// Página del historial de HEAD (`skip` commits saltados, como mucho `limit`). Por defecto
+    /// se apoya en [`log`](Self::log); el motor real usa `git log --skip`.
+    async fn log_page(
+        &self,
+        repo: &Repository,
+        skip: usize,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        let all = self.log(repo, skip.saturating_add(limit)).await?;
+        Ok(all.into_iter().skip(skip).collect())
+    }
     /// Busca por mensaje, autor o hash en todo el historial de HEAD.
     async fn search_log(
         &self,
