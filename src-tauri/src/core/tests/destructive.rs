@@ -400,6 +400,7 @@ async fn fetch_pull_push_contra_un_remoto_local() {
     // Otro clon sube un commit; pull lo trae.
     let other = env.root.join("otro-clon");
     env.git(&env.root, &["clone", "-q", &Env::s(&bare), &Env::s(&other)]);
+    env.git(&other, &["config", "core.autocrlf", "false"]);
     env.git(&other, &["config", "user.name", "T"]);
     env.git(&other, &["config", "user.email", "t@example.invalid"]);
     env.write(&other, "nuevo.txt", b"n\n");

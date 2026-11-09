@@ -98,10 +98,16 @@ fn la_clave_de_repo_pliega_mayusculas_segun_la_plataforma() {
     let a = RepoKey::from_paths_with(&dir, &upper, true);
     let b = RepoKey::from_paths_with(&dir, &lower, true);
     assert_eq!(a, b);
-    // Sin plegado (Linux) son claves distintas.
+    // Sin plegado forzado: en un sistema de archivos que distingue mayúsculas (Linux) son claves
+    // distintas; en uno que no las distingue (macOS, Windows) `canonicalize` devuelve la
+    // capitalización real del disco para ambas rutas y la clave coincide igualmente.
     let a = RepoKey::from_paths_with(&dir, &upper, false);
     let b = RepoKey::from_paths_with(&dir, &lower, false);
-    assert_ne!(a, b);
+    if cfg!(any(windows, target_os = "macos")) {
+        assert_eq!(a, b);
+    } else {
+        assert_ne!(a, b);
+    }
 }
 
 #[cfg(any(windows, target_os = "macos"))]

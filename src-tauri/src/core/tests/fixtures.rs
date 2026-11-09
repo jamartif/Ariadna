@@ -174,7 +174,27 @@ impl Fixtures {
         match std::fs::read_to_string(&path) {
             // Un checkout con `autocrlf` puede haber convertido los saltos de línea.
             Ok(existing) if existing.replace("\r\n", "\n") == text => {}
-            Ok(_) => self.problems.push(format!("{name}: el contenido difiere")),
+            Ok(existing) => {
+                let existing = existing.replace("\r\n", "\n");
+                let corto = |s: Option<&str>| -> String {
+                    s.unwrap_or("<fin>").chars().take(160).collect()
+                };
+                let mut a = existing.lines();
+                let mut b = text.lines();
+                let mut linea = 0usize;
+                let detalle = loop {
+                    linea += 1;
+                    match (a.next(), b.next()) {
+                        (Some(x), Some(y)) if x == y => continue,
+                        (x, y) => {
+                            break format!("fichero: {}\n    motor:   {}", corto(x), corto(y))
+                        }
+                    }
+                };
+                self.problems.push(format!(
+                    "{name}: el contenido difiere en la línea {linea}\n    {detalle}"
+                ));
+            }
             Err(_) => self.problems.push(format!("{name}: no existe")),
         }
     }

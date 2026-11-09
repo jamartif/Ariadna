@@ -209,6 +209,9 @@ impl Env {
         self.git(&dir, &["init", "-q", "-b", "main"]);
         self.git(&dir, &["config", "user.name", "Test"]);
         self.git(&dir, &["config", "user.email", "test@example.invalid"]);
+        // El motor lanza git con el entorno normal (en Windows, `core.autocrlf=true` de sistema):
+        // se fija en el propio repo para que los saltos de línea sean deterministas.
+        self.git(&dir, &["config", "core.autocrlf", "false"]);
         dir
     }
 
