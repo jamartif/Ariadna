@@ -74,9 +74,13 @@ impl GitRunner {
             "core.longpaths=true",
             "-c",
             "core.pager=cat",
+            // Un repo ajeno puede definir `core.fsmonitor` como programa a ejecutar: nunca,
+            // ni en lecturas ni en mutaciones (spec §4.1).
+            "-c",
+            "core.fsmonitor=false",
         ];
         if kind == CommandKind::Read {
-            v.extend(["-c", "core.fsmonitor=false", "--no-optional-locks"]);
+            v.push("--no-optional-locks");
         }
         v.into_iter().map(OsString::from).collect()
     }
@@ -281,6 +285,14 @@ mod tests {
     fn redacta_credenciales_en_urls() {
         let s = redact_credentials("fatal: https://user:s3cr3t@github.com/x/y.git no responde");
         assert!(!s.contains("s3cr3t") && s.contains("https://***@github.com"));
+    }
+
+    #[test]
+    fn fsmonitor_se_desactiva_en_todos_los_tipos() {
+        for k in [CommandKind::Read, CommandKind::Mutate, CommandKind::Network] {
+            let v = GitRunner::global_args(k);
+            assert!(v.iter().any(|a| a == "core.fsmonitor=false"), "{k:?}");
+        }
     }
 
     #[test]

@@ -36,28 +36,32 @@
 - [ ] Atajos ⌘O y ⌘R, menús nativos y tamaño mínimo de ventana 980×640 (huecos detectados en la matriz)
 
 ## M2 — Motor Git
-- [ ] Trait `GitServing` y `GitCliEngine` con endurecimiento de §4.1
-- [ ] Cola serial por clave de repo; lecturas con `GIT_OPTIONAL_LOCKS=0`; refrescos coalescidos con `revision` (§3.2) · OperationQueueTests
-- [ ] G-01 abrir repo, error claro
-- [ ] G-02 status
-- [ ] G-03 stage/unstage por archivo
-- [ ] G-04 stage/unstage por hunk, incluida la matriz de `core.autocrlf` y `.gitattributes`
-- [ ] G-06 commit; mensaje vacío rechazado; aviso en HEAD detached
-- [ ] G-07 amend seguro
-- [ ] G-08 log y diff · G-09 búsqueda global
+
+> Estado: implementado (`GitCliEngine`, `GitRunner`, `RepositorySession`). 125 tests nuevos en `ariadna-git` contra git real. Pendiente: contrato IPC de Tauri (M4), el test de 50 000 archivos (hoy se prueba con 5 000 rutas) y `core.longpaths` en CI de Windows.
+- [x] Trait `GitServing` y `GitCliEngine` con endurecimiento de §4.1
+- [x] Cola serial por clave de repo; lecturas con `GIT_OPTIONAL_LOCKS=0`; refrescos coalescidos con `revision` (§3.2) · OperationQueueTests
+- [x] G-01 abrir repo, error claro
+- [x] G-02 status
+- [x] G-03 stage/unstage por archivo
+- [x] G-04 stage/unstage por hunk, incluida la matriz de `core.autocrlf` y `.gitattributes`
+- [x] G-06 commit; mensaje vacío rechazado; aviso en HEAD detached
+- [x] G-07 amend seguro
+- [x] G-08 log y diff · G-09 búsqueda global
 - [ ] Contrato IPC: comandos, enum de errores, eventos, `operation_id`, `cancel_operation` (§3.3)
-- [ ] Reintento acotado ante `index.lock` ajeno
+- [x] Reintento acotado ante `index.lock` ajeno
 - [ ] Tests con 50 000 archivos (rutas por stdin, NF-3)
 
 ## M3 — Ramas, remotos, merge
-- [ ] G-10 ramas
-- [ ] G-11 fetch, pull merge/rebase, push `--set-upstream`; timeouts de red y GCM
-- [ ] G-12 merge ff / no-ff / ff-only / ya al día
-- [ ] G-13 conflictos a tres vías, escritura binaria preservando EOL y BOM
-- [ ] G-14 marcar resuelto, continuar, abortar
-- [ ] G-05 descartar con confirmación
-- [ ] Test `pull --rebase` con conflicto, abort y continue
-- [ ] Test de cherry-pick con conflicto (pendiente heredado)
+
+> Estado: implementado y probado con remoto bare real, rebase y cherry-pick con conflicto. Pendiente: flujo de confirmación de `safe.directory` (el error `DubiousOwnership` ya se detecta).
+- [x] G-10 ramas
+- [x] G-11 fetch, pull merge/rebase, push `--set-upstream`; timeouts de red y GCM
+- [x] G-12 merge ff / no-ff / ff-only / ya al día
+- [x] G-13 conflictos a tres vías, escritura binaria preservando EOL y BOM
+- [x] G-14 marcar resuelto, continuar, abortar
+- [x] G-05 descartar con confirmación
+- [x] Test `pull --rebase` con conflicto, abort y continue
+- [x] Test de cherry-pick con conflicto (pendiente heredado)
 - [ ] `DubiousOwnership` con confirmación para `safe.directory`
 
 ## M4 — Shell de la app

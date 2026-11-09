@@ -53,3 +53,7 @@ pub use porcelain::parse_status;
 pub use recents::{LoadOutcome, RecentStore, RecentsError, MAX_RECENTS};
 pub use runner::{redact_credentials, CommandKind, GitRunner};
 pub use serving::{Confirmation, GitServing};
+pub use session::{
+    repo_key, CloseOutcome, OperationId, RefreshOutcome, RepoKey, RepositorySession, SessionConfig,
+    SessionEvent, SessionEventKind, SessionState, Snapshot,
+};
