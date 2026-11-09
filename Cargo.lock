@@ -31,11 +31,15 @@ name = "ariadna-git"
 version = "0.1.0-dev"
 dependencies = [
  "ariadna-process",
+ "async-trait",
  "directories",
+ "regex",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]

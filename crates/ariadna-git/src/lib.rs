@@ -12,17 +12,22 @@
 //! * [`git_locator`]: localización y validación de `git`.
 //! * [`recents`]: recientes y favoritos en JSON compatible con el Swift.
 //!
-//! El motor (`GitCliEngine`) y la cola de mutaciones llegan en el siguiente hito.
+//! * [`runner`], [`engine`], [`serving`] y [`error`]: motor git por CLI (M2/M3).
 
 pub mod amend;
 pub mod conflict;
 pub mod diff;
+pub mod engine;
+pub mod error;
 pub mod git_locator;
 pub mod listings;
 pub mod models;
 pub mod path_safety;
 pub mod porcelain;
 pub mod recents;
+pub mod runner;
+pub mod serving;
+pub mod session;
 
 #[cfg(test)]
 mod testutil;
@@ -32,6 +37,8 @@ pub use conflict::{
     ConflictError, ConflictRegion, Eol, ParsedConflicts,
 };
 pub use diff::{parse_diff, rebuild_diff, unquote_c_style, DiffError};
+pub use engine::GitCliEngine;
+pub use error::{GitError, GitResult};
 pub use git_locator::{
     find_git, parse_git_version, GitInstall, GitLocateError, GitVersion, LocatorOptions, TargetOs,
     MIN_GIT_VERSION,
@@ -44,3 +51,5 @@ pub use path_safety::{
 };
 pub use porcelain::parse_status;
 pub use recents::{LoadOutcome, RecentStore, RecentsError, MAX_RECENTS};
+pub use runner::{redact_credentials, CommandKind, GitRunner};
+pub use serving::{Confirmation, GitServing};
