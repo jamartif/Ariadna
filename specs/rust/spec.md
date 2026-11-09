@@ -32,8 +32,10 @@ Cada requisito es `[P]` paridad con el Swift o `[N]` novedad. Las novedades no p
 | Pestañas por repo | [N] | Ver §8 |
 | Windows | [N] | Ver §4 |
 | Tema moderno, paleta de comandos | [N] | Ver §7 |
+| Clonar desde URL con PAT o inicio de sesión del GCM; Azure DevOps y GitHub reconocidos | [N] | Paridad de uso con GitKraken (§4.3, D19, D20) |
+| Pull requests: crear, listar, detalle, bajar rama, revisar y comentar, votar, completar | [N] | Azure DevOps y GitHub (§4.4, D21) |
 
-**Fuera de v0.1 (igual que el Swift):** clone, init, stash, tags, submódulos, LFS, worktrees (solo se detectan y se avisa), rebase interactivo, cherry-pick visual, stage por líneas sueltas, grafo de commits, diff lado a lado, actualizador automático, tiendas de aplicaciones.
+**Fuera de v0.1 (igual que el Swift):** init, stash, tags, submódulos, LFS, worktrees (solo se detectan y se avisa), rebase interactivo, cherry-pick visual, stage por líneas sueltas, grafo de commits, diff lado a lado, actualizador automático, tiendas de aplicaciones.
 
 ## 2. Decisiones
 
@@ -54,6 +56,10 @@ Cada requisito es `[P]` paridad con el Swift o `[N]` novedad. Las novedades no p
 | D14 | **Doble uso: particular y empresa.** Ariadna usa los CLI oficiales con la sesión que el usuario tenga; **no se gestionan planes ni condiciones de cuenta de la empresa**. No hay proxy ni certificado de firma en la empresa. No se diseña para despliegue gestionado por TI | **Cerrada (Javier)** |
 | D18 | Licencia **MIT** (`LICENSE` en la raíz) | **Cerrada (Javier)** |
 | D16 | **Perfiles Personal y Empresa.** Cada repo se asocia a un perfil. El perfil decide qué proveedores de IA se permiten, con qué cuenta y con qué consentimiento. Claude queda desactivado en el perfil Empresa hasta que se habilite expresamente | **PROPUESTA** |
+| D19 | **Alojamiento remoto agnóstico.** Ariadna solo habla con `git`: sirve igual con **Azure DevOps (el de la empresa de Javier)**, GitHub, GitLab, Bitbucket o un servidor propio. Reconoce el proveedor por la URL del remoto para sugerir perfil, mostrar su icono y abrir el navegador (repo / PR) (§4.3) | **PROPUESTA** |
+| D20 | **Clonar y autenticar con PAT desde la app, en v0.1**, como en GitKraken: se introduce URL y token una vez. El token **no lo guarda Ariadna**: se entrega al *credential helper* de git (Git Credential Manager en Windows, Keychain en macOS) con `git credential approve`. También funciona el inicio de sesión interactivo del GCM (Microsoft/GitHub) sin PAT (§4.3) | **PROPUESTA** (sustituye a «clone fuera de v0.1») |
+| D21 | **Pull requests completas en v0.1** para **Azure DevOps y GitHub**: crear, listar, ver detalle, bajar la rama, **revisar** (diff y comentarios en hilos), **votar** y **completar/abandonar** (§4.4). GitLab y Bitbucket: solo «abrir en el navegador». Usa la API REST del proveedor con el mismo PAT, obtenido del *credential helper* en cada llamada y **sin guardarlo** | **Cerrada (Javier)**; el alcance completo es decisión suya, el PM lo marca como riesgo (§12) |
+| D22 | El cliente de proveedor abstrae la autenticación (`AuthMethod::Pat` hoy, `Bearer` mañana) para añadir **inicio de sesión con Microsoft (Entra ID)** en la fase siguiente sin reescribir nada | **Cerrada (Javier)**: Microsoft en v0.2 |
 | D17 | **Firma de binarios por etapas:** alfas sin firmar; para `v0.1.0`, solicitar **SignPath Foundation** (gratis para OSS; la licencia MIT cumple el requisito de licencia, el resto de condiciones se leen al solicitarla). Si no se concede, se publica sin firmar con la guía de «Abrir igualmente» | **PROPUESTA** |
 | D15 | macOS mínimo **15** (igual que el Swift) | **Cerrada (Javier)** |
 | D13 | Hitos alfa publicables: `alpha.1` tras M5 (Git sin IA), `alpha.2` tras M6 (IA) | **PROPUESTA** |
@@ -118,6 +124,7 @@ Heredado de `specs/spec.md` §3 del Swift. Requisitos por ID para poder trazar t
 | G-13 | Conflictos a tres vías (ours/base/theirs), diff3, elección por hunk o archivo, escribir solo con confirmación |
 | G-14 | Marcar resuelto; continuar o abortar merge, rebase y cherry-pick |
 | G-15 | Recientes y favoritos, con importación del `recents.json` del Swift |
+| G-16 | Clonar desde URL (https, ssh, local) con credenciales vía credential helper; probar y olvidar credenciales **[N]** |
 
 ### 4.1 Endurecimiento de git (aplica a todas las llamadas)
 
@@ -139,6 +146,89 @@ Heredado de `specs/spec.md` §3 del Swift. Requisitos por ID para poder trazar t
 - Atajos: ⌘ en macOS, Ctrl en Windows.
 - WSL (`\\wsl$`), OneDrive y unidades de red: soportados en modo lectura y sondeo; documentar limitaciones.
 - Matriz de `core.autocrlf`: true, false, input, más `.gitattributes eol=`, ficheros mixtos, UTF-16 y BOM.
+
+## 4.3 Alojamiento remoto: GitHub, Azure DevOps y otros (D19)
+
+**Principio:** el control de versiones va **siempre por `git`** y por la autenticación que el usuario ya tiene (Git Credential Manager, agente SSH, `credential.helper`), así que clonar, fetch, pull y push funcionan igual con `github.com`, GitHub Enterprise, Azure DevOps, GitLab, Bitbucket o un servidor propio. Solo las **pull requests** (§4.4) hablan con la API REST del proveedor, y solo para Azure DevOps y GitHub.
+
+**Reconocimiento del proveedor** (función pura y testeable, `RemoteInfo::parse(url)`), que devuelve `{ provider, host, owner, project?, repo, webUrl }`:
+
+| Proveedor | Formas de URL |
+|---|---|
+| GitHub / GHE | `https://github.com/o/r(.git)`, `git@github.com:o/r.git`, `ssh://git@host/o/r` |
+| Azure DevOps | `https://dev.azure.com/{org}/{project}/_git/{repo}` (también con `{org}@` delante), `git@ssh.dev.azure.com:v3/{org}/{project}/{repo}`, `https://{org}.visualstudio.com/[DefaultCollection/]{project}/_git/{repo}` |
+| GitLab, Bitbucket, otros | host + ruta; proveedor `other` si no se reconoce |
+
+Debe tolerar `%20` y espacios en nombres de proyecto, quitar credenciales embebidas (`user:pass@`) y no fallar nunca con basura.
+
+**Para qué se usa (y solo para eso):**
+1. **Sugerir perfil** (§5.1.1) con reglas del tipo `host/propietario` (`github.com/mi-org`, `dev.azure.com/mi-org`), no solo GitHub.
+2. **Icono y etiqueta del proveedor** en la pestaña y en la lista de remotos.
+3. **Abrir en el navegador** (repo, PR, página de creación de PR). GitHub: `/pull/new/{rama}`; Azure DevOps: `/pullrequestcreate?sourceRef={rama}`. Es la única vía de PR para GitLab y Bitbucket. Solo `https`, solo el host del remoto, mediante el plugin `opener` con una capability mínima.
+
+**Autenticación:**
+- `GIT_TERMINAL_PROMPT=0` evita que git se cuelgue esperando un teclado inexistente; el Git Credential Manager abre su propia ventana en Windows y usa el llavero en macOS.
+- Nuevo error tipado `Auth` (`AUTH` en el contrato IPC) para fetch, pull y push, con texto accionable («inicia sesión con el Git Credential Manager», «comprueba `ssh-add`», «tu PAT ha caducado»). Detectarlo exige reconocer unos pocos textos de git (`Authentication failed`, `could not read Username`, `Permission denied (publickey)`): **es la única excepción a «no se parsean mensajes humanos»**; queda aislada en una función con tests y solo se aplica a operaciones de red con código de salida ≠ 0.
+- El filtro de entorno de git sigue quitando variables con pinta de token; si un usuario depende de `GIT_ASKPASS` o de un `credential.helper`, siguen funcionando (`GIT_*` y `GCM_*` están permitidos).
+
+**Particularidades de Azure DevOps a cubrir:**
+- Las **políticas de rama** rechazan el push a ramas protegidas: se muestra el `remote:` tal cual llega, sin interpretarlo.
+- Ariadna **nunca hace force push**, así que no choca con las políticas que lo prohíben.
+- La URL que da el botón *Clone* de Azure DevOps lleva `{org}@` delante: es válida y se conserva.
+- SSH exige claves con algoritmos modernos: se documenta en la guía de «Auth».
+
+### Clonar y credenciales (D20)
+
+Hoy los equipos clonan con GitKraken metiendo la URL de Azure DevOps y un PAT. Ariadna debe poder hacer lo mismo sin guardar ella el secreto.
+
+**Clonar** (`clone_repository`): URL + carpeta destino + rama opcional. Reglas de seguridad:
+- Esquemas permitidos: `https`, `ssh`, `git@host:ruta` y rutas locales. **Se rechaza `ext::`** y cualquier URL que empiece por `-`; se pasa `-c protocol.ext.allow=never` y `--` antes de la URL.
+- El destino debe no existir o estar vacío; si el clon falla o se cancela, Ariadna borra **solo** lo que ella creó.
+- Es una operación de red: sin timeout, con cancelación y progreso (`clone-progress`). Los submódulos no se descargan (`--no-recurse-submodules`).
+- Al terminar, abre el repo en una pestaña nueva.
+- Un proveedor reconocido (D19) rellena el nombre de carpeta (`repo`) y avisa de qué credencial hace falta.
+
+**Credenciales por PAT** (sin que Ariadna guarde nada):
+1. Formulario: URL (o host), usuario, token. El campo es de tipo contraseña; el token no se muestra, no se registra, no entra en `ApiError` ni en ningún fixture, y se borra de memoria al terminar (`zeroize`).
+2. **Guardar** = `git credential approve` con `protocol/host/username/password` por **stdin** (nunca en argv ni en variables de entorno). Lo almacena el helper del sistema: Git Credential Manager (Windows), Keychain (macOS) o el que el usuario tenga configurado. Si no hay ninguno, se avisa y se ofrece «usar una vez».
+3. **Probar conexión** = `git ls-remote` contra la URL, y devuelve éxito o `AUTH`.
+4. **Olvidar** = `git credential reject`.
+5. **Sin PAT**: si el usuario tiene GCM, basta lanzar fetch/clone y GCM abre su ventana (cuenta Microsoft para Azure DevOps, OAuth para GitHub). Ariadna ofrece las dos vías: «Iniciar sesión con el navegador» y «Usar un token (PAT)».
+6. Ayuda por proveedor, con enlace `https` a su página de creación de tokens y los permisos mínimos (Azure DevOps: *Code → Read & write*; GitHub: *repo* o un token de grano fino con *Contents*; GitLab: `read_repository`/`write_repository`; Bitbucket: token de app con *Repositories → Write*). Los textos del usuario para PAT de Azure DevOps: el nombre de usuario puede ser cualquiera no vacío.
+7. **Dos cuentas en el mismo host** (p. ej. GitHub personal y de empresa): v0.1 usa el usuario como discriminador (`https://usuario@github.com/...`); un perfil puede recordar qué usuario corresponde a cada repo. Soporte completo de varias cuentas: posterior a v0.1.
+
+**Proveedores soportados de serie** (reconocimiento, icono, ayuda de PAT, PR en el navegador): Azure DevOps, GitHub y GitHub Enterprise, GitLab (incluido autoalojado), Bitbucket. Cualquier otro host funciona igual como `other`.
+
+**Fuera de v0.1:** listado de repos del proveedor para elegir qué clonar, lanzar o ver pipelines, issues y tableros, inicio de sesión con Microsoft (v0.2, D22), PR de GitLab y Bitbucket dentro de la app.
+
+## 4.4 Pull requests (D21, D22)
+
+Alcance: **Azure DevOps y GitHub** (incluido GitHub Enterprise con su host). Para el resto, solo abrir el navegador.
+
+| ID | Requisito [N] |
+|---|---|
+| PR-01 | Detectar proveedor, organización/proyecto y repo desde el remoto (§4.3). Sin proveedor soportado, el panel de PR ofrece solo «Abrir en el navegador». |
+| PR-02 | **Listar** PR: abiertas, creadas por mí, donde soy revisor, y completadas/abandonadas con filtro. Cada fila: título, autor, ramas, estado (borrador, activa, completada, abandonada), votos de revisores, resumen de políticas/comprobaciones y si hay conflictos de merge. |
+| PR-03 | **Detalle**: descripción (Markdown **sin `{@html}`**, renderizado desde el AST), autor, ramas origen/destino, revisores y votos, políticas y estado de build, work items vinculados (Azure DevOps), commits y archivos cambiados. |
+| PR-04 | **Crear** desde la rama actual: destino por defecto = rama por defecto del remoto; título y descripción rellenados con la plantilla del repo (`.azuredevops/pull_request_template.md` o `pull_request_template.md`; `.github/pull_request_template.md`), revisores, borrador y work items (Azure DevOps). Si la rama no está publicada, ofrece hacer push antes. «Generar título y descripción con IA» como propuesta (M6, `SummaryStyle::PullRequest`). |
+| PR-05 | **Bajar la rama** de una PR (fetch + checkout o crear rama de seguimiento), con las reglas de checkout seguro ya existentes. Soporta PR de forks de GitHub (`refs/pull/N/head`). |
+| PR-06 | **Revisar**: diff de la PR (merge-base…origen) archivo a archivo con el mismo visor de diff; hilos de comentarios en línea y generales: ver, **crear, responder y resolver**. |
+| PR-07 | **Votar**: Azure DevOps (aprobar, aprobar con sugerencias, sin voto, esperar al autor, rechazar). GitHub (aprobar, solicitar cambios, comentar). |
+| PR-08 | **Completar / abandonar / reabrir**. Azure DevOps: estrategia (merge sin fast-forward, squash, rebase, rebase + merge), borrar rama origen, completar work items y *auto-complete*. GitHub: merge, squash o rebase. Acciones destructivas con **confirmación nativa** que nombra repo, PR y rama destino, y con las políticas del proveedor siempre por encima (Ariadna no las salta). |
+| PR-09 | **Refresco** manual y opcional a intervalo (apagado por defecto, mínimo 60 s) **solo con el panel abierto**. Sin sondeo en segundo plano. |
+| PR-10 | **Errores** tipados: `AUTH` con el permiso que falta, `NOT_FOUND`, `POLICY` (conflicto 409 o política incumplida, con el motivo del proveedor), `RATE_LIMITED`, `NETWORK`. |
+
+**Arquitectura.** Crate nuevo `ariadna-hosting`: `RemoteInfo` (§4.3) + `trait PullRequestProvider` con `AzureDevOps` y `GitHub`; cliente HTTP `reqwest` con `rustls`; el trait no conoce Tauri y se prueba con un servidor HTTP simulado (`wiremock`) y respuestas JSON de ejemplo de cada API.
+
+**Autenticación sin guardar secretos (D22).**
+- Cada llamada obtiene el secreto con `git credential fill` (stdin/stdout, no interactivo: `GIT_TERMINAL_PROMPT=0` y `GCM_INTERACTIVE=never`). Si el helper no lo tiene, el error es `AUTH` y la UI abre el formulario de credenciales de §4.3.
+- El secreto vive solo en memoria durante la petición y se borra después (`zeroize`). No se cachea, no se registra y no aparece en errores ni fixtures.
+- `AuthMethod::Pat { username, secret }` envía HTTP Basic (Azure DevOps y GitHub aceptan PAT); `AuthMethod::Bearer(token)` queda definido para el inicio de sesión con Microsoft de la v0.2.
+- Permisos mínimos del PAT por operación, mostrados en el formulario (lectura de código para listar y ver; lectura y escritura de código para crear, comentar, votar y completar; lectura de work items si se vinculan). **A verificar en el spike de M0 con un PAT real.**
+
+**Seguridad de red.** TLS siempre verificado; solo se contacta el host del remoto (más `api.github.com` para github.com); redirecciones solo al mismo host; timeout de 30 s; tope de tamaño de respuesta; sin cabeceras en logs. Es la **única** comunicación de red propia de Ariadna y solo ocurre por acción del usuario o con el panel abierto.
+
+**Pruebas.** Servidor simulado con respuestas de ejemplo (listar, detalle, crear, hilos, voto, completar, errores 401/403/404/409/429); prueba de humo **manual** con cuentas reales (no es criterio automático). Los endpoints exactos de Azure DevOps REST 7.x y GitHub REST se confirman en un spike antes de implementar.
 
 ## 5. IA
 
@@ -239,7 +329,7 @@ Entorno de referencia: runners `macos-15` y `windows-2025` más un portátil de 
 | NF-5 | Diff grande | > 1 MB o > 5 000 líneas: colapsado y carga bajo demanda; binarios detectados; líneas largas truncadas |
 | NF-6 | 20 pestañas | Memoria acotada por hibernación; sin agotar manejadores de watcher |
 | NF-7 | Cancelación | Tiempo hasta terminar el árbol de procesos ≤ 5 s |
-| NF-8 | Sin telemetría de código | |
+| NF-8 | Sin telemetría. La única red propia es la API del proveedor del repo (PR), por acción del usuario | |
 
 Procesos: Job Object de Windows con `KILL_ON_JOB_CLOSE`, proceso creado suspendido y asignado antes de reanudar, `CREATE_NO_WINDOW`; en macOS, grupo de procesos con `SIGTERM`, espera y `SIGKILL`. Tope de bytes al capturar salida y *streaming* de diffs.
 
@@ -260,7 +350,7 @@ Procesos: Job Object de Windows con `KILL_ON_JOB_CLOSE`, proceso creado suspendi
 
 macOS: Developer ID y notarización requieren Apple Developer Program (de pago). Sin él, firma ad-hoc con el procedimiento de «Abrir igualmente»; los Mac gestionados pueden bloquearlo.
 - Propuesta (D17): alfas sin firmar; `v0.1.0` con SignPath Foundation; si no se concede, un OV o sin firmar con aviso.
-- Sin telemetría y sin llamadas de red propias: lo único que sale del equipo es lo que hacen `git` y los CLI de IA.
+- Sin telemetría. Lo único que sale del equipo es lo que hacen `git`, los CLI de IA y las llamadas a la API del proveedor del repo para las pull requests (§4.4), siempre por acción del usuario.
 - Política de ramas: fusionar `main` en `rust-migration` periódicamente.
 - Al lograr la paridad: tag `swift-final`, rama `legacy-swift`, borrar Swift de `main`, README nuevo.
 
@@ -284,6 +374,8 @@ macOS: Developer ID y notarización requieren Apple Developer Program (de pago).
 | Shims `.cmd` y límites de línea | RF-IA1, RF-IA2 |
 | Repos hostiles ejecutan código vía git | §4.1 |
 | WebView2/WKWebView difieren | Matriz, lint CSS, regresión visual |
+| Alcance: clonado, credenciales y PR completas (dos proveedores) en la misma v0.1 | Hitos alfa: `alpha.3` tras M8. **Regla de corte (PROPUESTA):** si el calendario se rompe, revisar/comentar/votar/completar pasan a v0.2 antes que retrasar `v0.1.0`; crear, listar, detalle y bajar rama no se recortan |
+| APIs de Azure DevOps y GitHub cambian o requieren más permisos de PAT | Spike con PAT real en M0, versión de API fijada, pruebas contra servidor simulado |
 | Calidad de ARM64 sin hardware real | Mejor esfuerzo (D7) |
 | Binarios sin firmar bloqueados en equipos gestionados | Firma por etapas (D17); documentar el aviso |
 | Código de empresa enviado con cuenta personal | RF-IA12 y RF-IA11 |

@@ -1,0 +1,224 @@
+[
+  {
+    "hunks": [],
+    "isBinary": true,
+    "isDeletedFile": false,
+    "isNewFile": false,
+    "oldPath": null,
+    "path": "bin.dat"
+  },
+  {
+    "hunks": [
+      {
+        "heading": "",
+        "id": "crlf.txt#0#1#1",
+        "lines": [
+          {
+            "id": "1:0:0",
+            "kind": "context",
+            "newLineNumber": 1,
+            "oldLineNumber": 1,
+            "text": "uno\r"
+          },
+          {
+            "id": "1:0:1",
+            "kind": "deletion",
+            "newLineNumber": null,
+            "oldLineNumber": 2,
+            "text": "dos\r"
+          },
+          {
+            "id": "1:0:2",
+            "kind": "addition",
+            "newLineNumber": 2,
+            "oldLineNumber": null,
+            "text": "DOS\r"
+          },
+          {
+            "id": "1:0:3",
+            "kind": "context",
+            "newLineNumber": 3,
+            "oldLineNumber": 3,
+            "text": "tres\r"
+          },
+          {
+            "id": "1:0:4",
+            "kind": "addition",
+            "newLineNumber": 4,
+            "oldLineNumber": null,
+            "text": "cuatro\r"
+          }
+        ],
+        "newCount": 4,
+        "newStart": 1,
+        "oldCount": 3,
+        "oldStart": 1
+      }
+    ],
+    "isBinary": false,
+    "isDeletedFile": false,
+    "isNewFile": false,
+    "oldPath": null,
+    "path": "crlf.txt"
+  },
+  {
+    "hunks": [
+      {
+        "heading": "",
+        "id": "src/lib.rs#0#1#1",
+        "lines": [
+          {
+            "id": "2:0:0",
+            "kind": "context",
+            "newLineNumber": 1,
+            "oldLineNumber": 1,
+            "text": "fn linea_1() {}"
+          },
+          {
+            "id": "2:0:1",
+            "kind": "context",
+            "newLineNumber": 2,
+            "oldLineNumber": 2,
+            "text": "fn linea_2() {}"
+          },
+          {
+            "id": "2:0:2",
+            "kind": "deletion",
+            "newLineNumber": null,
+            "oldLineNumber": 3,
+            "text": "fn linea_3() {}"
+          },
+          {
+            "id": "2:0:3",
+            "kind": "addition",
+            "newLineNumber": 3,
+            "oldLineNumber": null,
+            "text": "fn linea_3() { 1 }"
+          },
+          {
+            "id": "2:0:4",
+            "kind": "context",
+            "newLineNumber": 4,
+            "oldLineNumber": 4,
+            "text": "fn linea_4() {}"
+          },
+          {
+            "id": "2:0:5",
+            "kind": "context",
+            "newLineNumber": 5,
+            "oldLineNumber": 5,
+            "text": "fn linea_5() {}"
+          },
+          {
+            "id": "2:0:6",
+            "kind": "context",
+            "newLineNumber": 6,
+            "oldLineNumber": 6,
+            "text": "fn linea_6() {}"
+          }
+        ],
+        "newCount": 6,
+        "newStart": 1,
+        "oldCount": 6,
+        "oldStart": 1
+      },
+      {
+        "heading": "fn linea_23() {}",
+        "id": "src/lib.rs#1#24#24",
+        "lines": [
+          {
+            "id": "2:1:0",
+            "kind": "context",
+            "newLineNumber": 24,
+            "oldLineNumber": 24,
+            "text": "fn linea_24() {}"
+          },
+          {
+            "id": "2:1:1",
+            "kind": "context",
+            "newLineNumber": 25,
+            "oldLineNumber": 25,
+            "text": "fn linea_25() {}"
+          },
+          {
+            "id": "2:1:2",
+            "kind": "context",
+            "newLineNumber": 26,
+            "oldLineNumber": 26,
+            "text": "fn linea_26() {}"
+          },
+          {
+            "id": "2:1:3",
+            "kind": "deletion",
+            "newLineNumber": null,
+            "oldLineNumber": 27,
+            "text": "fn linea_27() {}"
+          },
+          {
+            "id": "2:1:4",
+            "kind": "addition",
+            "newLineNumber": 27,
+            "oldLineNumber": null,
+            "text": "fn linea_27() { 2 }"
+          },
+          {
+            "id": "2:1:5",
+            "kind": "context",
+            "newLineNumber": 28,
+            "oldLineNumber": 28,
+            "text": "fn linea_28() {}"
+          },
+          {
+            "id": "2:1:6",
+            "kind": "context",
+            "newLineNumber": 29,
+            "oldLineNumber": 29,
+            "text": "fn linea_29() {}"
+          },
+          {
+            "id": "2:1:7",
+            "kind": "context",
+            "newLineNumber": 30,
+            "oldLineNumber": 30,
+            "text": "fn linea_30() {}"
+          }
+        ],
+        "newCount": 7,
+        "newStart": 24,
+        "oldCount": 7,
+        "oldStart": 24
+      }
+    ],
+    "isBinary": false,
+    "isDeletedFile": false,
+    "isNewFile": false,
+    "oldPath": null,
+    "path": "src/lib.rs"
+  },
+  {
+    "hunks": [
+      {
+        "heading": "",
+        "id": "nuevo.txt#0#0#1",
+        "lines": [
+          {
+            "id": "0:0:0",
+            "kind": "addition",
+            "newLineNumber": 1,
+            "oldLineNumber": null,
+            "text": "archivo nuevo"
+          }
+        ],
+        "newCount": 1,
+        "newStart": 1,
+        "oldCount": 0,
+        "oldStart": 0
+      }
+    ],
+    "isBinary": false,
+    "isDeletedFile": false,
+    "isNewFile": true,
+    "oldPath": null,
+    "path": "nuevo.txt"
+  }
+]

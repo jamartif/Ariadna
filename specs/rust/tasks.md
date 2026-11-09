@@ -54,6 +54,11 @@
 ## M3 — Ramas, remotos, merge
 
 > Estado: implementado y probado con remoto bare real, rebase y cherry-pick con conflicto. Pendiente: flujo de confirmación de `safe.directory` (el error `DubiousOwnership` ya se detecta).
+- [ ] `RemoteInfo::parse` (GitHub, GHE, Azure DevOps en sus tres formas, GitLab, Bitbucket, otros) con ≥ 20 URLs de prueba y redacción de credenciales (D19)
+- [ ] Error tipado `Auth` para fetch/pull/push con mensaje accionable (única excepción de parseo, aislada y con tests)
+- [ ] G-16 `clone_repository`: validación de URL (`ext::`, `-`), destino vacío, cancelación que borra solo lo creado, progreso, sin submódulos; tests con remoto bare local
+- [ ] Credenciales: `credential approve / reject / ls-remote` por stdin, zeroize del secreto, sin registro ni eco en errores; tests con un credential helper falso
+- [ ] Ayuda de PAT por proveedor (Azure DevOps, GitHub, GitLab, Bitbucket) con enlaces https y permisos mínimos
 - [x] G-10 ramas
 - [x] G-11 fetch, pull merge/rebase, push `--set-upstream`; timeouts de red y GCM
 - [x] G-12 merge ff / no-ff / ff-only / ya al día
@@ -73,7 +78,8 @@
 - [ ] Pestañas: hibernación, reorden por teclado, indicadores, tope de 20
 - [ ] `session.json` versionado y atómico, con respaldo y recuperación
 - [ ] Watcher (`notify`): debounce, `.git/` aparte, overflow → refresco completo, sondeo en UNC
-- [ ] Bienvenida: ruta, Examinar, recientes, favoritos
+- [ ] Bienvenida: ruta, Examinar, recientes, favoritos, **Clonar desde URL** y formulario de credenciales (PAT o «iniciar sesión con el navegador») (D20)
+- [ ] Plugin `opener` con capability mínima (solo `https` y el host del remoto) para «Abrir en el navegador» y «Crear pull request» (D19)
 - [ ] Paleta de comandos y registro único de atajos (ES/US/DE)
 - [ ] Errores: toast, banner de pestaña, pantalla de recuperación
 
@@ -82,7 +88,7 @@
 - [ ] Diff por hunk (CodeMirror 6), virtualizado, límites de NF-5
 - [ ] Barra de commit (Ctrl/⌘+Intro), amend
 - [ ] Historial paginado con filtro local y búsqueda global (NF-4)
-- [ ] Ramas y remotos
+- [ ] Ramas y remotos, con icono del proveedor y acciones «Abrir en el navegador» / «Crear pull request» (D19)
 - [ ] Estudio de conflicto a tres paneles + resultado
 - [ ] Ajustes: pull con rebase, ruta de git
 - [ ] Vitest de componentes
@@ -110,6 +116,22 @@
 - [x] CLI falso en CI: entorno, argv, stdin, secreto de prueba · AITests
 - [ ] Humo manual con CLI reales en macOS y Windows, con cuentas de organización (checklist)
 - [ ] Publicar `0.1.0-alpha.2`
+
+## M8 — Pull requests (→ alpha.3)
+- [ ] Spike con PAT real: endpoints y permisos mínimos de Azure DevOps REST y GitHub REST para listar, crear, hilos, voto y completar (PR-02…PR-08); documentar versiones de API
+- [ ] Crate `ariadna-hosting`: `RemoteInfo`, `trait PullRequestProvider`, `AuthMethod`, cliente `reqwest` con `rustls`, límites de seguridad de red (§4.4)
+- [ ] Obtención del secreto con `git credential fill` no interactivo, `zeroize`, sin registro ni eco (D22)
+- [ ] Azure DevOps: listar, detalle (revisores, políticas, work items), crear, abandonar/reabrir
+- [ ] Azure DevOps: diff de la PR, hilos (ver, crear, responder, resolver), voto, completar con estrategia y *auto-complete*
+- [ ] GitHub: listar, detalle, crear, reviews, comentarios en línea, merge/squash/rebase, cerrar/reabrir
+- [ ] Bajar la rama de una PR (incluido `refs/pull/N/head` de forks)
+- [ ] Plantillas de PR del repo (`pull_request_template.md`) y push previo si la rama no está publicada
+- [ ] Errores tipados `AUTH` (con el permiso que falta), `NOT_FOUND`, `POLICY`, `RATE_LIMITED`, `NETWORK`
+- [ ] Comandos IPC de PR (ipc.md) y confirmaciones nativas para completar, abandonar y votar con rechazo
+- [ ] UI: panel de PR (lista con filtros, detalle con Markdown sin `{@html}`, pestaña de archivos con comentarios en línea, votar, completar, crear)
+- [ ] «Generar título y descripción con IA» (propuesta) enlazado a M6
+- [ ] Pruebas contra servidor simulado (`wiremock`) con 401/403/404/409/429 y humo manual con cuentas reales (checklist)
+- [ ] Publicar `0.1.0-alpha.3`
 
 ## M7 — Release
 - [ ] Accesibilidad: ARIA, `forced-colors`, zoom 200 %, axe en E2E; revisión NVDA y VoiceOver

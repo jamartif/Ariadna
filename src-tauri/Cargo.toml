@@ -1,0 +1,36 @@
+[package]
+name = "ariadna-app"
+description = "Ariadna: cliente Git de escritorio (backend Tauri 2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lib]
+name = "ariadna_app_lib"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "ariadna-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+ariadna-git = { path = "../crates/ariadna-git" }
+ariadna-process.workspace = true
+tauri.workspace = true
+tauri-plugin-dialog.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+dunce.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

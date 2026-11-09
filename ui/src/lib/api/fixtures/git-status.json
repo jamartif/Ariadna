@@ -1,0 +1,66 @@
+{
+  "ahead": 0,
+  "behind": 0,
+  "branchName": "main",
+  "entries": [
+    {
+      "conflictKind": null,
+      "indexStatus": ".",
+      "isConflicted": false,
+      "isIgnored": false,
+      "isSubmodule": false,
+      "isUntracked": false,
+      "originalPath": null,
+      "path": "README.md",
+      "workTreeStatus": "M"
+    },
+    {
+      "conflictKind": null,
+      "indexStatus": "M",
+      "isConflicted": false,
+      "isIgnored": false,
+      "isSubmodule": false,
+      "isUntracked": false,
+      "originalPath": null,
+      "path": "docs/guia.md",
+      "workTreeStatus": "M"
+    },
+    {
+      "conflictKind": null,
+      "indexStatus": "A",
+      "isConflicted": false,
+      "isIgnored": false,
+      "isSubmodule": false,
+      "isUntracked": false,
+      "originalPath": null,
+      "path": "preparado.txt",
+      "workTreeStatus": "."
+    },
+    {
+      "conflictKind": "bothModified",
+      "indexStatus": "U",
+      "isConflicted": true,
+      "isIgnored": false,
+      "isSubmodule": false,
+      "isUntracked": false,
+      "originalPath": null,
+      "path": "conflict.txt",
+      "workTreeStatus": "U"
+    },
+    {
+      "conflictKind": null,
+      "indexStatus": ".",
+      "isConflicted": false,
+      "isIgnored": false,
+      "isSubmodule": false,
+      "isUntracked": true,
+      "originalPath": null,
+      "path": "notas.md",
+      "workTreeStatus": "?"
+    }
+  ],
+  "headOid": "0000000000000000000000000000000000000001",
+  "isDetached": false,
+  "isUnborn": false,
+  "upstream": null
+}

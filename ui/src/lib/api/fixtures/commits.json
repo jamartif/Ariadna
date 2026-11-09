@@ -1,0 +1,38 @@
+[
+  {
+    "authorDateIso": "2026-01-04T12:00:00Z",
+    "authorEmail": "test@example.invalid",
+    "authorName": "Test",
+    "body": "",
+    "parents": [
+      "0000000000000000000000000000000000000001"
+    ],
+    "refs": [
+      "HEAD -> main"
+    ],
+    "sha": "0000000000000000000000000000000000000002",
+    "subject": "main: cambia b"
+  },
+  {
+    "authorDateIso": "2026-01-02T12:00:00Z",
+    "authorEmail": "test@example.invalid",
+    "authorName": "Test",
+    "body": "",
+    "parents": [
+      "0000000000000000000000000000000000000003"
+    ],
+    "refs": [],
+    "sha": "0000000000000000000000000000000000000001",
+    "subject": "cambios previos"
+  },
+  {
+    "authorDateIso": "2026-01-01T12:00:00Z",
+    "authorEmail": "test@example.invalid",
+    "authorName": "Test",
+    "body": "",
+    "parents": [],
+    "refs": [],
+    "sha": "0000000000000000000000000000000000000003",
+    "subject": "inicial"
+  }
+]

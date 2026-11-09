@@ -1,0 +1,126 @@
+{
+  "branches": [
+    {
+      "ahead": 0,
+      "behind": 0,
+      "isHead": false,
+      "name": "feature",
+      "oid": "0000000000000000000000000000000000000001",
+      "upstream": null
+    },
+    {
+      "ahead": 0,
+      "behind": 0,
+      "isHead": true,
+      "name": "main",
+      "oid": "0000000000000000000000000000000000000002",
+      "upstream": null
+    }
+  ],
+  "conflicts": [
+    {
+      "base": {
+        "content": "a\nb\nc\n",
+        "isBinary": false,
+        "oid": "0000000000000000000000000000000000000003"
+      },
+      "hunks": [
+        {
+          "base": null,
+          "id": 0,
+          "ours": "b-main\n",
+          "theirs": "b-feature\n"
+        }
+      ],
+      "kind": "bothModified",
+      "ours": {
+        "content": "a\nb-main\nc\n",
+        "isBinary": false,
+        "oid": "0000000000000000000000000000000000000004"
+      },
+      "path": "conflict.txt",
+      "theirs": {
+        "content": "a\nb-feature\nc\n",
+        "isBinary": false,
+        "oid": "0000000000000000000000000000000000000005"
+      },
+      "workingTree": "a\n<<<<<<< HEAD\nb-main\n=======\nb-feature\n>>>>>>> feature\nc\n"
+    }
+  ],
+  "integration": "merging",
+  "remoteBranches": [],
+  "remotes": [
+    {
+      "fetchUrl": "https://example.invalid/demo.git",
+      "name": "origin",
+      "pushUrl": "https://example.invalid/demo.git"
+    }
+  ],
+  "revision": 1,
+  "status": {
+    "ahead": 0,
+    "behind": 0,
+    "branchName": "main",
+    "entries": [
+      {
+        "conflictKind": null,
+        "indexStatus": ".",
+        "isConflicted": false,
+        "isIgnored": false,
+        "isSubmodule": false,
+        "isUntracked": false,
+        "originalPath": null,
+        "path": "README.md",
+        "workTreeStatus": "M"
+      },
+      {
+        "conflictKind": null,
+        "indexStatus": "M",
+        "isConflicted": false,
+        "isIgnored": false,
+        "isSubmodule": false,
+        "isUntracked": false,
+        "originalPath": null,
+        "path": "docs/guia.md",
+        "workTreeStatus": "M"
+      },
+      {
+        "conflictKind": null,
+        "indexStatus": "A",
+        "isConflicted": false,
+        "isIgnored": false,
+        "isSubmodule": false,
+        "isUntracked": false,
+        "originalPath": null,
+        "path": "preparado.txt",
+        "workTreeStatus": "."
+      },
+      {
+        "conflictKind": "bothModified",
+        "indexStatus": "U",
+        "isConflicted": true,
+        "isIgnored": false,
+        "isSubmodule": false,
+        "isUntracked": false,
+        "originalPath": null,
+        "path": "conflict.txt",
+        "workTreeStatus": "U"
+      },
+      {
+        "conflictKind": null,
+        "indexStatus": ".",
+        "isConflicted": false,
+        "isIgnored": false,
+        "isSubmodule": false,
+        "isUntracked": true,
+        "originalPath": null,
+        "path": "notas.md",
+        "workTreeStatus": "?"
+      }
+    ],
+    "headOid": "0000000000000000000000000000000000000002",
+    "isDetached": false,
+    "isUnborn": false,
+    "upstream": null
+  }
+}

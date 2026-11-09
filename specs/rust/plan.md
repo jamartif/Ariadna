@@ -36,7 +36,8 @@ specs/                     Swift: spec.md, plan.md, tasks.md · Rust: specs/rust
 | M4 | Shell Tauri sobre `GitServing` simulado: ventana, tokens, Bienvenida, pestañas, sesión persistente, watcher | Varios repos en pestañas, restaurados al reabrir |
 | M5 | Pantallas: cambios + diff por hunk, commit, historial, ramas, conflictos | **`0.1.0-alpha.1`**: Git completo sin IA, macOS y Windows |
 | M6 | IA: trait, Claude, Codex, Copilot, consentimiento, stdin, shims, Ajustes, hoja de propuesta | **`0.1.0-alpha.2`**: IA con el CLI falso en CI y humo manual |
-| M7 | Pulido, accesibilidad, rendimiento, instaladores, release, retirada del Swift | `v0.1.0` |
+| M8 | Pull requests (Azure DevOps y GitHub): crear, listar, detalle, bajar rama, revisar, votar, completar | **`0.1.0-alpha.3`** |
+| M7 | Pulido, accesibilidad, rendimiento, instaladores, release, retirada del Swift. **Se hace después de M8**: `v0.1.0` incluye las PR | `v0.1.0` |
 
 ## Dependencias
 - M1 → M2 → M3 (mismo núcleo).

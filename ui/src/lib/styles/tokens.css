@@ -1,0 +1,224 @@
+/*
+ * TOKENS DE DISEÑO — único archivo (spec §7.1).
+ *
+ *  - Espaciado: escala de 4/8 px (--space-*).
+ *  - 3 radios: --radius-sm, --radius-md, --radius-lg.
+ *  - 2 elevaciones: --elev-1 (tarjetas, menús), --elev-2 (diálogos, paleta).
+ *  - Paleta con contraste verificado por `src/lib/styles/tokens.test.ts`
+ *    (≥ 4,5:1 texto, ≥ 3:1 elementos de UI) en claro y oscuro.
+ *  - El bloque oscuro aparece DOS veces (explícito y «sistema»); el test exige
+ *    que sean idénticos.
+ *  - Tema por `data-theme="light|dark"` en <html>; sin atributo, sigue al sistema.
+ */
+
+:root {
+  color-scheme: light;
+  --bg-app: #f4f5f7;
+  --bg-surface: #ffffff;
+  --bg-subtle: #eceef2;
+  --bg-muted: #e3e6ec;
+  --bg-selected: #dcf3f8;
+  --bg-overlay: rgb(15 23 32 / 0.45);
+
+  --text: #151a22;
+  --text-muted: #4a5565;
+  --text-subtle: #5b6677;
+
+  --border: #dde1e8;
+  --border-strong: #7c8798;
+
+  --accent: #0e7490;
+  --accent-hover: #0b6479;
+  --accent-fg: #ffffff;
+  --accent-soft: #dcf3f8;
+  --accent-brand: #06b6d4;
+  --focus-ring: #0e7490;
+
+  --success: #17692e;
+  --danger: #c62828;
+  --warning: #8a5a00;
+  --info: #0e7490;
+  --danger-soft: #fde4e1;
+  --warning-soft: #fbefd2;
+  --success-soft: #ddf3e3;
+  --info-soft: #dcf3f8;
+
+  --diff-add-bg: #e6f6ea;
+  --diff-add-gutter: #cdecd6;
+  --diff-del-bg: #fdeaea;
+  --diff-del-gutter: #f8d3d3;
+  --diff-hunk-bg: #e9eff7;
+
+  --st-added-fg: #146c2e;
+  --st-added-bg: #ddf3e3;
+  --st-modified-fg: #8a5a00;
+  --st-modified-bg: #fbefd2;
+  --st-deleted-fg: #b42318;
+  --st-deleted-bg: #fde4e1;
+  --st-renamed-fg: #0b5ea8;
+  --st-renamed-bg: #dcebfa;
+  --st-unmerged-fg: #7a2fb5;
+  --st-unmerged-bg: #efe2fb;
+  --st-untracked-fg: #4a5565;
+  --st-untracked-bg: #e3e6ec;
+
+  --elev-1: 0 1px 2px rgb(15 23 32 / 0.08), 0 1px 1px rgb(15 23 32 / 0.04);
+  --elev-2: 0 12px 32px rgb(15 23 32 / 0.18), 0 2px 8px rgb(15 23 32 / 0.08);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-app: #0c1016;
+  --bg-surface: #131920;
+  --bg-subtle: #1a222c;
+  --bg-muted: #232d3a;
+  --bg-selected: #0d2f3a;
+  --bg-overlay: rgb(0 0 0 / 0.6);
+
+  --text: #e7edf4;
+  --text-muted: #a3afbd;
+  --text-subtle: #96a2b1;
+
+  --border: #26303c;
+  --border-strong: #6b7889;
+
+  --accent: #22d3ee;
+  --accent-hover: #67e1f3;
+  --accent-fg: #04232b;
+  --accent-soft: #0d2f3a;
+  --accent-brand: #22d3ee;
+  --focus-ring: #22d3ee;
+
+  --success: #4ade80;
+  --danger: #ff8a80;
+  --warning: #e3b341;
+  --info: #22d3ee;
+  --danger-soft: #3a1a1f;
+  --warning-soft: #33290f;
+  --success-soft: #11301c;
+  --info-soft: #0d2f3a;
+
+  --diff-add-bg: #10281a;
+  --diff-add-gutter: #14351f;
+  --diff-del-bg: #2d1519;
+  --diff-del-gutter: #3a1a1f;
+  --diff-hunk-bg: #17202b;
+
+  --st-added-fg: #4ade80;
+  --st-added-bg: #11301c;
+  --st-modified-fg: #e3b341;
+  --st-modified-bg: #33290f;
+  --st-deleted-fg: #ff8a80;
+  --st-deleted-bg: #3a1a1f;
+  --st-renamed-fg: #7cc4ff;
+  --st-renamed-bg: #11283f;
+  --st-unmerged-fg: #d6a8ff;
+  --st-unmerged-bg: #2b1a40;
+  --st-untracked-fg: #a3afbd;
+  --st-untracked-bg: #232d3a;
+
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.03);
+  --elev-2: 0 16px 40px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='dark']) {
+    color-scheme: dark;
+    --bg-app: #0c1016;
+    --bg-surface: #131920;
+    --bg-subtle: #1a222c;
+    --bg-muted: #232d3a;
+    --bg-selected: #0d2f3a;
+    --bg-overlay: rgb(0 0 0 / 0.6);
+
+    --text: #e7edf4;
+    --text-muted: #a3afbd;
+    --text-subtle: #96a2b1;
+
+    --border: #26303c;
+    --border-strong: #6b7889;
+
+    --accent: #22d3ee;
+    --accent-hover: #67e1f3;
+    --accent-fg: #04232b;
+    --accent-soft: #0d2f3a;
+    --accent-brand: #22d3ee;
+    --focus-ring: #22d3ee;
+
+    --success: #4ade80;
+    --danger: #ff8a80;
+    --warning: #e3b341;
+    --info: #22d3ee;
+    --danger-soft: #3a1a1f;
+    --warning-soft: #33290f;
+    --success-soft: #11301c;
+    --info-soft: #0d2f3a;
+
+    --diff-add-bg: #10281a;
+    --diff-add-gutter: #14351f;
+    --diff-del-bg: #2d1519;
+    --diff-del-gutter: #3a1a1f;
+    --diff-hunk-bg: #17202b;
+
+    --st-added-fg: #4ade80;
+    --st-added-bg: #11301c;
+    --st-modified-fg: #e3b341;
+    --st-modified-bg: #33290f;
+    --st-deleted-fg: #ff8a80;
+    --st-deleted-bg: #3a1a1f;
+    --st-renamed-fg: #7cc4ff;
+    --st-renamed-bg: #11283f;
+    --st-unmerged-fg: #d6a8ff;
+    --st-unmerged-bg: #2b1a40;
+    --st-untracked-fg: #a3afbd;
+    --st-untracked-bg: #232d3a;
+
+    --elev-1: 0 1px 2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.03);
+    --elev-2: 0 16px 40px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.06);
+  }
+}
+
+/* Tokens independientes del tema. */
+:root {
+  --font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.75rem;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --dur: 150ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  --titlebar-h: 40px;
+  --tabstrip-h: 40px;
+  --target-min: 24px;
+
+  /* Densidad cómoda (por defecto). Deben coincidir con settings.svelte.ts. */
+  --row-h: 40px;
+  --header-h: 36px;
+  --code-lh: 22px;
+  --control-h: 32px;
+}
+
+:root[data-density='compact'] {
+  --row-h: 30px;
+  --header-h: 30px;
+  --code-lh: 18px;
+  --control-h: 28px;
+}

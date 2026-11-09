@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ariadna-process", "crates/ariadna-git", "crates/ariadna-ai"]
+members = ["crates/ariadna-process", "crates/ariadna-git", "crates/ariadna-ai", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0-dev"
@@ -23,6 +23,9 @@ dunce = "1"
 async-trait = "0.1"
 tempfile = "3"
 ariadna-process = { path = "crates/ariadna-process" }
+tauri = { version = "2", features = [] }
+tauri-build = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

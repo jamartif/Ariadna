@@ -35,7 +35,8 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      # `ariadna-app` (Tauri) necesita WebKitGTK, que este runner no trae: se prueba en macOS y Windows.
+      - run: cargo clippy --workspace --exclude ariadna-app --all-targets -- -D warnings
 
   test:
     name: test (${{ matrix.os }})
@@ -55,7 +56,13 @@ jobs:
           git config --global user.email "ci@example.invalid"
           git config --global init.defaultBranch main
           git --version
-      - run: cargo test --workspace --no-fail-fast
+      # Linux no tiene las librerías de WebKit: ahí se excluye `ariadna-app` (Tauri).
+      - name: cargo test (Linux, sin ariadna-app)
+        if: runner.os == 'Linux'
+        run: cargo test --workspace --exclude ariadna-app --no-fail-fast
+      - name: cargo test (macOS y Windows)
+        if: runner.os != 'Linux'
+        run: cargo test --workspace --no-fail-fast
 
   test-windows-arm64:
     name: test (windows-11-arm, mejor esfuerzo)

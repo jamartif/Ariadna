@@ -1,0 +1,30 @@
+[
+  {
+    "base": {
+      "content": "a\nb\nc\n",
+      "isBinary": false,
+      "oid": "0000000000000000000000000000000000000001"
+    },
+    "hunks": [
+      {
+        "base": null,
+        "id": 0,
+        "ours": "b-main\n",
+        "theirs": "b-feature\n"
+      }
+    ],
+    "kind": "bothModified",
+    "ours": {
+      "content": "a\nb-main\nc\n",
+      "isBinary": false,
+      "oid": "0000000000000000000000000000000000000002"
+    },
+    "path": "conflict.txt",
+    "theirs": {
+      "content": "a\nb-feature\nc\n",
+      "isBinary": false,
+      "oid": "0000000000000000000000000000000000000003"
+    },
+    "workingTree": "a\n<<<<<<< HEAD\nb-main\n=======\nb-feature\n>>>>>>> feature\nc\n"
+  }
+]
