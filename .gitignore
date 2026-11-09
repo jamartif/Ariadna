@@ -46,3 +46,11 @@ credentials.json
 
 # Herramientas locales del agente
 /agent-tools/
+
+# Rust
+target/
+**/*.rs.bk
+
+# Node (UI)
+node_modules/
+ui/dist/
