@@ -1,0 +1,260 @@
+# Ariadna en Rust — especificación v1
+
+Cliente Git de escritorio para **macOS y Windows**, con IA propuesta por CLI oficiales (Claude, Codex, Copilot) y aspecto moderno. Sustituye a la versión Swift (`Sources/`, `Tests/`), que queda como oráculo de comportamiento hasta alcanzar la paridad.
+
+Estado: v1, tras la revisión con contexto limpio de [revision-egm.md](revision-egm.md). Las decisiones marcadas **PROPUESTA** las ha tomado el PM para resolver la revisión y Javier puede vetarlas.
+
+Método: Elephant-Goldfish Model (EGM v0.1.1): brainstorm, borrador, revisión con revisores sin contexto, resolución.
+
+## 1. Objetivo y alcance
+
+Paridad funcional con el Swift actual, más Windows y pestañas por repo. Nada más en v0.1.
+
+| Plataforma | Estado en v0.1 |
+|---|---|
+| macOS 13+ (universal arm64 + x86_64) | Oficial |
+| Windows 10 (22H2) y 11, x64 | Oficial |
+| Windows 11 ARM64 | **PROPUESTA: compilado, con tests unitarios y de integración del núcleo en CI y publicado, sin garantía de IA ni E2E** (ver D7) |
+
+### 1.1 Paridad frente a novedad
+
+Cada requisito es `[P]` paridad con el Swift o `[N]` novedad. Las novedades no pueden retrasar la salida de una paridad.
+
+| Área | Marca | Notas |
+|---|---|---|
+| Abrir repo, estado, stage/unstage por archivo y hunk, descartar, commit, amend seguro, log, búsqueda en todo el historial, diff | [P] | Ver §3 |
+| Ramas, fetch/pull/push, merge ff/no-ff/ya al día, conflictos a tres vías, continuar/abortar | [P] | Ver §3 |
+| Recientes y favoritos | [P] | Se importa el `recents.json` existente |
+| IA: mensaje de commit, resumen, explicar commit, propuesta de conflicto | [P] | El Swift la tiene con Copilot y Codex tras flag |
+| IA con Claude | [N] | Spike verificado, ver §5 |
+| Modo Auto, consentimiento por proveedor, ajustes por proveedor | [N] | |
+| Pestañas por repo | [N] | Ver §8 |
+| Windows | [N] | Ver §4 |
+| Tema moderno, paleta de comandos | [N] | Ver §7 |
+
+**Fuera de v0.1 (igual que el Swift):** clone, init, stash, tags, submódulos, LFS, worktrees (solo se detectan y se avisa), rebase interactivo, cherry-pick visual, stage por líneas sueltas, grafo de commits, diff lado a lado, actualizador automático, tiendas de aplicaciones.
+
+## 2. Decisiones
+
+| # | Decisión | Estado |
+|---|---|---|
+| D1 | Alcance v0.1 = paridad con Swift + Windows + pestañas | Cerrada (Javier) |
+| D2 | IA por CLI oficiales `claude`, `codex`, `copilot`. Sin API keys ni proxies | Cerrada (Javier) |
+| D3 | Tauri 2 + Svelte 5 + TypeScript. Núcleo en Rust. Editor de diff: CodeMirror 6. Fuentes: Inter y JetBrains Mono | **Cerrada** (PM, tras revisión) |
+| D4 | Mismo repo `jamartif/Ariadna`, rama `rust-migration`. Se fusiona a `main` cuando haya paridad | Cerrada (Javier) |
+| D5 | Git = el `git` del sistema. Versión mínima **2.39** | Heredada + revisión |
+| D6 | Fuera de tiendas | Heredada |
+| D7 | Windows en v0.1. ARM64 = mejor esfuerzo (compila, núcleo probado) | Windows: Cerrada (Javier). ARM64 mejor esfuerzo: **PROPUESTA** |
+| D8 | Modo Auto: Claude → Codex → Copilot, solo entre proveedores consentidos | Cerrada (Javier) + revisión |
+| D9 | Pestañas por repo | Cerrada (Javier) |
+| D10 | La IA entra siempre en el binario, apagada hasta consentimiento. Hay un interruptor para desactivarla del todo | **PROPUESTA** (sustituye al flag `ARIADNA_AI`) |
+| D11 | v0.1 sin Mica/vibrancy: fondo sólido con diseño propio. Mica y vibrancy en v0.2 | **PROPUESTA** |
+| D12 | Instalador Windows: NSIS, con bootstrapper de WebView2 | Cerrada (PM) |
+| D13 | Hitos alfa publicables: `alpha.1` tras M5 (Git sin IA), `alpha.2` tras M6 (IA) | **PROPUESTA** |
+
+## 3. Arquitectura
+
+```
+UI Svelte ─IPC tipado─▶ comando Tauri ─▶ SessionManager ─▶ RepositorySession ─▶ GitEngine ─▶ ProcessRunner ─▶ git
+                                                     └──▶ AiService ─▶ AiProvider ─▶ ProcessRunner ─▶ claude | codex | copilot
+```
+
+Cargo workspace: `crates/ariadna-git`, `crates/ariadna-ai`, `src-tauri`, `ui`.
+
+Equivalencias Swift → Rust: `protocol` → `trait`; `actor` → tarea tokio con canal; `@MainActor` → la UI no tiene estado de verdad; `UserConfirmation.require` → ver §6.
+
+**Regla de oro: el estado vive en Rust.** La UI es una vista sin lógica de git ni de IA.
+
+### 3.1 Ciclo de vida de `RepositorySession`
+
+`Abriendo → Activa → Cerrando → Cerrada`.
+
+- Cerrar una pestaña, cerrar la ventana y salir de la app siguen el mismo camino.
+- Si hay mutación en curso o en cola, **pide confirmación** (nombrando repo y operación). Tras confirmar: cancelación cooperativa, plazo de gracia (5 s) y luego se termina el árbol de procesos. La cola se vacía. Los eventos tardíos se descartan por `session_id`.
+- `index.lock` solo se elimina si lo creó un proceso git de Ariadna que acabamos de terminar. Si no, se explica el bloqueo y no se borra nada.
+- Repo borrado, movido o en unidad desconectada: banner de pestaña con **Reintentar / Localizar / Cerrar**.
+
+### 3.2 Concurrencia
+
+- Mutaciones: serie estricta por repo, con **prioridad** sobre lecturas.
+- Lecturas (`status`, `diff`, `log`): se lanzan con `GIT_OPTIONAL_LOCKS=0` y `--no-optional-locks`. Pueden solapar entre sí.
+- Refrescos: coalescidos (máx. uno en curso y uno pendiente por sesión) y descartados si una mutación ya está en cola.
+- Cada snapshot lleva `revision` monótona. La UI ignora revisiones anteriores.
+- Ante `index.lock` ajeno: reintento acotado con backoff (3 intentos, 200/400/800 ms) y mensaje accionable.
+- Cola por **clave de repo** (no por pestaña). Clave = ruta canónica sin prefijo `\\?\`, comparada sin distinguir mayúsculas según el sistema de archivos, resuelta con `git rev-parse --git-common-dir`.
+
+### 3.3 Contrato IPC
+
+- Todo comando recibe `session_id`. Los tipos se generan con `tauri-specta`; la CI falla si el binding generado difiere del versionado.
+- Operaciones largas devuelven `operation_id` y emiten `op:progress | done | error | cancelled` por `tauri::ipc::Channel`. Existe `cancel_operation(operation_id)`.
+- Los eventos de estado llevan `session_id` y `revision`. Se envían **deltas por sección** (cambios, ramas, historial paginado).
+- Rutas: `PathBuf`/bytes en todo el IPC, nunca `String` solo, para no perder nombres no UTF-8.
+- Errores: enum tipado (`thiserror` + `specta`) con código estable, texto localizable, causa y acción sugerida: `GitNotFound`, `NotARepo`, `Locked`, `Conflict`, `Auth`, `Network`, `Timeout`, `Cancelled`, `DubiousOwnership`, `RepoMissing`, `AiNotInstalled`, `AiNotLoggedIn`, `AiQuota`, `AiBadOutput`. Presentación: error de operación = toast con detalle; error de sesión = banner de pestaña; fatal = pantalla de recuperación. El stderr se muestra tras redactar secretos.
+
+## 4. Git
+
+Heredado de `specs/spec.md` §3 del Swift. Requisitos por ID para poder trazar tareas y tests:
+
+| ID | Requisito [P] |
+|---|---|
+| G-01 | Abrir carpeta dentro de un repo (sube a la raíz); error claro si no lo es |
+| G-02 | Estado con `status --porcelain=v2 -z`: preparados, sin preparar, sin seguimiento, ignorados, conflictos |
+| G-03 | Stage/unstage por archivo |
+| G-04 | Stage/unstage por hunk (nuevos, CRLF, sin salto final, rutas con espacios y Unicode) |
+| G-05 | Descartar cambios, siempre con confirmación |
+| G-06 | Commit con mensaje obligatorio; aviso en HEAD detached |
+| G-07 | Amend seguro: sin commits, fuera de rama, merge/rebase en curso o commit ya en un remoto → se niega |
+| G-08 | Log con autor, fecha, refs y cuerpo; diff del commit |
+| G-09 | Filtro local y búsqueda en todo el historial (mensaje, autor, hash) |
+| G-10 | Ramas: listar, crear, cambiar, renombrar, borrar; remotas con seguimiento |
+| G-11 | Fetch, pull (merge o rebase), push con `--set-upstream` |
+| G-12 | Merge ff / no-ff / ff-only / ya al día |
+| G-13 | Conflictos a tres vías (ours/base/theirs), diff3, elección por hunk o archivo, escribir solo con confirmación |
+| G-14 | Marcar resuelto; continuar o abortar merge, rebase y cherry-pick |
+| G-15 | Recientes y favoritos, con importación del `recents.json` del Swift |
+
+### 4.1 Endurecimiento de git (aplica a todas las llamadas)
+
+- `git` se resuelve **una vez al arrancar** a ruta absoluta (nunca con el directorio actual): Windows → `HKLM\SOFTWARE\GitForWindows\InstallPath`, `Program Files\Git\cmd\git.exe`, luego PATH; macOS → PATH ampliado (`/usr/bin`, Homebrew, Command Line Tools). Se valida `git --version ≥ 2.39`.
+- `--literal-pathspecs` (`GIT_LITERAL_PATHSPECS=1`), `--` antes de rutas, refs validadas con `git check-ref-format`, rechazo de nombres que empiecen por `-`.
+- Rutas a git por stdin cuando son muchas: `--pathspec-from-file=- --pathspec-file-nul` o `update-index -z --stdin` (límite de línea de comandos en Windows).
+- Para lecturas: `-c core.fsmonitor=false -c core.hooksPath=<vacío> --no-ext-diff --no-textconv`. `GIT_TERMINAL_PROMPT=0`, `GIT_PAGER=cat`, `GIT_EDITOR=true`. Ejecutar hooks solo en mutaciones, con aviso de confianza del repo la primera vez.
+- Codificación: siempre `-z`, `-c core.quotepath=false`, `i18n.logOutputEncoding=UTF-8`. No se parsean mensajes humanos de error; se usan códigos de salida y porcelain. `LC_ALL=C` como apoyo, no como garantía.
+- `core.longpaths=true` por proceso y manifiesto `longPathAware`.
+- `safe.directory`: error accionable `DubiousOwnership`. Añadirlo solo con confirmación y nunca con `*`.
+- Parches: se construyen **desde bytes de `git diff`** y se aplican con `git apply --cached` por stdin binario, sin tocar `\r` ni leer el worktree. Las resoluciones de conflicto se escriben en binario conservando EOL y BOM.
+- Operaciones de red: timeout propio, cancelación manual y sin límite mientras haya diálogo de credenciales (GCM, SSH). Nunca se registran URLs con credenciales.
+
+### 4.2 Rutas y plataforma
+
+- `PathSafety` con lista cerrada de tests: `\`, unidades, UNC, `\\?\`, nombres reservados (CON, NUL, AUX…), `.git` y sus variantes NTFS (`.git.`, `git~1`, `.git `), flujos alternativos `fichero:stream`, final con punto o espacio, symlinks/junctions que escapan, 8.3, mayúsculas, NFD/NFC en macOS, nombres `-rf`, `:(glob)*`, `*.c`.
+- Al proceso hijo se le pasa la ruta con `dunce::simplified()`.
+- Persistencia: `~/Library/Application Support/Ariadna` y `%APPDATA%\Ariadna` (`directories`).
+- Atajos: ⌘ en macOS, Ctrl en Windows.
+- WSL (`\\wsl$`), OneDrive y unidades de red: soportados en modo lectura y sondeo; documentar limitaciones.
+- Matriz de `core.autocrlf`: true, false, input, más `.gitattributes eol=`, ficheros mixtos, UTF-16 y BOM.
+
+## 5. IA
+
+Principio: **la IA solo propone**. Ninguna acción escribe en worktree, índice ni refs. Toda respuesta es una `AiSuggestion` (`pending | accepted | rejected`) ligada a la `revision` del repo y marcada **obsoleta** si el repo cambia.
+
+### 5.1 Consentimiento y privacidad
+- Primer uso por proveedor: diálogo que explica qué se envía (diff, mensajes, tamaño) y a quién. Se guarda por proveedor. Interruptor global para desactivar la IA.
+- Vista previa exacta de lo que se enviará antes de enviarlo.
+- Se excluyen del contexto `.env*`, `*.pem`, `id_*`, `*.pfx`, `*.key` y se pasa un redactor de secretos con las reglas de `.gitleaks.toml`.
+- El contenido del repo se delimita como **dato no fiable** con marcadores y una instrucción de sistema propia. La propuesta de conflicto se rechaza si introduce texto fuera de los hunks originales.
+- Tope de contexto 100 000 bytes (configurable); si se supera, no se llama al CLI.
+- Registro local opcional de lo enviado.
+
+### 5.2 Proveedores
+
+| Proveedor | Estado de verificación | Invocación |
+|---|---|---|
+| Claude | **Flags verificados** contra `claude 2.1.319` | `claude -p --output-format json --tools "" --strict-mcp-config --disable-slash-commands --no-session-persistence --permission-mode plan`, prompt por stdin. Probar `--setting-sources ""`. **Prohibido `--bare`**: solo lee `ANTHROPIC_API_KEY` y rompería el login de suscripción |
+| Codex | **NO verificado** (CLI no instalado en la máquina de revisión) | Candidato: `codex exec --json --sandbox read-only --skip-git-repo-check -`. Spike en M0 |
+| Copilot | **NO verificado** | Candidato: `copilot -p … -s --no-ask-user` con lista blanca de herramientas. Comprobar stdin. Spike en M0 |
+
+Un proveedor sin flags verificados no bloquea `alpha.2`; se publica marcado experimental.
+
+### 5.3 Ejecución
+- **RF-IA1:** el prompt va por **stdin**, nunca por argv. Límites: ~32 K en CreateProcess, **8 191 en `.cmd`**. Si un CLI no lee stdin, se reduce el contexto (tope propio) en lugar de usar un fichero que el CLI leería.
+- **RF-IA2:** en Windows, `codex` y `copilot` pueden ser shims `.cmd`. Orden: (1) binario nativo si existe (`~/.local/bin/claude.exe`); (2) `node.exe <entrypoint.js>` con parseo tolerante del shim; (3) `.cmd` solo con argumentos constantes de lista blanca y prompt por stdin, con aviso. Rust ≥ 1.77.2. Nada derivado del repo (rama, ruta, mensaje) va como argumento. Test que falla si un `.cmd` recibe un argumento fuera de la lista.
+- **RF-IA3:** entorno por **lista blanca** por proveedor. Común: `PATH`, `SystemRoot`, `windir`, `TEMP`, `TMP`, `USERPROFILE`, `HOME`, `APPDATA`, `LOCALAPPDATA`, `ProgramData`, `ComSpec`, `PATHEXT`, `LANG`, `LC_*`, proxies y certificados (`HTTP(S)_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS`), `CLAUDE_CONFIG_DIR`, `CODEX_HOME`. Se eliminan siempre `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`. Comparación sin distinguir mayúsculas. Copilot recibe un token de GitHub solo si el usuario lo declara.
+- **RF-IA4:** disponibilidad, versión y sesión se detectan **ejecutando el propio CLI** (`--version`, subcomando de estado si existe, o botón «Probar» con un prompt trivial). No se leen `.credentials.json` ni el llavero.
+- **RF-IA5:** directorio de trabajo = carpeta vacía dedicada (`…/Ariadna/ai-sandbox`), sin ficheros de instrucciones, limpiada tras cada llamada.
+- **RF-IA6:** Escribir stdin en una tarea aparte y cerrarlo; drenar stdout/stderr en paralelo; tope de salida; sin TTY; un prompt interactivo se trata como error `AiNotLoggedIn`. Timeout duro 120 s con cancelación.
+- **RF-IA7:** esquema de parseo por proveedor y versión mínima, con golden files de salida real. Formato desconocido → «formato no reconocido», nunca texto crudo a la UI.
+- **RF-IA8:** Cola de IA FIFO global con **2 llamadas simultáneas** y límite por minuto. Estado visible (en cola, generando, cancelar). Se cancela al cerrar la pestaña.
+- **RF-IA9:** Auto salta de proveedor solo si el anterior **no está instalado**, y solo entre proveedores con consentimiento. No hay fallback por error de contenido, sesión o cuota. La hoja de propuesta muestra qué proveedor respondió.
+- **RF-IA10:** términos de uso. Antes de `alpha.2` se leen y citan con fecha los vigentes de Anthropic, OpenAI y GitHub sobre uso de la suscripción por aplicaciones de terceros. Si hay ambigüedad: uso personal, sin distribución con IA, o modo API opcional. El README advierte que el usuario es responsable del cumplimiento.
+
+## 6. Seguridad de la aplicación
+
+- **Confirmaciones:** el diálogo lo abre **Rust** (plugin dialog nativo). Los comandos destructivos no reciben ninguna prueba de confirmación desde la UI. Internamente `Confirmed` es un token de un solo uso ligado a `(session_id, operación, revision, hash de parámetros)` con caducidad; el backend comprueba la revisión antes de ejecutar. El diálogo muestra repo, rama y ruta, y bloquea el cambio de pestaña.
+- **WebView:** CSP estricta sin `unsafe-eval`, capabilities mínimas por ventana, sin plugin shell ni fs, sin `{@html}` salvo sanitizado. Todo texto de git o IA se escapa. Test con repo malicioso (nombres de rama con HTML, secuencias de control, `.git/config` con `core.fsmonitor`/`core.sshCommand`).
+- Entorno de `git`: el Swift filtraba por subcadena (`TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`). Se mantiene ese filtro por paridad, con comparación sin distinguir mayúsculas, pero se **permiten** las variables que git y los credential helpers necesitan (`SSH_AUTH_SOCK`, `GIT_*`, `GCM_*`, `GIT_ASKPASS`). Los hijos de **IA** usan lista blanca (§5.3), no este filtro.
+- No se escribe `core.hooksPath` ni ninguna configuración en repos ajenos.
+- Repo público: `.gitignore` ampliado (`target/`, `node_modules/`), gitleaks en pre-commit y CI.
+
+## 7. Diseño visual
+
+«Moderno» se define con propiedades verificables:
+
+1. Tokens de diseño en un único archivo: escala de espaciado 4/8 px, 3 radios, 2 elevaciones, paleta con ratios de contraste calculados (≥ 4,5:1 texto, ≥ 3:1 UI).
+2. Tema claro, oscuro y sistema, con transición de 150 ms o menos; respeta `prefers-reduced-motion`.
+3. Tipografía Inter (UI) y JetBrains Mono (código), incluidas en la app.
+4. Barra de título integrada; fondo sólido en v0.1 (D11).
+5. Densidad cómoda y compacta, configurable.
+6. Iconos de un único conjunto vectorial; estados vacío, cargando y error diseñados en cada pantalla.
+7. Paleta de comandos (⌘K / Ctrl+K).
+8. Mockups aprobados de las 5 pantallas clave (Bienvenida, Cambios+Diff, Historial, Conflictos, Propuesta de IA) **antes de M5**.
+
+Compatibilidad: matriz con versión mínima de WebView2 (Evergreen) y WebKit de macOS 13; `browserslist` y lint de CSS que prohíben APIs fuera de ella. Se decide Ctrl+Tab frente a Ctrl+PgDn tras probar WebView2.
+
+Accesibilidad: roles `tablist/tab/tabpanel` con reorden por teclado, listas virtualizadas con `grid/listbox`, `aria-live` para operaciones, trampa de foco en diálogos, `forced-colors` y `prefers-contrast`, zoom de texto al 200 %, objetivos ≥ 24 px. Revisión manual con NVDA y VoiceOver y chequeo automático axe en E2E.
+
+Atajos: registro único con ámbito (global/pestaña/editor), detección de conflictos en tests, menú nativo de Tauri donde se pueda, teclados ES/US/DE.
+
+## 8. Pestañas por repo
+
+- Una ventana, N pestañas, una `RepositorySession` por repo (no por pestaña): si el mismo repo (según §3.2) se abre otra vez, se enfoca la pestaña existente. Worktrees comparten clave; se avisa.
+- Estado por pestaña: panel, selección, borrador de commit (autoguardado), filtros y propuestas de IA.
+- **Pestañas ocultas hibernan:** la UI pesada (diff, historial) se desmonta y se rehidrata al activar. En Rust queda estado ligero. Hibernación completa tras 10 min de inactividad.
+- `session.json`: versionado, escritura atómica (tmp + rename), copia de respaldo, recuperación si está corrupto. Aviso si una ruta ya no existe.
+- Vigilancia de archivos (`notify`): debounce 300 ms con tope de 2 s; worktree con filtro de ignorados; `.git/{HEAD,index,refs}` aparte; se ignoran los eventos de nuestras propias mutaciones; ante overflow o error se hace refresco completo y se degrada a sondeo (también en UNC/red). **Solo la pestaña visible** vigila a fondo; las demás se marcan «sucias» y refrescan al activarse. Estado ligero: `status --porcelain=v2 -z --no-renames -uno` con límite de 5 s, cada 60 s como máximo.
+- Atajos: Ctrl/⌘+T, Ctrl/⌘+W, Ctrl/⌘+1…9, siguiente/anterior (ver §7).
+- Cerrar con propuesta de IA sin descartar o borrador sin commitear pide confirmación.
+- Tope blando de 20 pestañas con aviso.
+
+## 9. Requisitos no funcionales (con método de medida)
+
+Entorno de referencia: runners `macos-15` y `windows-2025` más un portátil de gama media para medición manual. Fixtures sintéticos de repos grandes en CI con umbral de regresión.
+
+| ID | Métrica | Objetivo |
+|---|---|---|
+| NF-1 | Arranque en frío hasta ventana interactiva | ≤ 1,5 s |
+| NF-2 | Primer pintado de `status` con datos parciales | ≤ 300 ms |
+| NF-3 | `status` completo, 50 000 archivos | ≤ 2 s, sin bloquear UI |
+| NF-4 | Historial: 100 000 commits | Paginado por 200, scroll a 60 fps |
+| NF-5 | Diff grande | > 1 MB o > 5 000 líneas: colapsado y carga bajo demanda; binarios detectados; líneas largas truncadas |
+| NF-6 | 20 pestañas | Memoria acotada por hibernación; sin agotar manejadores de watcher |
+| NF-7 | Cancelación | Tiempo hasta terminar el árbol de procesos ≤ 5 s |
+| NF-8 | Sin telemetría de código | |
+
+Procesos: Job Object de Windows con `KILL_ON_JOB_CLOSE`, proceso creado suspendido y asignado antes de reanudar, `CREATE_NO_WINDOW`; en macOS, grupo de procesos con `SIGTERM`, espera y `SIGKILL`. Tope de bytes al capturar salida y *streaming* de diffs.
+
+## 10. Distribución y CI
+
+- CI: `macos-15`, `windows-2025`, `windows-11-arm`, `ubuntu` (núcleo). `cargo fmt --check`, `clippy -D warnings`, `cargo deny`, `cargo test`, gitleaks, build de UI, `vitest`, `axe` en E2E, regresión visual con baseline por SO (tolerancia 0,1 %). Un **job agregador** siempre corre. Caché de cargo.
+- Git mínimo (2.39) y último, ambos en CI.
+- macOS: `.dmg` universal, firma ad-hoc, notarización opcional con los secrets actuales. Se documenta cómo abrir una app no notarizada y se acepta ese límite en v0.1.
+- Windows: NSIS x64 y ARM64 (mejor esfuerzo), WebView2 con bootstrapper. Sin firma en v0.1: SmartScreen avisará; documentado. Prueba de instalación y desinstalación limpias en VM.
+- Política de ramas: fusionar `main` en `rust-migration` periódicamente.
+- Al lograr la paridad: tag `swift-final`, rama `legacy-swift`, borrar Swift de `main`, README nuevo.
+
+## 11. Pruebas
+
+- Inventario de los 36 tests de `GitCoreTests` y los 8 de `AriadnaAITests` con su tarea Rust. Criterio de salida de M2 y M3: nº de tests portados = nº de tests Swift del área.
+- **La fuente de verdad es git.** Fixtures de parsers generados con git real y contrastados con el Swift; versionados con metadatos (versión de git, SO) y regenerables con un script Rust.
+- Tests de sesiones: cola, cancelación, cierre durante push/rebase/IA, refresco concurrente, confirmar tras cambiar de pestaña, repo borrado, 20 sesiones.
+- Fuzz/propiedades de los parsers.
+- IA en CI con un **CLI falso** que vuelca entorno, argumentos y stdin: comprueba lista blanca de entorno, orden de flags, nada de datos del usuario por argv, y que un secreto de prueba no llega al hijo.
+- Humo con CLI reales: job manual con checklist; **no** es criterio de salida automático.
+- Frontend: Vitest para componentes; E2E con `tauri-driver`.
+
+## 12. Riesgos
+
+| Riesgo | Mitigación |
+|---|---|
+| Alcance grande + aprender Rust, Tauri y Svelte | Hitos alfa (D13), núcleo primero, UI delgada |
+| Flags de Codex/Copilot sin verificar | Spike M0, experimental si no se verifica |
+| Términos de uso de suscripciones | RF-IA10 antes de `alpha.2` |
+| Shims `.cmd` y límites de línea | RF-IA1, RF-IA2 |
+| Repos hostiles ejecutan código vía git | §4.1 |
+| WebView2/WKWebView difieren | Matriz, lint CSS, regresión visual |
+| Calidad de ARM64 sin hardware real | Mejor esfuerzo (D7) |
+| Sandbox de Codex en Windows distinto al de Unix | Humo manual de escritura/ejecución; avisar si no hay garantía |
+
+## 13. Preguntas abiertas para Javier
+1. ¿Vetas alguna **PROPUESTA** (D7 ARM64 mejor esfuerzo, D10, D11 sin Mica en 0.1, D13 alfas)?
+2. Términos de uso: ¿prefieres uso personal estricto si hay ambigüedad?
