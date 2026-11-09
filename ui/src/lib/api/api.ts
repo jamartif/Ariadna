@@ -5,23 +5,32 @@ import type {
   AiState,
   AmendDraft,
   ApiEvents,
+  AppSettings,
   AppState,
   Branch,
   Commit,
   CommitResult,
   ConflictFile,
+  ConflictResolution,
+  ContinueResult,
   ContextPreview,
+  CliStatus,
   CloneAuth,
   CredentialTest,
   DiffHunk,
   DiffScope,
   DoneResult,
   FileDiff,
+  GitDetect,
+  GitIdentity,
   GitPath,
   MergeFastForward,
   MergeResult,
+  MergeStartResult,
+  MergeState,
   OpenResult,
   RecentRepository,
+  SettingsView,
   Snapshot
 } from './types';
 
@@ -83,9 +92,31 @@ export interface Api {
   getConflicts(tabId: string): Promise<ConflictFile[]>;
   writeConflictResolution(tabId: string, path: GitPath, contents: number[]): Promise<DoneResult>;
   markResolved(tabId: string, path: GitPath): Promise<void>;
+  /** Empieza un merge y, si hay conflictos, **lo deja en curso** para resolverlos. */
+  mergeStart(tabId: string, branch: string, fastForward: MergeFastForward): Promise<MergeStartResult>;
+  /** Estado de la integración en curso (mensaje por defecto, commit que se integra, conflictos). */
+  mergeState(tabId: string): Promise<MergeState>;
+  /** Escribe (o borra) el archivo y hace `git add`, tras confirmación nativa. `{ done: false }` si se cancela. */
+  resolveConflict(tabId: string, path: GitPath, resolution: ConflictResolution): Promise<DoneResult>;
+  /** Termina el merge (con mensaje opcional) o continúa rebase/cherry-pick. */
+  mergeContinue(tabId: string, message: string | null): Promise<ContinueResult>;
+  /** Aborta el merge en curso (confirmación nativa). */
+  mergeAbort(tabId: string): Promise<DoneResult>;
   fetch(tabId: string, remote: string): Promise<void>;
-  pull(tabId: string, remote: string, refspec: string | null, rebase: boolean): Promise<MergeResult>;
+  /** `rebase` omitido (o `null`) = usa el ajuste «pull con rebase» de Ajustes → Git. */
+  pull(tabId: string, remote: string, refspec: string | null, rebase?: boolean | null): Promise<MergeResult>;
   push(tabId: string, remote: string, refspec: string | null, setUpstream: boolean): Promise<void>;
+
+  // Ajustes (`settings.json`; la ruta de git y el pull con rebase los usa el motor)
+  getSettings(): Promise<SettingsView>;
+  /** Valida y guarda. Rechaza con `PARSE` (campo en `detail`) o `GIT_NOT_FOUND` (ruta de git no válida). */
+  saveSettings(settings: AppSettings): Promise<SettingsView>;
+  /** Prueba una ruta de git (o busca sola si es `null`) y da su versión. No guarda nada. */
+  detectGit(path: string | null): Promise<GitDetect>;
+  /** `user.name` / `user.email` de la configuración de git (solo lectura). */
+  gitIdentity(): Promise<GitIdentity>;
+  /** Estado de cada CLI de IA (ejecuta `--version`). */
+  getCliStatus(): Promise<CliStatus[]>;
 
   // IA (solo propone; lee Rust el diff preparado, la UI no envía ningún diff)
   aiState(tabId: string): Promise<AiState>;

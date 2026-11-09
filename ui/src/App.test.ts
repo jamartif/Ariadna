@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App.svelte';
 import { AppStore } from '$lib/stores/app.svelte';
 import { mockApi, resetGlobals } from './test/helpers';
@@ -51,7 +51,10 @@ describe('App (integración con mockApi)', () => {
     await screen.findByRole('tab', { name: /ariadna/ });
     await userEvent.keyboard('{Control>}2{/Control}');
     await waitFor(() => expect(app.activeId).toBe('tab-legacy'));
-    expect(await screen.findByText('Fusión en curso')).toBeInTheDocument();
+    expect((await screen.findAllByText('Fusión en curso')).length).toBeGreaterThan(0);
+    // Banner de la pestaña con el contador y acceso directo al estudio de conflictos.
+    expect(await screen.findByText('4 archivos en conflicto por resolver')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resolver conflictos' })).toBeInTheDocument();
   });
 
   it('pestaña con repo desaparecido: banner con Reintentar, Localizar y Cerrar', async () => {
@@ -115,5 +118,18 @@ describe('App (integración con mockApi)', () => {
     boot();
     await screen.findByRole('tab', { name: /ariadna/ });
     expect(document.querySelector('header[data-tauri-drag-region]')).not.toBeNull();
+  });
+});
+
+describe('vigilancia de archivos: foco de la ventana', () => {
+  it('al recuperar el foco de la ventana refresca la pestaña activa', async () => {
+    const api = mockApi();
+    const spy = vi.spyOn(api, 'refresh');
+    const app = new AppStore(api);
+    render(App, { props: { app } });
+    await screen.findByRole('grid', { name: /Archivos con cambios/ });
+    spy.mockClear();
+    window.dispatchEvent(new Event('focus'));
+    expect(spy).toHaveBeenCalledWith('tab-ariadna');
   });
 });

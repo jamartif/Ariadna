@@ -5,7 +5,7 @@ use std::path::Path;
 
 use async_trait::async_trait;
 
-use crate::error::GitResult;
+use crate::error::{GitError, GitResult};
 use crate::models::{
     Branch, Commit, ConflictFile, DiffHunk, DiffScope, FileDiff, GitPath, GitStatus,
     IntegrationState, MergeFastForward, MergeResult, Remote, Repository,
@@ -124,6 +124,19 @@ pub trait GitServing: Send + Sync {
         contents: &[u8],
         confirmation: &Confirmation,
     ) -> GitResult<()>;
+    /// Borra el archivo de trabajo (resolución «quedarse con el borrado»). No hace `git add`.
+    /// Por defecto no está soportado: lo implementa el motor real.
+    async fn remove_working_tree_file(
+        &self,
+        _repo: &Repository,
+        relative_path: &GitPath,
+        _confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        Err(GitError::Io(format!(
+            "borrar {} no está soportado por este motor",
+            relative_path.to_string_lossy()
+        )))
+    }
     async fn mark_resolved(&self, repo: &Repository, path: &GitPath) -> GitResult<()>;
     /// Descarta cambios del árbol de trabajo (`git restore`). Destructivo.
     async fn restore_worktree(

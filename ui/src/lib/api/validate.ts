@@ -217,7 +217,7 @@ export const providerState = obj({
 
 export const aiState = obj({
   enabled: bool,
-  profile: obj({ name: str, kind: oneOf('personal', 'empresa') }),
+  profile: obj({ name: str, kind: oneOf('personal', 'empresa') }, { rule: str }),
   choice: oneOf('auto', 'claude', 'codex', 'copilot'),
   providers: arr(providerState)
 });
@@ -240,9 +240,54 @@ export const aiCommitSuggestion = obj({
   repoRevision: int
 });
 
+// ---- Ajustes (ipc.md «Ajustes») ---------------------------------------------------------
+
+export const profileRule = obj({ pattern: str, profile: oneOf('personal', 'empresa') });
+
+export const appSettings = obj({
+  version: int,
+  language: oneOf('es'),
+  theme: oneOf('system', 'light', 'dark'),
+  diffFontSize: int,
+  gitPath: nullable(str),
+  pullRebase: bool,
+  profileRules: arr(profileRule)
+});
+
+export const settingsView = obj({
+  settings: appSettings,
+  load: obj({ status: oneOf('ok', 'missing', 'migrated', 'resetCorrupt'), warning: nullable(str) }),
+  about: obj({ version: str, license: str, repository: str, issues: str }),
+  git: nullable(obj({ path: str, version: str })),
+  gitProblem: nullable(str)
+});
+
+export const gitDetect = obj({
+  ok: bool,
+  source: oneOf('configured', 'auto'),
+  path: nullable(str),
+  version: nullable(str),
+  problem: nullable(str)
+});
+
+export const gitIdentity = obj({ name: nullable(str), email: nullable(str) });
+
+export const cliStatus = obj({
+  id: oneOf('claude', 'codex', 'copilot'),
+  displayName: str,
+  installed: bool,
+  availability: oneOf('available', 'missing', 'failed'),
+  version: nullable(str),
+  path: nullable(str),
+  hint: nullable(str),
+  loginCommand: str
+});
+
 export const credentialTest = obj({ ok: bool, code: nullable(str) });
 
 export const cloneProgress = obj({ operationId: int, phase: str, percent: nullable(num) });
+
+export const notice = obj({ kind: str, message: str });
 
 export const openResult = obj({ tab: tabInfo, alreadyOpen: bool });
 
@@ -309,6 +354,7 @@ export function detect(value: unknown): { name: string; validator: V } | null {
   if (!list && has('subject', 'body', 'provider', 'repoRevision')) return { name: 'AiCommitSuggestion', validator: aiCommitSuggestion };
   if (!list && has('enabled', 'profile', 'providers')) return { name: 'AiState', validator: aiState };
   if (!list && has('maxBytes', 'redactions')) return { name: 'ContextPreview', validator: contextPreview };
+  if (!list && has('kind', 'message') && !has('code')) return { name: 'Notice', validator: notice };
   if (!list && has('operationId', 'phase')) return { name: 'CloneProgress', validator: cloneProgress };
   if (has('lastOpened', 'isFavorite')) return { name: list ? 'RecentRepository[]' : 'RecentRepository', validator: list ? arr(recentRepository) : recentRepository };
   if (has('tabId', 'missing')) return { name: list ? 'TabInfo[]' : 'TabInfo', validator: list ? arr(tabInfo) : tabInfo };

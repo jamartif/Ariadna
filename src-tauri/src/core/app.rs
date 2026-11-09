@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -17,12 +17,14 @@ use tokio::task::JoinHandle;
 
 use super::ai::AiService;
 use super::api::{
-    ApiSessionEvent, ApiSnapshot, AppEvent, AppState, EventSink, GitInfo, OpenResult,
+    ApiSessionEvent, ApiSnapshot, AppEvent, AppState, EventSink, NoticeEvent, OpenResult,
     SnapshotEvent, TabInfo,
 };
 use super::error::{ApiError, ApiResult};
 use super::prompter::Prompter;
 use super::session_file::{SavedTab, SessionData, SessionStore, SESSION_VERSION};
+use super::settings::{locate_configured, GitSlot, SettingsService};
+use super::watch::{TabWatcher, Trigger, WatchConfig, WatchTimings};
 
 /// Tope blando de pestañas (spec §8): se avisa, no se impide.
 pub const SOFT_TAB_LIMIT: usize = 20;
@@ -60,6 +62,8 @@ pub(crate) struct TabMeta {
 /// Sesión viva de una pestaña y las tareas que la acompañan.
 pub(crate) struct Live {
     pub session: RepositorySession,
+    /// Solo la pestaña activa tiene vigilante (spec §8); se libera al desactivarla o cerrarla.
+    pub watcher: Option<TabWatcher>,
     forwarder: JoinHandle<()>,
     bridge: JoinHandle<()>,
 }
@@ -92,9 +96,9 @@ pub(crate) struct TabsState {
 }
 
 pub(crate) struct Inner {
-    pub git: Option<GitInstall>,
-    pub git_problem: Option<String>,
-    pub runner: Option<GitRunner>,
+    /// `git` en uso (cambia en caliente al guardar la ruta en Ajustes).
+    pub gitslot: Mutex<GitSlot>,
+    pub settings: SettingsService,
     pub recents: RecentStore,
     pub sessions: SessionStore,
     pub prompter: Arc<dyn Prompter>,
@@ -103,6 +107,11 @@ pub(crate) struct Inner {
     pub open_lock: tokio::sync::Mutex<()>,
     pub(crate) ai: AiService,
     next_tab: AtomicU64,
+    /// ¿Ventana con el foco? El sondeo de respaldo solo corre enfocado.
+    focused: Arc<AtomicBool>,
+    /// El aviso de «vigilancia degradada» sale una sola vez por ejecución.
+    watch_notice_sent: Arc<AtomicBool>,
+    watch_timings: Mutex<WatchTimings>,
 }
 
 impl Inner {
@@ -239,11 +248,20 @@ fn spawn_forwarder(
 impl AppCore {
     /// Crea el núcleo (sin restaurar la sesión: llama a [`AppCore::restore_session`]).
     pub fn new(config: AppConfig, prompter: Arc<dyn Prompter>, sink: Arc<dyn EventSink>) -> Self {
-        let (git, git_problem) = match config.git {
-            Ok(g) => (Some(g), None),
-            Err(p) => (None, Some(p)),
+        let settings = SettingsService::new(&config.data_dir);
+        // La ruta de git de Ajustes manda; si ya no sirve se avisa y se usa la detección.
+        let git = match settings.snapshot().git_path {
+            Some(p) => match locate_configured(&p) {
+                Ok(g) => Ok(g),
+                Err(why) => {
+                    settings.warn(format!(
+                        "La ruta de git guardada no sirve ({why}) y se usa la detectada."
+                    ));
+                    config.git
+                }
+            },
+            None => config.git,
         };
-        let runner = git.as_ref().map(GitRunner::new);
         let recents = RecentStore::with_base_dir(&config.data_dir);
         if let Some(legacy) = &config.legacy_recents {
             if legacy != recents.file() && legacy.is_file() {
@@ -254,9 +272,8 @@ impl AppCore {
         }
         Self {
             inner: Arc::new(Inner {
-                git,
-                git_problem,
-                runner,
+                gitslot: Mutex::new(GitSlot::from_result(git)),
+                settings,
                 recents,
                 sessions: SessionStore::new(config.data_dir.join("session.json")),
                 prompter,
@@ -265,13 +282,16 @@ impl AppCore {
                 open_lock: tokio::sync::Mutex::new(()),
                 ai: AiService::new(&config.data_dir),
                 next_tab: AtomicU64::new(1),
+                focused: Arc::new(AtomicBool::new(true)),
+                watch_notice_sent: Arc::new(AtomicBool::new(false)),
+                watch_timings: Mutex::new(WatchTimings::default()),
             }),
         }
     }
 
     pub(crate) fn runner(&self) -> ApiResult<GitRunner> {
-        self.inner.runner.clone().ok_or_else(|| {
-            let problem = self.inner.git_problem.clone().unwrap_or_default();
+        self.git_runner().ok_or_else(|| {
+            let problem = self.git_state().1.unwrap_or_default();
             ApiError::new(
                 "GIT_NOT_FOUND",
                 format!("No encuentro git. Instálalo o indica su ruta en Ajustes. {problem}")
@@ -318,15 +338,13 @@ impl AppCore {
                 .collect();
             (infos, st.active.clone())
         };
+        let (git, git_problem) = self.git_state();
         AppState {
             tabs: tabs.0,
             active_tab_id: tabs.1,
             recents: self.recents_list(),
-            git: self.inner.git.as_ref().map(|g| GitInfo {
-                path: display(&g.path),
-                version: g.version.to_string(),
-            }),
-            git_problem: self.inner.git_problem.clone(),
+            git,
+            git_problem,
         }
     }
 
@@ -388,6 +406,7 @@ impl AppCore {
             spawn_forwarder(Arc::clone(&self.inner.sink), meta.clone(), session.clone());
         Ok(Live {
             session,
+            watcher: None,
             forwarder,
             bridge,
         })
@@ -478,6 +497,7 @@ impl AppCore {
         };
         self.persist();
         self.emit_tabs_changed();
+        self.sync_watchers();
         let tab = self
             .tab_info_of(&id)
             .ok_or_else(|| ApiError::unknown_tab(&id))?;
@@ -525,6 +545,7 @@ impl AppCore {
         self.persist();
         self.emit_tabs_changed();
         // Solo la pestaña visible vigila a fondo: al activarla se pone al día (spec §8).
+        self.sync_watchers();
         if let Some(s) = session {
             tokio::spawn(async move {
                 let _ = s.refresh().await;
@@ -608,10 +629,16 @@ impl AppCore {
         self.close_live(removed).await;
         self.persist();
         self.emit_tabs_changed();
+        // Si la cerrada era la activa, la nueva activa pasa a vigilarse.
+        self.sync_watchers();
         Ok(true)
     }
 
-    async fn close_live(&self, tab: Tab) {
+    async fn close_live(&self, mut tab: Tab) {
+        if let Some(live) = tab.live.as_mut() {
+            // Primero se libera el vigilante del SO: no debe refrescar una sesión que se cierra.
+            live.watcher = None;
+        }
         if let Some(live) = &tab.live {
             live.stop_forwarder();
             live.session.close(CLOSE_GRACE).await;
@@ -665,6 +692,133 @@ impl AppCore {
         true
     }
 
+    // --- vigilancia de archivos --------------------------------------------------------------
+
+    /// Ajusta los tiempos del vigilante (pruebas). Afecta a los vigilantes que se creen después.
+    #[cfg(test)]
+    pub(crate) fn set_watch_timings(&self, t: WatchTimings) {
+        *self
+            .inner
+            .watch_timings
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = t;
+    }
+
+    /// ¿La pestaña tiene vigilante, y está en modo sondeo? (`None` si no vigila.)
+    #[cfg(test)]
+    pub(crate) fn watcher_state(&self, tab_id: &str) -> Option<bool> {
+        let st = self.inner.lock();
+        st.tabs
+            .iter()
+            .find(|t| t.meta.id == tab_id)
+            .and_then(|t| t.live.as_ref())
+            .and_then(|l| l.watcher.as_ref())
+            .map(TabWatcher::is_polling)
+    }
+
+    /// Deja un vigilante solo en la pestaña activa y libera los demás. Las pestañas
+    /// inactivas no vigilan: al activarlas se refrescan (equivale a marcarlas «sucias»).
+    pub(crate) fn sync_watchers(&self) {
+        let timings = *self
+            .inner
+            .watch_timings
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let wanted = {
+            let mut st = self.inner.lock();
+            let active = st.active.clone();
+            let mut wanted = None;
+            for t in &mut st.tabs {
+                let Some(live) = t.live.as_mut() else {
+                    continue;
+                };
+                if active.as_deref() == Some(t.meta.id.as_str()) {
+                    if live.watcher.is_none() {
+                        wanted = Some((t.meta.id.clone(), live.session.clone()));
+                    }
+                } else {
+                    live.watcher = None;
+                }
+            }
+            wanted
+        };
+        let Some((id, session)) = wanted else {
+            return;
+        };
+        // Fuera del cerrojo: el primer recorrido del árbol puede tardar.
+        let watcher = self.start_watcher(&session, timings);
+        let mut st = self.inner.lock();
+        let still_active = st.active.as_deref() == Some(id.as_str());
+        if let Some(live) = st
+            .tabs
+            .iter_mut()
+            .find(|t| t.meta.id == id)
+            .and_then(|t| t.live.as_mut())
+        {
+            if still_active && live.watcher.is_none() {
+                live.watcher = Some(watcher);
+            }
+        }
+    }
+
+    fn start_watcher(&self, session: &RepositorySession, timings: WatchTimings) -> TabWatcher {
+        let repo = session.repository();
+        let s = session.clone();
+        let trigger: Trigger = Arc::new(move || {
+            let s = s.clone();
+            Box::pin(async move {
+                // Con una mutación en curso el refresco se descarta solo (la propia mutación
+                // programa el suyo); sin cambios reales no se publica nada.
+                let _ = s.refresh().await;
+            })
+        });
+        let sink = Arc::clone(&self.inner.sink);
+        let sent = Arc::clone(&self.inner.watch_notice_sent);
+        TabWatcher::start(
+            WatchConfig {
+                worktree: repo.path.clone(),
+                git_dir: repo.git_dir.clone(),
+                timings,
+            },
+            trigger,
+            Arc::clone(&self.inner.focused),
+            Arc::new(move |reason| {
+                eprintln!("vigilancia de archivos degradada a sondeo: {reason}");
+                if !sent.swap(true, Ordering::SeqCst) {
+                    sink.emit(AppEvent::Notice(NoticeEvent {
+                        kind: "watcherFallback".to_owned(),
+                        message: format!(
+                            "No se pueden vigilar los archivos de este repositorio ({reason}). Ariadna comprobará los cambios cada pocos segundos y al volver a la ventana."
+                        ),
+                    }));
+                }
+            }),
+        )
+    }
+
+    /// La ventana gana o pierde el foco. Al ganarlo se refresca la pestaña activa.
+    pub fn set_window_focus(&self, focused: bool) {
+        self.inner.focused.store(focused, Ordering::SeqCst);
+        if !focused {
+            return;
+        }
+        let session = {
+            let st = self.inner.lock();
+            let active = st.active.as_deref();
+            st.tabs
+                .iter()
+                .find(|t| Some(t.meta.id.as_str()) == active)
+                .and_then(|t| t.live.as_ref().map(|l| l.session.clone()))
+        };
+        if let Some(s) = session {
+            if let Ok(rt) = tokio::runtime::Handle::try_current() {
+                rt.spawn(async move {
+                    let _ = s.refresh().await;
+                });
+            }
+        }
+    }
+
     // --- recientes -------------------------------------------------------------------------
 
     pub fn toggle_favorite(&self, path: &str) -> ApiResult<Vec<RecentRepository>> {
@@ -714,6 +868,7 @@ impl AppCore {
             st.active = active_id.or_else(|| st.tabs.first().map(|t| t.meta.id.clone()));
         }
         self.emit_tabs_changed();
+        self.sync_watchers();
     }
 
     async fn restore_tab(&self, path: &str) -> Option<Tab> {

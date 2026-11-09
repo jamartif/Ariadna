@@ -73,7 +73,7 @@
 
 > Segunda oleada hecha: rediseño visual con barra de título propia, botón de IA para el commit (`ai_generate_commit_message`, consentimiento Personal/Empresa), clonado con PAT (askpass temporal, nunca guardado), historial virtualizado con grafo y ramas (crear, cambiar, renombrar, borrar, fusionar sin conflictos). Deuda: test de cancelar clonado ignorado con git 2.53; retirar el aviso de la barra lateral sobre ramas; resolución de conflictos; panel de remotos.
 
-> Estado: backend Tauri (`AppCore`, pestañas, 34 comandos IPC, `session.json`, fixtures) e interfaz Svelte (diseño claro/oscuro, pestañas, bienvenida, cambios, diff por hunk, commit, paleta) **hechos y validados en CI** (Windows x64/ARM64, macOS 15, Ubuntu); el instalador NSIS y el `.dmg` se construyen. Pendiente: vigilancia de archivos (`notify`), hibernación de pestañas, pantalla de recuperación, clonado (D20) en la bienvenida, `opener`.
+> Estado: backend Tauri (`AppCore`, pestañas, 34 comandos IPC, `session.json`, fixtures) e interfaz Svelte (diseño claro/oscuro, pestañas, bienvenida, cambios, diff por hunk, commit, paleta) **hechos y validados en CI** (Windows x64/ARM64, macOS 15, Ubuntu); el instalador NSIS y el `.dmg` se construyen. Pendiente: hibernación de pestañas, pantalla de recuperación, clonado (D20) en la bienvenida, `opener`.
 - [x] Proyecto Tauri 2 + Svelte 5 + TS; `tauri-specta`; CI falla si el binding difiere
 - [x] CSP estricta y capabilities mínimas; sin `{@html}`
 - [ ] **Barra de título duplicada** (hallazgo en la ventana nativa): Tauri dibuja la barra del sistema y la UI dibuja la suya. Poner `decorations: false` con controles propios (minimizar, maximizar, cerrar) en Windows y Linux, y `titleBarStyle: Overlay` con los semáforos en macOS; verificar el arrastre (`data-tauri-drag-region`)
@@ -82,7 +82,7 @@
 - [x] Confirmaciones nativas desde Rust con token de un solo uso (§6)
 - [ ] Pestañas: hibernación, reorden por teclado, indicadores, tope de 20
 - [x] `session.json` versionado y atómico, con respaldo y recuperación
-- [ ] Watcher (`notify`): debounce, `.git/` aparte, overflow → refresco completo, sondeo en UNC
+- [x] Watcher (`notify`): debounce 300 ms/tope 2 s, `.git/` aparte, solo la pestaña activa, overflow → refresco completo + sondeo (UNC, 9p/WSL), refresco al recuperar el foco, toast único si degrada; la revisión sube con cada cambio externo y un refresco sin cambios no publica
 - [ ] Bienvenida: ruta, Examinar, recientes, favoritos, **Clonar desde URL** y formulario de credenciales (PAT o «iniciar sesión con el navegador») (D20)
 - [ ] Plugin `opener` con capability mínima (solo `https` y el host del remoto) para «Abrir en el navegador» y «Crear pull request» (D19)
 - [x] Paleta de comandos y registro único de atajos (ES/US/DE)
@@ -96,8 +96,8 @@
 - [x] Barra de commit (Ctrl/⌘+Intro), amend
 - [ ] Historial paginado con filtro local y búsqueda global (NF-4)
 - [ ] Ramas y remotos, con icono del proveedor y acciones «Abrir en el navegador» / «Crear pull request» (D19)
-- [ ] Estudio de conflicto a tres paneles + resultado
-- [ ] Ajustes: pull con rebase, ruta de git
+- [x] Estudio de conflicto a tres paneles + resultado (panel «Conflictos», `merge_start`/`merge_state`/`resolve_conflict`/`merge_continue`/`merge_abort`; textarea con resultado editable, sin CodeMirror: no está en el proyecto)
+- [x] Ajustes: pantalla (General, Git, IA, Cuentas, Acerca de), `settings.json` versionado y atómico, pull con rebase, ruta de git con «Detectar», reglas repo → perfil (`ipc.md` «Ajustes»)
 - [x] Vitest de componentes
 - [ ] Publicar `0.1.0-alpha.1` (macOS y Windows x64)
 

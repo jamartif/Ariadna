@@ -45,10 +45,23 @@ export class AppStore {
   async init(): Promise<void> {
     const offs = await Promise.all([
       this.api.listen('tabs-changed', (s) => this.applyAppState(s)),
-      this.api.listen('tab-updated', (info) => this.patchInfo(info))
+      this.api.listen('tab-updated', (info) => this.patchInfo(info)),
+      this.api.listen('notice', (n) => {
+        if (n.kind === 'watcherFallback') toasts.push({ kind: 'warning', title: t('toast.watcherFallback'), message: n.message });
+      })
     ]);
     this.unlisten = offs;
     await this.reload();
+  }
+
+  /**
+   * La ventana recupera el foco: se pide un refresco de la pestaña activa. Es lo que más se
+   * nota cuando se edita fuera y el vigilante del SO no entrega eventos (red, WSL).
+   * Rust no publica nada si no cambió nada.
+   */
+  refreshActiveOnFocus(): void {
+    const tab = this.activeTab;
+    if (tab) void tab.refresh();
   }
 
   async reload(): Promise<void> {

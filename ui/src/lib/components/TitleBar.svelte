@@ -20,16 +20,18 @@
     onnew: () => void;
     onreorder: (ids: string[]) => void;
     onpalette: () => void;
+    onsettings?: () => void;
     /** Para pruebas y revisión visual; por defecto se detecta con `navigator`. */
     platform?: Platform;
     /** `undefined` = detectar Tauri; `null` = sin API de ventana (navegador). */
     windowApi?: WindowApi | null;
   }
-  let { entries, activeId, onactivate, onclose, onnew, onreorder, onpalette, platform, windowApi }: Props = $props();
+  let { entries, activeId, onactivate, onclose, onnew, onreorder, onpalette, onsettings, platform, windowApi }: Props = $props();
 
   const os = $derived(platform ?? detectPlatform());
   const mac = $derived(os === 'mac');
   const paletteCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'palette.open')?.combo ?? 'Mod+K', mac));
+  const settingsCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'settings.open')?.combo ?? 'Mod+,', mac));
   const themeIcon = $derived<IconName>(settings.theme === 'light' ? 'sun' : settings.theme === 'dark' ? 'moon' : 'monitor');
   const themeLabel = $derived(t(`settings.theme.${settings.theme}`));
 
@@ -88,6 +90,18 @@
     >
       <Icon name="rows" size={16} />
     </button>
+    {#if onsettings}
+      <button
+        type="button"
+        class="btn btn-ghost btn-icon tool"
+        onclick={onsettings}
+        aria-label={t('settings.open')}
+        title={t('settings.openHint', { combo: settingsCombo })}
+        aria-keyshortcuts="Control+, Meta+,"
+      >
+        <Icon name="sliders" size={16} />
+      </button>
+    {/if}
   </div>
 
   {#if !mac}<WindowControls api={windowApi} />{/if}

@@ -6,7 +6,7 @@
 
   let { snapshot, loading }: { snapshot: Snapshot | null; loading: boolean } = $props();
 
-  // Placeholder navegable: el contenido real (checkout, crear, fusionar) llega en la oleada 2.
+  // Selección local de la lista; cambiar de rama, crear y fusionar viven en el panel de Ramas.
   let current = $state<string | null>(null);
 </script>
 
@@ -76,7 +76,6 @@
         </ul>
       </section>
     {/if}
-    <p class="note"><Icon name="info" size={12} />{t('sidebar.soon')}</p>
   {/if}
 </nav>
 
@@ -174,15 +173,6 @@
     font-size: 0.6875rem;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
-  }
-  .note {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    margin-top: auto;
-    padding: var(--space-2);
-    color: var(--text-subtle);
-    font-size: var(--text-xs);
   }
   .sk {
     display: flex;

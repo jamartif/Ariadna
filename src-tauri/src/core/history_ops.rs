@@ -129,7 +129,7 @@ impl AppCore {
         Err(ApiError::new(
             "MERGE_CONFLICTS",
             format!(
-                "Hay conflictos al fusionar «{branch}» ({} archivo(s)). La fusión se ha cancelado y no se ha cambiado nada; la resolución de conflictos llegará en una versión posterior.",
+                "Hay conflictos al fusionar «{branch}» ({} archivo(s)). La fusión se ha cancelado y no se ha cambiado nada. Usa `merge_start` para dejarla en curso y resolver los conflictos.",
                 paths.len()
             ),
             Some(shown.join("\n")),

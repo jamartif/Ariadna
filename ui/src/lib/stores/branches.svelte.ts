@@ -1,6 +1,6 @@
 import type { Branch, MergeFastForward } from '$lib/api/types';
 import { toApiError } from '$lib/api/types';
-import { t } from '$lib/i18n';
+import { t, tn } from '$lib/i18n';
 import { toasts } from './toasts.svelte';
 import type { TabState } from './tab.svelte';
 
@@ -19,8 +19,6 @@ export class BranchesController {
   selected = $state<string | null>(null);
   busy = $state<string | null>(null);
   prompt = $state.raw<BranchPrompt>(null);
-  /** Último fallo de una fusión por conflictos (se muestra junto al detalle de la rama). */
-  conflict = $state.raw<{ branch: string; message: string; files: string[] } | null>(null);
 
   constructor(readonly tab: TabState) {}
 
@@ -48,7 +46,6 @@ export class BranchesController {
 
   select(name: string): void {
     this.selected = name;
-    this.conflict = null;
   }
 
   private async run<T>(label: string, title: string, fn: () => Promise<T>): Promise<T | undefined> {
@@ -116,23 +113,25 @@ export class BranchesController {
     this.prompt = { kind: 'merge', name };
   }
 
-  /** Fusiona sin conflictos; si los hay, Rust aborta y aquí se explica. */
+  /**
+   * Fusiona. Si hay conflictos el merge **queda en curso** y se pasa al panel «Conflictos»
+   * (desde ahí se resuelven o se aborta). Devuelve `true` si la fusión terminó.
+   */
   async merge(name: string, fastForward: MergeFastForward = 'allow'): Promise<boolean> {
     this.prompt = null;
-    this.conflict = null;
     if (this.busy) return false;
     this.busy = 'merge';
     try {
-      const res = await this.tab.api.mergeClean(this.tab.id, name, fastForward);
-      toasts.success(res === 'upToDate' ? t('branches.mergeUpToDate', { name }) : t('branches.merged', { name }));
+      const { result } = await this.tab.api.mergeStart(this.tab.id, name, fastForward);
+      if (typeof result === 'object' && 'conflicts' in result) {
+        toasts.warning(t('branches.mergeStarted'), tn('conflicts.banner.pending', result.conflicts.paths.length));
+        this.tab.panel = 'conflicts';
+        return false;
+      }
+      toasts.success(result === 'upToDate' ? t('branches.mergeUpToDate', { name }) : t('branches.merged', { name }));
       return true;
     } catch (e) {
-      const err = toApiError(e);
-      if (err.code === 'MERGE_CONFLICTS') {
-        this.conflict = { branch: name, message: err.message, files: (err.detail ?? '').split('\n').filter((l) => l !== '') };
-      } else {
-        toasts.error(t('branches.mergeFailed'), err);
-      }
+      toasts.error(t('branches.mergeFailed'), toApiError(e));
       return false;
     } finally {
       this.busy = null;

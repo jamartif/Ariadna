@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMockApi } from './mockApi';
 import { toApiError, ApiError, API_ERROR_CODES, CODES_ADDED_IN_WAVE_2 } from './types';
-import { aiCommitSuggestion, aiState, appState, check, cloneProgress, contextPreview, credentialTest, detect, diffScope, fileDiff, gitPath, mergeResult, openResult, recentRepository, snapshot } from './validate';
+import { aiCommitSuggestion, aiState, appState, check, cloneProgress, contextPreview, credentialTest, detect, diffScope, fileDiff, gitPath, mergeResult, notice, openResult, recentRepository, snapshot } from './validate';
 
 // Fixtures REALES generados por `src-tauri` desde el motor de Rust (ipc.md, «Verificación del contrato»).
 const fixtureModules = import.meta.glob('./fixtures/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
@@ -146,5 +146,14 @@ describe('ApiError', () => {
     expect(toApiError('boom').code).toBe('UNKNOWN');
     expect(toApiError({ code: 'NOPE', message: 'x' }).code).toBe('UNKNOWN');
     expect(toApiError(new Error('x')).message).toBe('x');
+  });
+});
+
+describe('evento notice', () => {
+  it('tiene la forma de ipc.md y se detecta', () => {
+    const n = { kind: 'watcherFallback', message: 'sin inotify' };
+    expect(check(notice, n)).toEqual([]);
+    expect(detect(n)?.name).toBe('Notice');
+    expect(check(notice, { kind: 'x' }).length).toBeGreaterThan(0);
   });
 });

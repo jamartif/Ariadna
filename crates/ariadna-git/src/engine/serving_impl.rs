@@ -140,6 +140,15 @@ impl GitServing for GitCliEngine {
         self.write_working_tree_file(repo, relative_path, contents, confirmation)
             .await
     }
+    async fn remove_working_tree_file(
+        &self,
+        repo: &Repository,
+        relative_path: &GitPath,
+        confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        self.remove_working_tree_file(repo, relative_path, confirmation)
+            .await
+    }
     async fn mark_resolved(&self, repo: &Repository, path: &GitPath) -> GitResult<()> {
         self.mark_resolved(repo, path).await
     }

@@ -32,6 +32,7 @@ use super::api::{
 };
 use super::app::AppCore;
 use super::error::{ApiError, ApiResult};
+use super::settings::RuleMatch;
 
 /// Versión actual de `ai-settings.json`.
 pub const AI_SETTINGS_VERSION: u32 = 1;
@@ -335,10 +336,23 @@ impl AiService {
         Ok(())
     }
 
-    fn grant_consent(&self, id: ProviderId) {
+    /// Copia de los ajustes con el perfil de la regla repo → perfil (si la hay) como activo.
+    fn snapshot_with(&self, rule: Option<&RuleMatch>) -> StoredAi {
+        let mut st = self.snapshot();
+        if let Some(r) = rule {
+            st.active_profile = r.kind;
+        }
+        st
+    }
+
+    /// El consentimiento se guarda en el perfil con el que se pidió (no en el «activo»).
+    fn grant_consent(&self, kind: ProfileKind, id: ProviderId) {
         let mut guard = lock(&self.shared.state);
         let mut next = guard.clone();
-        next.profile_mut().grant_consent(id);
+        match kind {
+            ProfileKind::Personal => next.personal.grant_consent(id),
+            ProfileKind::Empresa => next.empresa.grant_consent(id),
+        }
         if let Err(e) = self.shared.store.save(&next) {
             // La decisión vale para esta sesión; se vuelve a preguntar en la próxima.
             eprintln!("no se pudo guardar el consentimiento de IA: {e}");
@@ -577,6 +591,7 @@ pub(crate) fn compose_state(st: &StoredAi, avail: &[(ProviderId, Availability)])
         profile: AiProfileInfo {
             name: profile.name.clone(),
             kind: profile.kind,
+            rule: None,
         },
         choice: st.settings.provider,
         providers,
@@ -789,7 +804,7 @@ impl AppCore {
 
     // --- comandos --------------------------------------------------------------------------
 
-    async fn ai_availability(&self, st: &StoredAi) -> Vec<(ProviderId, Availability)> {
+    pub(crate) async fn ai_availability(&self, st: &StoredAi) -> Vec<(ProviderId, Availability)> {
         let svc = self.ai();
         let (claude, codex, copilot) = (
             svc.provider(ProviderId::Claude, st),
@@ -808,22 +823,28 @@ impl AppCore {
         ]
     }
 
-    async fn ai_state_now(&self) -> AiState {
-        let st = self.ai().snapshot();
+    /// Estado de IA; `rule` es la regla repo → perfil de la pestaña (manda sobre el perfil
+    /// elegido en Ajustes y se muestra en `profile.rule`).
+    async fn ai_state_now(&self, rule: Option<&RuleMatch>) -> AiState {
+        let st = self.ai().snapshot_with(rule);
         let avail = self.ai_availability(&st).await;
-        compose_state(&st, &avail)
+        let mut state = compose_state(&st, &avail);
+        state.profile.rule = rule.map(|r| r.pattern.clone());
+        state
     }
 
     /// `ai_state`: ajustes, perfil y disponibilidad real de cada CLI (ejecutando `--version`).
     pub async fn ai_state(&self, tab_id: &str) -> ApiResult<AiState> {
         self.live(tab_id)?;
-        Ok(self.ai_state_now().await)
+        let rule = self.rule_for_tab(tab_id);
+        Ok(self.ai_state_now(rule.as_ref()).await)
     }
 
     /// `ai_update_settings`: ajuste global, guardado en `ai-settings.json`.
     pub async fn ai_update_settings(&self, patch: AiSettingsPatch) -> ApiResult<AiState> {
         self.ai().update(&patch)?;
-        Ok(self.ai_state_now().await)
+        let rule = patch.tab_id.as_deref().and_then(|t| self.rule_for_tab(t));
+        Ok(self.ai_state_now(rule.as_ref()).await)
     }
 
     /// `ai_preview_context`: lo que se enviaría, sin enviarlo ni preguntar nada.
@@ -832,7 +853,8 @@ impl AppCore {
         tab_id: &str,
         options: Option<AiCommitOptions>,
     ) -> ApiResult<AiContextPreview> {
-        let st = self.ai().snapshot();
+        let rule = self.rule_for_tab(tab_id);
+        let st = self.ai().snapshot_with(rule.as_ref());
         let g = self
             .ai_gather(tab_id, &options.unwrap_or_default(), &st)
             .await?;
@@ -913,7 +935,9 @@ impl AppCore {
         run: &Run,
     ) -> ApiResult<AiCommitSuggestion> {
         let svc = self.ai();
-        let mut st = svc.snapshot();
+        // La regla repo → perfil manda sobre el perfil elegido en Ajustes.
+        let rule = self.rule_for_tab(tab_id);
+        let mut st = svc.snapshot_with(rule.as_ref());
 
         let gathered = self.ai_gather(tab_id, options, &st).await?;
         if run.token.is_cancelled() {
@@ -928,8 +952,9 @@ impl AppCore {
             .map_err(ApiError::from)?;
 
         if let Plan::NeedConsent(provider) = svc.plan(&st)? {
-            self.ai_ask_consent(provider, &gathered, run).await?;
-            st = svc.snapshot();
+            self.ai_ask_consent(provider, st.active_profile, &gathered, run)
+                .await?;
+            st = svc.snapshot_with(rule.as_ref());
         }
         if run.token.is_cancelled() {
             return Err(AiError::Cancelled.into());
@@ -962,11 +987,18 @@ impl AppCore {
     }
 
     /// Diálogo nativo de primer uso: qué se envía y a quién. Se guarda lo que decida.
-    async fn ai_ask_consent(&self, provider: ProviderId, g: &Gathered, run: &Run) -> ApiResult<()> {
+    async fn ai_ask_consent(
+        &self,
+        provider: ProviderId,
+        kind: ProfileKind,
+        g: &Gathered,
+        run: &Run,
+    ) -> ApiResult<()> {
         let svc = self.ai();
         // Dos pestañas que piden consentimiento a la vez no abren dos diálogos.
         let _guard = svc.shared.consent_lock.lock().await;
-        let st = svc.snapshot();
+        let mut st = svc.snapshot();
+        st.active_profile = kind;
         if st.profile().has_consent(provider) {
             return Ok(());
         }
@@ -1008,7 +1040,7 @@ impl AppCore {
         if !accepted {
             return Err(AiError::ConsentRequired { provider }.into());
         }
-        svc.grant_consent(provider);
+        svc.grant_consent(kind, provider);
         Ok(())
     }
 }

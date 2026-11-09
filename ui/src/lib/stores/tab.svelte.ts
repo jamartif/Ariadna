@@ -21,7 +21,7 @@ export interface Selection {
   path: GitPath;
 }
 
-export type Panel = 'changes' | 'history' | 'branches';
+export type Panel = 'changes' | 'history' | 'branches' | 'conflicts';
 
 const DRAFT_PREFIX = 'ariadna.draft:';
 

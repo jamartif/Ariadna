@@ -18,6 +18,8 @@ import {
   sha,
   smallHunk
 } from './mockData';
+import { demoConflictDefs, toConflictFile, toSummary, type MockConflictDef } from './mockConflicts';
+import { hasMarkers } from '$lib/util/conflictMarkers';
 import {
   ApiError,
   type AiCommitSuggestion,
@@ -25,24 +27,31 @@ import {
   type AmendDraft,
   type ApiErrorCode,
   type ApiEvents,
+  type AppSettings,
   type AppState,
   type Branch,
+  type CliStatus,
   type Commit,
   type ConflictFile,
   type ContextPreview,
   type DiffHunk,
   type DiffScope,
   type FileDiff,
+  type GitDetect,
   type GitPath,
   type IntegrationState,
+  type MergeState,
+  type ConflictResolution,
   type OpenResult,
   type RecentRepository,
   type Remote,
+  type SettingsView,
   type Snapshot,
   type StatusEntry,
   type TabInfo
 } from './types';
 import { pathText } from '../util/gitpath';
+import { matchRule, normalizePattern } from '../util/profileRules';
 
 export interface MockOptions {
   /** Latencia simulada por llamada en ms (por defecto 120; 0 en tests). */
@@ -72,6 +81,8 @@ interface MockFile {
   ignored?: boolean;
   wasUntracked?: boolean;
   conflictKind?: StatusEntry['conflictKind'];
+  /** Resuelto durante el merge en curso (el aborto lo deshace). */
+  fromMerge?: boolean;
 }
 
 interface MockRepo {
@@ -91,6 +102,10 @@ interface MockRepo {
   busy: string | null;
   ahead: number;
   behind: number;
+  /** Rama que se integra (merge en curso). */
+  mergeSource?: string;
+  /** Contenido de los archivos en conflicto (tres lados + marcadores). */
+  conflictDefs?: Map<string, MockConflictDef>;
 }
 
 const hasStaged = (f: MockFile) => f.staged.length > 0 || (f.binary === true && f.binaryStaged === true);
@@ -254,6 +269,8 @@ function buildConflicts(): MockRepo {
     files: [
       conflicted('src/billing/invoice.ts', 'bothModified'),
       conflicted('src/billing/tax.ts', 'deletedByThem'),
+      conflicted('config/settings.json', 'bothAdded'),
+      conflicted('assets/logo.png', 'bothModified'),
       { path: 'package.json', base: 'M', staged: [smallHunk('package.json', 3)], unstaged: [] },
       { path: 'README.md', base: 'M', staged: [], unstaged: [smallHunk('README.md', 1)] }
     ],
@@ -264,6 +281,8 @@ function buildConflicts(): MockRepo {
     remoteBranches: [branch('origin/main', 13, false, null), branch('origin/feature/payments', 14, false, null)],
     remotes: [{ name: 'origin', fetchUrl: 'https://git.example.com/legacy-api.git', pushUrl: 'https://git.example.com/legacy-api.git' }],
     integration: 'merging',
+    mergeSource: 'origin/main',
+    conflictDefs: demoConflictDefs(),
     commits: makeCommits(['Integra pasarela de pagos', 'Añade modelo de factura', 'Configura CI']),
     revision: 1,
     busy: null,
@@ -358,7 +377,7 @@ const BASE_RECENTS: RecentRepository[] = [
  * estado (stage, unstage, commit…) modifican el modelo y emiten `snapshot` con
  * una `revision` creciente, igual que Rust.
  */
-export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<string, MockRepo> } {
+export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<string, MockRepo>; __lastPullRebase: () => boolean | null } {
   const scenario = options.scenario;
   const latency = (options.latency ?? 120) * (scenario === 'slow' ? 6 : 1);
   const now = options.now ?? (() => new Date());
@@ -385,6 +404,25 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
       { id: 'copilot', displayName: 'Copilot', availability: 'failed', version: '1.0.4', hint: 'Sin sesión iniciada', enabled: true, consented: false, loginCommand: 'copilot login' }
     ]
   };
+  // ---- Ajustes simulados (ipc.md «Ajustes») ----
+  let settingsData: AppSettings = {
+    version: 1,
+    language: 'es',
+    theme: 'system',
+    diffFontSize: 13,
+    gitPath: null,
+    pullRebase: false,
+    profileRules: [
+      { pattern: 'dev.azure.com', profile: 'empresa' },
+      { pattern: 'github.com', profile: 'personal' }
+    ]
+  };
+  let gitInUse: { path: string; version: string } | null = scenario === 'nogit' ? null : { path: '/usr/bin/git', version: '2.47.0' };
+  const settingsWarning =
+    scenario === 'settings-corrupt' ? 'settings.json no se pudo leer (expected value at line 1 column 1). Se guardó una copia como settings.json.bak y se usan los valores por defecto.' : null;
+  /** Último `pull` pedido (para comprobar en tests que respeta el ajuste). */
+  let lastPullRebase: boolean | null = null;
+  const cliPaths: Record<string, string> = { claude: '/usr/local/bin/claude', copilot: '/usr/local/bin/copilot' };
   /** Cancelaciones pendientes por pestaña (`ai_cancel`). */
   const aiCancelled = new Map<string, () => void>();
   /** Credenciales «guardadas» por host: solo si el token era válido; el secreto NO se conserva. */
@@ -460,15 +498,33 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
   function conflictsOf(r: MockRepo): ConflictFile[] {
     return r.files
       .filter((f) => f.base === 'U')
-      .map((f) => ({
-        path: f.path,
-        kind: f.conflictKind ?? 'bothModified',
-        ours: { oid: sha(1), content: 'ours\n', isBinary: false },
-        base: { oid: sha(2), content: 'base\n', isBinary: false },
-        theirs: { oid: sha(3), content: 'theirs\n', isBinary: false },
-        workingTree: '<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n',
-        hunks: [{ id: 0, ours: 'ours\n', base: 'base\n', theirs: 'theirs\n' }]
-      }));
+      .map((f) => {
+        const def = r.conflictDefs?.get(f.path);
+        if (def) return toConflictFile(f.path, def);
+        return {
+          path: f.path,
+          kind: f.conflictKind ?? 'bothModified',
+          ours: { oid: sha(1), content: 'ours\n', isBinary: false },
+          base: { oid: sha(2), content: 'base\n', isBinary: false },
+          theirs: { oid: sha(3), content: 'theirs\n', isBinary: false },
+          workingTree: '<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n',
+          hunks: [{ id: 0, ours: 'ours\n', base: null, theirs: 'theirs\n' }]
+        };
+      });
+  }
+
+  function mergeStateOf(r: MockRepo): MergeState {
+    const conflicts = r.files
+      .filter((f) => f.base === 'U')
+      .map((f) => toSummary(f.path, r.conflictDefs?.get(f.path) ?? { kind: f.conflictKind ?? 'bothModified', ours: 'ours\n', base: 'base\n', theirs: 'theirs\n', working: '<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n' }));
+    return {
+      integration: r.integration,
+      otherHead: r.integration === 'none' ? null : sha(77),
+      sourceLabel: r.mergeSource ?? null,
+      message: r.integration === 'none' ? '' : `Merge branch '${r.mergeSource ?? 'rama'}' into ${r.branch ?? 'HEAD'}\n`,
+      conflicts,
+      canContinue: r.integration !== 'none' && conflicts.length === 0
+    };
   }
 
   function snapshotOf(r: MockRepo): Snapshot {
@@ -517,6 +573,47 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
           ? 'No se encontró Git en el equipo. Ariadna necesita Git 2.39 o posterior.'
           : null
     };
+  }
+
+  /** `ai` con la regla repo → perfil de la pestaña aplicada (como hace Rust). */
+  function withRule(tabId: string | undefined): AiState {
+    const out = clone(ai);
+    const r = tabId ? repos.get(tabId) : undefined;
+    const url = r?.remotes.find((x) => x.name === 'origin')?.fetchUrl ?? r?.remotes[0]?.fetchUrl;
+    const m = url ? matchRule(settingsData.profileRules, url) : null;
+    if (m) {
+      out.profile = { name: m.profile === 'empresa' ? 'Empresa' : 'Personal', kind: m.profile, rule: m.pattern };
+      out.providers = out.providers.map((p) => (p.id === 'claude' ? { ...p, enabled: m.profile !== 'empresa' } : p));
+    }
+    return out;
+  }
+
+  function badSetting(field: string, why: string): ApiError {
+    return err('PARSE', `Ajuste no válido «${field}»: ${why}.`, field);
+  }
+
+  function settingsView(): SettingsView {
+    return {
+      settings: clone(settingsData),
+      load: { status: settingsWarning ? 'resetCorrupt' : 'ok', warning: settingsWarning },
+      about: { version: '0.1.0-alpha.1', license: 'MIT', repository: 'https://github.com/jamartif/Ariadna', issues: 'https://github.com/jamartif/Ariadna/issues' },
+      git: gitInUse ? { ...gitInUse } : null,
+      gitProblem: gitInUse ? null : 'No se encontró Git en el equipo. Ariadna necesita Git 2.39 o posterior.'
+    };
+  }
+
+  function probeGit(path: string | null): GitDetect {
+    if (scenario === 'nogit' && path === null) {
+      return { ok: false, source: 'auto', path: null, version: null, problem: 'No se encontró git. Instala Git (https://git-scm.com/downloads) o indica su ruta en Ajustes.' };
+    }
+    if (path === null) return { ok: true, source: 'auto', path: '/usr/bin/git', version: '2.47.0', problem: null };
+    if (!/^([a-z]:[\\/]|\/)/i.test(path)) {
+      return { ok: false, source: 'configured', path: null, version: null, problem: 'La ruta debe ser absoluta (p. ej. C:\\Program Files\\Git\\cmd\\git.exe).' };
+    }
+    if (/git(\.exe)?$/i.test(path) && !/viejo|nada|missing/i.test(path)) {
+      return { ok: true, source: 'configured', path, version: /git-2\.3\d/.test(path) ? '2.36.0' : '2.47.0', problem: null };
+    }
+    return { ok: false, source: 'configured', path: null, version: null, problem: `No hay un ejecutable de git en «${path}».` };
   }
 
   function touchRecent(r: MockRepo): void {
@@ -621,7 +718,7 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
     sortHunks(to);
   }
 
-  const api: Api & { __repos: Map<string, MockRepo> } = {
+  const api: Api & { __repos: Map<string, MockRepo>; __lastPullRebase: () => boolean | null } = {
     __repos: repos,
 
     async appState() {
@@ -992,7 +1089,7 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
         throw err('INVALID_REFERENCE', `No existe la referencia ${branchName}.`);
       }
       if (/conflict|choca/i.test(branchName)) {
-        throw err('MERGE_CONFLICTS', `Hay conflictos al fusionar «${branchName}» (2 archivo(s)). La fusión se ha cancelado y no se ha cambiado nada; la resolución de conflictos llegará en una versión posterior.`, 'src/lib/api/types.ts\ndocs/ipc.md');
+        throw err('MERGE_CONFLICTS', `Hay conflictos al fusionar «${branchName}» (2 archivo(s)). La fusión se ha cancelado y no se ha cambiado nada. Usa «merge_start» para dejarla en curso y resolver los conflictos.`, 'src/lib/api/types.ts\ndocs/ipc.md');
       }
       const target = r.branches.find((b) => b.name === branchName);
       if (target && r.branches.find((b) => b.isHead)?.oid === target.oid) return 'upToDate';
@@ -1023,9 +1120,107 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
       await delay();
       if (r.integration === 'none') throw err('NO_INTEGRATION', 'No hay ninguna integración en curso.');
       r.integration = 'none';
-      r.files = r.files.filter((f) => f.base !== 'U');
+      r.files = r.files.filter((f) => f.base !== 'U' && !f.fromMerge);
+      r.conflictDefs = undefined;
       publish(r);
       return { done: true };
+    },
+    async mergeStart(tabId, branchName, fastForward) {
+      const r = repoOf(tabId);
+      if (r.integration !== 'none') throw err('COMMAND_FAILED', 'Ya hay una integración en curso.', 'fatal: You have not concluded your merge (MERGE_HEAD exists).');
+      if (!/conflict|choca/i.test(branchName)) {
+        return { result: await api.mergeClean(tabId, branchName, fastForward), state: null };
+      }
+      await delay();
+      if (!r.branches.some((b) => b.name === branchName) && !r.remoteBranches.some((b) => b.name === branchName)) {
+        throw err('INVALID_REFERENCE', `No existe la referencia ${branchName}.`);
+      }
+      const defs = demoConflictDefs();
+      r.integration = 'merging';
+      r.mergeSource = branchName;
+      r.conflictDefs = defs;
+      for (const [path, d] of defs) {
+        r.files = r.files.filter((f) => f.path !== path);
+        r.files.unshift({ path, base: 'U', staged: [], unstaged: [], conflictKind: d.kind });
+      }
+      publish(r);
+      return { result: { conflicts: { paths: [...defs.keys()] } }, state: mergeStateOf(r) };
+    },
+    async mergeState(tabId) {
+      await delay(Math.min(latency, 60));
+      return clone(mergeStateOf(repoOf(tabId)));
+    },
+    async resolveConflict(tabId, path, resolution: ConflictResolution) {
+      const r = repoOf(tabId);
+      await delay();
+      const f = r.files.find((x) => x.path === pathText(path) && x.base === 'U');
+      if (!f) throw err('CONFLICT_NOT_FOUND', 'Ese archivo ya no está en conflicto.', pathText(path));
+      const def = r.conflictDefs?.get(f.path);
+      const binary = def?.binary === true;
+      let deleting = false;
+      if ('side' in resolution) {
+        const content = resolution.side === 'ours' ? def?.ours : resolution.side === 'theirs' ? def?.theirs : def?.base;
+        if (content === null || content === undefined) {
+          if (resolution.side === 'base') throw err('CONFLICT_NOT_FOUND', 'Este conflicto no tiene versión base.', f.path);
+          deleting = true;
+        }
+      } else if (binary) {
+        throw err('CONFLICT_NOT_TEXT', 'Este archivo es binario o no es texto UTF-8: solo se puede elegir una versión entera.', f.path);
+      } else if ('manual' in resolution) {
+        if (hasMarkers(new TextDecoder().decode(new Uint8Array(resolution.manual)))) {
+          throw err('CONFLICT_MARKERS_REMAIN', 'Quedan marcadores de conflicto (<<<<<<<, =======, >>>>>>>) sin resolver en el resultado.');
+        }
+      }
+      if (!confirmFn(`¿${deleting ? 'Borrar' : 'Sobrescribir'} ${f.path} con la resolución elegida y marcarlo como resuelto?`)) return { done: false };
+      if (deleting) {
+        r.files = r.files.filter((x) => x !== f);
+      } else {
+        f.base = 'M';
+        f.conflictKind = undefined;
+        f.fromMerge = true;
+        f.staged = [smallHunk(f.path, 1)];
+      }
+      r.conflictDefs?.delete(f.path);
+      publish(r);
+      return { done: true };
+    },
+    async mergeContinue(tabId, message) {
+      const r = repoOf(tabId);
+      await delay();
+      if (r.integration === 'none') throw err('NO_INTEGRATION', 'No hay ninguna integración en curso.');
+      const pending = r.files.filter((f) => f.base === 'U');
+      if (pending.length > 0) {
+        throw err('CONFLICTS_PENDING', `Quedan ${pending.length} archivo(s) en conflicto sin resolver.`, pending.map((f) => f.path).join('\n'));
+      }
+      const subject = (message ?? '').trim() === '' ? `Merge branch '${r.mergeSource ?? 'rama'}' into ${r.branch ?? 'HEAD'}` : (message ?? '').trim().split('\n')[0] ?? '';
+      const newHead = sha(r.commits.length + 120 + r.revision);
+      r.commits = [
+        {
+          sha: newHead,
+          parents: [r.commits[0]?.sha ?? ''].filter(Boolean),
+          subject,
+          body: '',
+          authorName: 'Javier',
+          authorEmail: 'javier@example.com',
+          authorDateIso: now().toISOString(),
+          refs: [`HEAD -> ${r.branch ?? 'main'}`]
+        },
+        ...r.commits.map((x) => ({ ...x, refs: x.refs.filter((ref) => !ref.startsWith('HEAD')) }))
+      ];
+      for (const f of r.files.filter((x) => x.fromMerge)) {
+        r.files = r.files.filter((x) => x !== f);
+      }
+      r.integration = 'none';
+      r.conflictDefs = undefined;
+      publish(r);
+      return { done: true, sha: newHead, integration: 'none' };
+    },
+    async mergeAbort(tabId) {
+      const r = repoOf(tabId);
+      await delay();
+      if (r.integration !== 'merging') throw err('NO_INTEGRATION', 'No hay ningún merge en curso.');
+      if (!confirmFn('¿Abortar el merge? Se perderá lo resuelto hasta ahora.')) return { done: false };
+      return api.abortIntegration(tabId);
     },
     async getConflicts(tabId) {
       await delay();
@@ -1046,8 +1241,9 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
     async fetch() {
       await delay(latency * 3);
     },
-    async pull() {
+    async pull(_tabId, _remote, _refspec, rebase) {
       await delay(latency * 3);
+      lastPullRebase = rebase ?? settingsData.pullRebase;
       return 'upToDate';
     },
     async push() {
@@ -1056,8 +1252,7 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
 
     async aiState(tabId) {
       await delay(Math.min(latency, 60));
-      repoOf(tabId);
-      return clone(ai);
+      return withRule(tabId);
     },
     async aiUpdateSettings(patch) {
       await delay(Math.min(latency, 60));
@@ -1072,8 +1267,61 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
         const { id, enabled } = patch.providerEnabled;
         ai.providers = ai.providers.map((p) => (p.id === id ? { ...p, enabled } : p));
       }
-      return clone(ai);
+      return withRule(patch.tabId);
     },
+    // Ajustes
+    async getSettings() {
+      await delay(Math.min(latency, 60));
+      return settingsView();
+    },
+    async saveSettings(next) {
+      await delay(Math.min(latency, 80));
+      if (next.language !== 'es') throw badSetting('language', 'por ahora solo existe el español (es)');
+      if (!Number.isInteger(next.diffFontSize) || next.diffFontSize < 10 || next.diffFontSize > 24) throw badSetting('diffFontSize', 'debe estar entre 10 y 24');
+      if (!['system', 'light', 'dark'].includes(next.theme)) throw badSetting('theme', 'valor desconocido');
+      const path = next.gitPath?.trim() || null;
+      const rules = [];
+      const seen = new Set<string>();
+      for (const r of next.profileRules) {
+        const n = normalizePattern(r.pattern);
+        if (!n.ok) throw badSetting('profileRules', 'patrón no válido');
+        if (seen.has(n.pattern)) throw badSetting('profileRules', 'hay dos reglas con el mismo patrón');
+        seen.add(n.pattern);
+        rules.push({ pattern: n.pattern, profile: r.profile });
+      }
+      if (path !== settingsData.gitPath) {
+        const probe = probeGit(path);
+        if (path !== null && !probe.ok) throw err('GIT_NOT_FOUND', `La ruta de git no es válida. ${probe.problem ?? ''}`.trim(), probe.problem ?? undefined);
+        gitInUse = probe.ok && probe.path && probe.version ? { path: probe.path, version: probe.version } : null;
+        emit('tabs-changed', appState());
+      }
+      settingsData = { ...next, version: 1, gitPath: path, profileRules: rules };
+      return settingsView();
+    },
+    async detectGit(path) {
+      await delay(Math.min(latency * 2, 300));
+      return probeGit(path?.trim() ? path.trim() : null);
+    },
+    async gitIdentity() {
+      await delay(Math.min(latency, 60));
+      return scenario === 'no-identity' ? { name: null, email: null } : { name: 'Javier Martínez', email: 'javier@example.com' };
+    },
+    async getCliStatus(): Promise<CliStatus[]> {
+      await delay(Math.min(latency * 2, 300));
+      return ai.providers.map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        installed: p.availability === 'available',
+        availability: p.availability,
+        version: p.version,
+        path: p.availability === 'available' ? (cliPaths[p.id] ?? `/usr/local/bin/${p.id}`) : null,
+        hint: p.hint,
+        loginCommand: p.loginCommand
+      }));
+    },
+    /** Solo pruebas: lo último que recibió `pull`. */
+    __lastPullRebase: () => lastPullRebase,
+
     async aiPreviewContext(tabId): Promise<ContextPreview> {
       await delay(Math.min(latency, 80));
       const r = repoOf(tabId);

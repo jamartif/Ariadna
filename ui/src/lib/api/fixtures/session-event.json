@@ -5,7 +5,7 @@
       "operationId": 1,
       "type": "operationStarted"
     },
-    "revision": 0,
+    "revision": 1,
     "sessionId": "tab-1"
   },
   {
@@ -16,7 +16,7 @@
       "operationId": 2,
       "type": "operationRetrying"
     },
-    "revision": 1,
+    "revision": 2,
     "sessionId": "tab-1"
   },
   {
@@ -27,7 +27,7 @@
       "operationId": 1,
       "type": "operationFinished"
     },
-    "revision": 1,
+    "revision": 2,
     "sessionId": "tab-1"
   },
   {
@@ -42,15 +42,15 @@
       "operationId": 2,
       "type": "operationFinished"
     },
-    "revision": 1,
+    "revision": 2,
     "sessionId": "tab-1"
   },
   {
     "kind": {
-      "revision": 1,
+      "revision": 2,
       "type": "snapshotPublished"
     },
-    "revision": 1,
+    "revision": 2,
     "sessionId": "tab-1"
   },
   {

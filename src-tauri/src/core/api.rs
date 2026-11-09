@@ -121,6 +121,15 @@ pub struct SnapshotEvent {
     pub snapshot: ApiSnapshot,
 }
 
+/// Aviso no intrusivo para la UI (toast). Evento `notice`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoticeEvent {
+    /// Identificador estable (`watcherFallback`).
+    pub kind: String,
+    pub message: String,
+}
+
 /// Evento de sesión en el IPC: `{ sessionId, revision, kind: { type, ... } }`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -275,6 +284,7 @@ pub enum AppEvent {
     TabUpdated(TabInfo),
     Session(ApiSessionEvent),
     TabsChanged(AppState),
+    Notice(NoticeEvent),
 }
 
 /// Destino de los eventos (Tauri en producción, un colector en los tests).
@@ -290,6 +300,10 @@ pub trait EventSink: Send + Sync {
 pub struct AiProfileInfo {
     pub name: String,
     pub kind: ProfileKind,
+    /// Patrón de la regla repo → perfil que ha decidido este perfil (`dev.azure.com`); `None`
+    /// si es el perfil elegido en Ajustes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule: Option<String>,
 }
 
 /// Estado de un proveedor para Ajustes y para el botón de IA.
@@ -335,6 +349,8 @@ pub struct BinaryPathPatch {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AiSettingsPatch {
+    /// Pestaña para la que se calcula el `AiState` devuelto (aplica su regla repo → perfil).
+    pub tab_id: Option<String>,
     pub enabled: Option<bool>,
     pub choice: Option<String>,
     pub profile: Option<String>,

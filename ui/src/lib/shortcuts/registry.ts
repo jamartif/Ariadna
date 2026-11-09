@@ -41,7 +41,14 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'commit.submit', combo: 'Mod+Enter', scope: 'editor', label: 'shortcut.commit' },
   // Mod+Shift+G (no Alt: en macOS ⌥G produce «©» y la tecla no coincide).
   { id: 'ai.generate', combo: 'Mod+Shift+G', scope: 'tab', label: 'shortcut.aiGenerate' },
-  { id: 'clone.open', combo: 'Mod+Shift+O', scope: 'global', label: 'shortcut.clone' }
+  // Estudio de conflictos: solo con el foco dentro del editor (`data-scope="editor"`).
+  { id: 'conflicts.next', combo: 'Alt+ArrowDown', scope: 'editor', label: 'shortcut.conflictNext' },
+  { id: 'conflicts.prev', combo: 'Alt+ArrowUp', scope: 'editor', label: 'shortcut.conflictPrev' },
+  { id: 'conflicts.ours', combo: 'Alt+1', scope: 'editor', label: 'shortcut.conflictOurs' },
+  { id: 'conflicts.theirs', combo: 'Alt+2', scope: 'editor', label: 'shortcut.conflictTheirs' },
+  { id: 'conflicts.both', combo: 'Alt+3', scope: 'editor', label: 'shortcut.conflictBoth' },
+  { id: 'clone.open', combo: 'Mod+Shift+O', scope: 'global', label: 'shortcut.clone' },
+  { id: 'settings.open', combo: 'Mod+,', scope: 'global', label: 'shortcut.settings' }
 ];
 
 interface Parsed {

@@ -2,8 +2,8 @@
   import { t, tn } from '$lib/i18n';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { branchesOf } from '$lib/stores/branches.svelte';
+  import { conflictsOf } from '$lib/stores/conflicts.svelte';
   import { branchNameProblem } from '$lib/util/branchName';
-  import Banner from './Banner.svelte';
   import EmptyState from './EmptyState.svelte';
   import Icon from './Icon.svelte';
 
@@ -15,6 +15,7 @@
   const remote = $derived(br ? b.isRemote(br.name) : false);
   const current = $derived(b.current);
   const busy = $derived(b.busy !== null);
+  const integrating = $derived((tab.snapshot?.integration ?? 'none') !== 'none');
 
   let renaming = $state(false);
   let renameTo = $state('');
@@ -63,15 +64,13 @@
       {/if}
     </dl>
 
-    {#if b.conflict && b.conflict.branch === br.name}
-      <div class="conflict">
-        <Banner kind="warning" title={t('branches.conflictTitle')} message={b.conflict.message}>
-          {#if b.conflict.files.length > 0}
-            <ul class="cfiles mono">
-              {#each b.conflict.files as f (f)}<li>{f}</li>{/each}
-            </ul>
-          {/if}
-        </Banner>
+    {#if integrating}
+      <div class="integ" role="status">
+        <p><Icon name="git-merge" size={14} />{t(`integration.${tab.snapshot?.integration ?? 'merging'}`)}. {t('branches.integrationNote')}</p>
+        <div class="row">
+          <button type="button" class="btn btn-ghost" disabled={busy} onclick={() => conflictsOf(tab).abort()}>{t('conflicts.abort')}</button>
+          <button type="button" class="btn btn-primary" onclick={() => (tab.panel = 'conflicts')}>{t('conflicts.banner.open')}</button>
+        </div>
       </div>
     {/if}
 
@@ -114,7 +113,7 @@
         {#if b.busy === 'checkout'}<Icon name="loader" size={14} spin />{:else}<Icon name="arrow-right" size={14} />{/if}
         {remote ? t('branches.checkoutRemote') : t('branches.checkout')}
       </button>
-      <button type="button" class="btn" disabled={br.isHead || busy || !current} onclick={() => b.askMerge(br.name)}>
+      <button type="button" class="btn" disabled={br.isHead || busy || !current || integrating} onclick={() => b.askMerge(br.name)}>
         {#if b.busy === 'merge'}<Icon name="loader" size={14} spin />{:else}<Icon name="git-merge" size={14} />{/if}
         {t('branches.merge', { into: current?.name ?? 'HEAD' })}
       </button>
@@ -243,9 +242,19 @@
     gap: var(--space-2);
     margin-top: var(--space-1);
   }
-  .cfiles {
-    margin: var(--space-2) 0 0;
-    padding-left: var(--space-4);
-    font-size: var(--text-xs);
+  .integ {
+    display: grid;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-md);
+    background: var(--warning-soft);
+  }
+  .integ p {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    margin: 0;
+    font-size: var(--text-sm);
   }
 </style>

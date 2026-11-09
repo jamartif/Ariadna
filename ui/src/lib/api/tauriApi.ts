@@ -54,12 +54,23 @@ export function createTauriApi(): Api {
     mergeClean: (tabId, branch, fastForward) => call('merge_clean', { tabId, branch, fastForward }),
     continueIntegration: (tabId) => call('continue_integration', { tabId }),
     abortIntegration: (tabId) => call('abort_integration', { tabId }),
+    mergeStart: (tabId, branch, fastForward) => call('merge_start', { tabId, branch, fastForward }),
+    mergeState: (tabId) => call('merge_state', { tabId }),
+    resolveConflict: (tabId, path, resolution) => call('resolve_conflict', { tabId, path, resolution }),
+    mergeContinue: (tabId, message) => call('merge_continue', { tabId, message }),
+    mergeAbort: (tabId) => call('merge_abort', { tabId }),
     getConflicts: (tabId) => call('get_conflicts', { tabId }),
     writeConflictResolution: (tabId, path, contents) =>
       call('write_conflict_resolution', { tabId, path, contents }),
     markResolved: (tabId, path) => call('mark_resolved', { tabId, path }),
     fetch: (tabId, remote) => call('fetch', { tabId, remote }),
-    pull: (tabId, remote, refspec, rebase) => call('pull', { tabId, remote, refspec, rebase }),
+    pull: (tabId, remote, refspec, rebase) => call('pull', { tabId, remote, refspec, rebase: rebase ?? null }),
+
+    getSettings: () => call('get_settings'),
+    saveSettings: (settings) => call('save_settings', { settings }),
+    detectGit: (path) => call('detect_git', { path }),
+    gitIdentity: () => call('git_identity'),
+    getCliStatus: () => call('get_cli_status'),
     push: (tabId, remote, refspec, setUpstream) =>
       call('push', { tabId, remote, refspec, setUpstream }),
 

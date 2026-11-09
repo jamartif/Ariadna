@@ -409,7 +409,7 @@ async fn fetch_pull_push_contra_un_remoto_local() {
     env.git(&other, &["push", "-q", "origin", "main"]);
     let r = env
         .core
-        .pull(&id, "origin".into(), Some("main".into()), false)
+        .pull(&id, "origin".into(), Some("main".into()), Some(false))
         .await
         .unwrap();
     assert!(matches!(r, MergeResult::FastForward { .. }), "{r:?}");

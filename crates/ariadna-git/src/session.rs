@@ -216,6 +216,16 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    /// ¿Mismo contenido, sin mirar la revisión?
+    pub fn same_content(&self, other: &Snapshot) -> bool {
+        self.status == other.status
+            && self.branches == other.branches
+            && self.remote_branches == other.remote_branches
+            && self.remotes == other.remotes
+            && self.integration == other.integration
+            && self.conflicts == other.conflicts
+    }
+
     /// Snapshot vacío de la revisión 0 (antes del primer refresco).
     pub fn empty() -> Self {
         Self {
@@ -856,26 +866,55 @@ impl Core {
         let Some(snapshot) = built else {
             return Ok(RefreshOutcome::Skipped);
         };
-        let snapshot = Arc::new(snapshot);
+        let mut snapshot = snapshot;
         // Comprobar y publicar en la misma sección crítica que sube la revisión.
-        let published = {
-            let s = self.lock();
+        enum Verdict {
+            Published(Arc<Snapshot>),
+            Unchanged(Arc<Snapshot>),
+            Stale,
+        }
+        let verdict = {
+            let mut s = self.lock();
             if !s.open() || token.is_cancelled() {
                 return Err(GitError::Cancelled);
             }
-            if s.revision == start && !s.mutation_pending() {
-                self.snapshot_tx.send_replace(Arc::clone(&snapshot));
-                true
+            if s.revision != start || s.mutation_pending() {
+                Verdict::Stale
             } else {
-                false
+                let current = self.snapshot_tx.borrow().clone();
+                // Una mutación ya subió la revisión y este refresco es el que la publica;
+                // si no, el cambio viene de fuera (editor, `git` en otra terminal).
+                let external = current.revision == start;
+                if external && current.same_content(&snapshot) {
+                    // Nada cambió (p. ej. el vigilante vio un `git add` nuestro o ruido):
+                    // ni revisión nueva ni evento, para no provocar refrescos en cascada.
+                    Verdict::Unchanged(current)
+                } else {
+                    // Todo cambio externo lleva una revisión mayor: la UI descarta los
+                    // snapshots cuya revisión no sube.
+                    if external {
+                        s.revision = start + 1;
+                    }
+                    snapshot.revision = s.revision;
+                    let snapshot = Arc::new(snapshot);
+                    self.snapshot_tx.send_replace(Arc::clone(&snapshot));
+                    Verdict::Published(snapshot)
+                }
             }
         };
-        if published {
-            self.activate_if_opening();
-            self.emit(SessionEventKind::SnapshotPublished { revision: start });
-            Ok(RefreshOutcome::Published(snapshot))
-        } else {
-            Ok(RefreshOutcome::Skipped)
+        match verdict {
+            Verdict::Published(snapshot) => {
+                self.activate_if_opening();
+                self.emit(SessionEventKind::SnapshotPublished {
+                    revision: snapshot.revision,
+                });
+                Ok(RefreshOutcome::Published(snapshot))
+            }
+            Verdict::Unchanged(current) => {
+                self.activate_if_opening();
+                Ok(RefreshOutcome::Published(current))
+            }
+            Verdict::Stale => Ok(RefreshOutcome::Skipped),
         }
     }
 }

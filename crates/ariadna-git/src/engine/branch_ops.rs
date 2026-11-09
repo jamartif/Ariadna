@@ -632,6 +632,22 @@ impl GitCliEngine {
             .map_err(|e| GitError::Io(e.to_string()))?
     }
 
+    /// Borra un archivo del árbol de trabajo (resolver «borrado vs. modificado» quedándose con
+    /// el lado borrado). No sigue enlaces fuera del repo y no falla si ya no existe. No hace
+    /// `git add`. La [`Confirmation`] es la prueba de que la capa de comandos obtuvo permiso.
+    pub async fn remove_working_tree_file(
+        &self,
+        repo: &Repository,
+        relative_path: &GitPath,
+        _confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        let root = repo.path.clone();
+        let rel = relative_path.clone();
+        tokio::task::spawn_blocking(move || remove_checked(&root, &rel))
+            .await
+            .map_err(|e| GitError::Io(e.to_string()))?
+    }
+
     /// `git add -- <ruta>`.
     pub async fn mark_resolved(&self, repo: &Repository, path: &GitPath) -> GitResult<()> {
         let mut args = os(&["add"]);
@@ -816,6 +832,23 @@ fn ensure_inside(root: &Path, dir: &Path, rel: &GitPath) -> GitResult<()> {
         Ok(())
     } else {
         Err(escapes(rel))
+    }
+}
+
+fn remove_checked(root: &Path, rel: &GitPath) -> GitResult<()> {
+    validate_repo_path_components(rel.as_bytes()).map_err(|_| escapes(rel))?;
+    let root = dunce::canonicalize(root)?;
+    let target = root.join(rel.to_path_buf());
+    let parent = target.parent().ok_or_else(|| escapes(rel))?.to_path_buf();
+    ensure_inside(&root, &parent, rel)?;
+    match std::fs::symlink_metadata(&target) {
+        Ok(m) if m.is_dir() => Err(GitError::Io(format!(
+            "{} es un directorio",
+            rel.to_string_lossy()
+        ))),
+        Ok(_) => Ok(std::fs::remove_file(&target)?),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.into()),
     }
 }
 

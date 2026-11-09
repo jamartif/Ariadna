@@ -138,7 +138,7 @@ export const esScreens = {
   'branches.switched': 'Ahora estás en «{name}»',
   'branches.merge': 'Fusionar en {into}',
   'branches.mergeAsk': '¿Fusionar «{name}» en «{into}»?',
-  'branches.mergeNote': 'Solo se fusiona si no hay conflictos. Si los hay, la fusión se cancela y el repositorio queda como estaba.',
+  'branches.mergeNote': 'Si hay conflictos, la fusión queda en curso: los resuelves en el panel Conflictos o la abortas y todo vuelve a como estaba.',
   'branches.mergeConfirm': 'Fusionar',
   'branches.merged': '«{name}» fusionada',
   'branches.mergeUpToDate': '«{name}» ya estaba fusionada: no hay nada que hacer',

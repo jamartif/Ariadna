@@ -138,10 +138,12 @@ describe('DiffView', () => {
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
   });
 
-  it('un archivo en conflicto remite a la siguiente versión', async () => {
+  it('un archivo en conflicto ofrece abrirlo en el estudio de conflictos', async () => {
     const { tab } = await loadedTab('tab-legacy');
     pick(tab, 'conflicts', 'src/billing/invoice.ts');
     render(DiffView, { props: { tab } });
     expect(screen.getByText('Archivo en conflicto')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir en Conflictos' }));
+    expect(tab.panel).toBe('conflicts');
   });
 });

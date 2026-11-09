@@ -5,7 +5,8 @@
   import type { TabState } from '$lib/stores/tab.svelte';
   import { settings } from '$lib/stores/settings.svelte';
   import { countLines, diffStats, flattenDiff, hunkHeader, isGiant, truncateLine, type DiffRow } from '$lib/util/diff';
-  import { pathBase, pathDir, pathText } from '$lib/util/gitpath';
+  import { conflictsOf } from '$lib/stores/conflicts.svelte';
+  import { pathBase, pathDir, pathKey, pathText } from '$lib/util/gitpath';
   import { buildOffsets, indexAt } from '$lib/util/virtual';
   import Banner from './Banner.svelte';
   import EmptyState from './EmptyState.svelte';
@@ -104,6 +105,14 @@
   function kindName(kind: string): string {
     return kind === 'addition' ? t('diff.added') : kind === 'deletion' ? t('diff.removed') : '';
   }
+
+  /** Lleva el archivo seleccionado al estudio de conflictos. */
+  function openConflict() {
+    const c = conflictsOf(tab);
+    const f = c.files.find((x) => sel && pathKey(x.path) === sel.key);
+    if (f) c.select(f);
+    tab.panel = 'conflicts';
+  }
 </script>
 
 {#snippet hunkBar(h: DiffHunk, index: number, total: number)}
@@ -130,7 +139,11 @@
   {#if !sel}
     <EmptyState icon="file-diff" title={t('diff.noneTitle')} body={t('diff.noneBody')} />
   {:else if sel.section === 'conflicts'}
-    <EmptyState icon="git-merge" tone="accent" title={t('diff.conflictTitle')} body={t('diff.conflictBody')} />
+    <EmptyState icon="git-merge" tone="accent" title={t('diff.conflictTitle')} body={t('diff.conflictBody')}>
+      <button type="button" class="btn btn-primary" onclick={openConflict}>
+        <Icon name="git-merge" size={14} />{t('diff.conflictOpen')}
+      </button>
+    </EmptyState>
   {:else if sel.section === 'ignored'}
     <EmptyState icon="eye" title={t('diff.ignoredTitle')} body={t('diff.ignoredBody')} />
   {:else if error}

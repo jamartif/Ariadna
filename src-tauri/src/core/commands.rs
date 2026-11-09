@@ -484,8 +484,10 @@ impl AppCore {
         tab_id: &str,
         remote: String,
         refspec: Option<String>,
-        rebase: bool,
+        rebase: Option<bool>,
     ) -> ApiResult<MergeResult> {
+        // Sin indicación explícita manda el ajuste «pull con rebase» (Ajustes → Git).
+        let rebase = rebase.unwrap_or_else(|| self.pull_rebase_setting());
         self.mutate_op(
             tab_id,
             "pull",

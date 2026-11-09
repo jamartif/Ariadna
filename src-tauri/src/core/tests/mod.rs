@@ -6,8 +6,11 @@ mod clone_history;
 mod destructive;
 mod errors;
 mod fixtures;
+mod merge;
 mod session;
+mod settings;
 mod tabs;
+mod watch;
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};

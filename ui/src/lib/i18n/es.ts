@@ -4,10 +4,14 @@
  * mismas claves (el tipo `MessageKey` lo exige) y registrarlo en `i18n/index.ts`.
  * Un test comprueba que toda clave usada en el código existe aquí.
  */
+import { esConflicts } from './es.conflicts';
 import { esScreens } from './es.screens';
+import { esSettings } from './es.settings';
 
 export const es = {
   ...esScreens,
+  ...esSettings,
+  ...esConflicts,
   // Aplicación
   'app.loading': 'Cargando Ariadna…',
   'app.errorTitle': 'No se pudo iniciar Ariadna',
@@ -96,7 +100,6 @@ export const es = {
   'sidebar.behind': '{n} por detrás',
   'sidebar.emptyTitle': 'Sin ramas todavía',
   'sidebar.emptyBody': 'Cuando el repositorio tenga ramas o remotos aparecerán aquí.',
-  'sidebar.soon': 'Cambiar de rama, crear y fusionar llegan en la siguiente versión.',
 
   // Estado
   'status.branch': 'Rama actual',
@@ -190,7 +193,8 @@ export const es = {
   'diff.noneTitle': 'Selecciona un archivo',
   'diff.noneBody': 'Elige un archivo de la lista para ver sus diferencias y preparar hunks sueltos.',
   'diff.conflictTitle': 'Archivo en conflicto',
-  'diff.conflictBody': 'La resolución de conflictos llega en la siguiente versión. De momento puedes resolverlo con tu editor y marcarlo como resuelto desde la terminal.',
+  'diff.conflictOpen': 'Abrir en Conflictos',
+  'diff.conflictBody': 'Hay una integración en curso y este archivo tiene conflictos. Ábrelo en el estudio de conflictos para ver las tres versiones y resolverlo.',
   'diff.ignoredTitle': 'Archivo ignorado',
   'diff.ignoredBody': 'Git ignora este archivo (.gitignore), por eso no tiene diferencias que mostrar.',
   'diff.errorTitle': 'No se pudo cargar el diff',
@@ -339,6 +343,7 @@ export const es = {
 
   // Toasts
   'toast.region': 'Notificaciones',
+  'toast.watcherFallback': 'Vigilancia de archivos limitada',
   'toast.dismiss': 'Cerrar notificación',
   'toast.showDetail': 'Detalle técnico',
   'toast.hideDetail': 'Ocultar detalle',

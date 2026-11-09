@@ -334,3 +334,56 @@ async fn la_vista_previa_no_ejecuta_el_cli_ni_pregunta() {
     assert!(!ai.dump.exists());
     assert_eq!(ai.env.prompter.count(), 0);
 }
+
+#[tokio::test]
+async fn la_regla_de_perfil_decide_con_que_perfil_se_genera_y_donde_se_guarda_el_consentimiento() {
+    let ai = Ai::new(ok_script).await;
+    // Perfil elegido en Ajustes: Empresa (Claude desactivado). El remoto es de GitHub → Personal.
+    ai.env
+        .core
+        .ai_update_settings(AiSettingsPatch {
+            profile: Some("empresa".into()),
+            ..AiSettingsPatch::default()
+        })
+        .await
+        .unwrap();
+    ai.env.git(
+        &ai.repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/javie/ariadna.git",
+        ],
+    );
+    ai.env.core.refresh(&ai.tab).await.unwrap();
+    ai.stage("saludo.txt", b"hola\n").await;
+
+    let s = ai
+        .generate()
+        .await
+        .expect("la regla habilita Claude (perfil Personal)");
+    assert_eq!(s.provider, "claude");
+    let asked = ai.env.prompter.last();
+    assert!(
+        asked.message.contains("perfil Personal"),
+        "{}",
+        asked.message
+    );
+
+    // El consentimiento quedó en Personal, no en el perfil «activo» (Empresa).
+    let stored: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(ai.env.core.inner.ai.settings_file()).unwrap())
+            .unwrap();
+    assert_eq!(stored["activeProfile"], "empresa");
+    assert_eq!(stored["personal"]["consent"], serde_json::json!(["claude"]));
+    assert_eq!(stored["empresa"]["consent"], serde_json::json!([]));
+
+    // Sin la regla, el mismo repo usa Empresa y Claude no está habilitado.
+    let mut cfg = ai.env.core.get_settings().settings;
+    cfg.profile_rules.clear();
+    ai.env.core.save_settings(cfg).await.unwrap();
+    ai.stage("otro.txt", b"otro\n").await;
+    let e = ai.generate().await.unwrap_err();
+    assert!(e.code.starts_with("AI_"), "{e:?}");
+}

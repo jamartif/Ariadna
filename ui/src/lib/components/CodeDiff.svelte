@@ -81,7 +81,7 @@
     height: 100%;
     min-height: 0;
     font-family: var(--font-mono);
-    font-size: 0.8125rem;
+    font-size: var(--diff-font-size, 13px);
   }
   .hunk-row {
     display: flex;

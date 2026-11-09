@@ -2,6 +2,7 @@ import { t, tn, type MessageKey } from '$lib/i18n';
 import { SHORTCUTS, formatCombo, isMac, runShortcut } from '$lib/shortcuts/registry';
 import type { AppStore } from './app.svelte';
 import { settings } from './settings.svelte';
+import { settingsUi } from './settingsPanel.svelte';
 
 export interface PaletteAction {
   id: string;
@@ -95,6 +96,7 @@ export function buildActions(app: AppStore): PaletteAction[] {
     });
   }
 
+  add({ id: 'settings.open', label: t('shortcut.settings'), group: g('palette.group.view'), shortcut: combo('settings.open'), run: () => settingsUi.open() });
   const g3 = g('palette.group.view');
   add({ id: 'theme.system', label: t('palette.themeSystem'), group: g3, run: () => settings.setTheme('system') });
   add({ id: 'theme.light', label: t('palette.themeLight'), group: g3, run: () => settings.setTheme('light') });

@@ -144,6 +144,56 @@ export interface ConflictFile {
   hunks: ConflictHunk[];
 }
 
+/** Resumen de un archivo en conflicto (`merge_state`); los contenidos vienen en `ConflictFile`. */
+export interface ConflictSummary {
+  path: GitPath;
+  kind: ConflictKind;
+  /** Algún lado es binario: solo se puede elegir una versión entera. */
+  binary: boolean;
+  hunkCount: number;
+  /** Lados y archivo de trabajo son UTF-8: se puede editar el texto sin alterar bytes. */
+  textSafe: boolean;
+  oursPresent: boolean;
+  basePresent: boolean;
+  theirsPresent: boolean;
+}
+
+/** Estado de la integración en curso (merge, cherry-pick o rebase). */
+export interface MergeState {
+  integration: IntegrationState;
+  /** Commit que se integra (`MERGE_HEAD` / `CHERRY_PICK_HEAD`). */
+  otherHead: string | null;
+  /** Nombre legible de lo que se integra (`feature`, `origin/main`…). */
+  sourceLabel: string | null;
+  /** Mensaje por defecto del commit de merge (editable). */
+  message: string;
+  conflicts: ConflictSummary[];
+  /** No quedan rutas sin resolver en el índice. */
+  canContinue: boolean;
+}
+
+export interface MergeStartResult {
+  result: MergeResult;
+  /** Presente solo si el merge quedó en curso con conflictos. */
+  state: MergeState | null;
+}
+
+export interface ContinueResult {
+  done: boolean;
+  sha: string | null;
+  integration: IntegrationState;
+}
+
+export type HunkSide = 'ours' | 'theirs' | 'base' | 'both';
+
+export interface HunkChoice {
+  id: number;
+  choice: HunkSide;
+}
+
+/** Cómo se resuelve un archivo (`resolve_conflict`). `manual` lleva los bytes del texto final. */
+export type ConflictResolution = { side: ConflictChoice } | { hunks: HunkChoice[] } | { manual: number[] };
+
 export interface RecentRepository {
   isFavorite: boolean;
   lastBranch?: string | null;
@@ -253,12 +303,15 @@ export interface ProviderState {
 
 export interface AiState {
   enabled: boolean;
-  profile: { name: string; kind: AiProfileKind };
+  /** `rule`: patrón de la regla repo → perfil que decidió el perfil (ausente si es el elegido en Ajustes). */
+  profile: { name: string; kind: AiProfileKind; rule?: string };
   choice: AiChoice;
   providers: ProviderState[];
 }
 
 export interface AiSettingsPatch {
+  /** Pestaña para la que se calcula el estado devuelto (aplica su regla repo → perfil). */
+  tabId?: string;
   enabled?: boolean;
   choice?: string;
   profile?: AiProfileKind;
@@ -292,6 +345,67 @@ export interface AiCommitSuggestion {
   repoRevision: number;
 }
 
+// ---- Ajustes (ipc.md, «Ajustes») ------------------------------------------------------
+
+export type ThemePref = 'system' | 'light' | 'dark';
+
+export interface ProfileRule {
+  /** `host` o `host/propietario[/proyecto[/repo]]` en minúsculas (`dev.azure.com`). */
+  pattern: string;
+  profile: AiProfileKind;
+}
+
+/** Contenido de `settings.json`. Ariadna no guarda tokens ni contraseñas. */
+export interface AppSettings {
+  version: number;
+  language: 'es';
+  theme: ThemePref;
+  diffFontSize: number;
+  /** Ruta del ejecutable de git; `null` = detección automática. */
+  gitPath: string | null;
+  pullRebase: boolean;
+  profileRules: ProfileRule[];
+}
+
+export type SettingsLoadStatus = 'ok' | 'missing' | 'migrated' | 'resetCorrupt';
+
+export interface SettingsView {
+  settings: AppSettings;
+  load: { status: SettingsLoadStatus; warning: string | null };
+  about: { version: string; license: string; repository: string; issues: string };
+  git: GitInfo | null;
+  gitProblem: string | null;
+}
+
+export interface GitDetect {
+  ok: boolean;
+  source: 'configured' | 'auto';
+  path: string | null;
+  version: string | null;
+  problem: string | null;
+}
+
+export interface GitIdentity {
+  name: string | null;
+  email: string | null;
+}
+
+export interface CliStatus {
+  id: AiProviderId | string;
+  displayName: string;
+  installed: boolean;
+  availability: AiAvailability;
+  version: string | null;
+  path: string | null;
+  hint: string | null;
+  /** Comando oficial para iniciar sesión; lo ejecuta el usuario. */
+  loginCommand: string;
+}
+
+/** Límites de `diffFontSize` (px); los mismos que valida Rust. */
+export const DIFF_FONT_MIN = 10;
+export const DIFF_FONT_MAX = 24;
+
 // ---- Errores -----------------------------------------------------------------
 
 export const API_ERROR_CODES = [
@@ -316,6 +430,10 @@ export const API_ERROR_CODES = [
   'DUBIOUS_OWNERSHIP',
   'AUTH',
   'MERGE_CONFLICTS',
+  'CONFLICTS_PENDING',
+  'CONFLICT_MARKERS_REMAIN',
+  'CONFLICT_NOT_TEXT',
+  'CONFLICT_NOT_FOUND',
   'IO',
   'REPO_MISSING',
   'AI_DISABLED',
@@ -341,6 +459,10 @@ export const API_ERROR_CODES = [
  */
 export const CODES_ADDED_IN_WAVE_2: readonly ApiErrorCode[] = [
   'MERGE_CONFLICTS',
+  'CONFLICTS_PENDING',
+  'CONFLICT_MARKERS_REMAIN',
+  'CONFLICT_NOT_TEXT',
+  'CONFLICT_NOT_FOUND',
   'AI_DISABLED',
   'AI_NOT_INSTALLED',
   'AI_NOT_LOGGED_IN',
@@ -427,10 +549,17 @@ export interface SessionEvent {
   kind: SessionEventKind;
 }
 
+/** Evento `notice`: aviso no intrusivo de Rust (p. ej. `watcherFallback`). */
+export interface Notice {
+  kind: string;
+  message: string;
+}
+
 export interface ApiEvents {
   snapshot: { tabId: string; snapshot: Snapshot };
   'tab-updated': TabInfo;
   'session-event': SessionEvent;
   'tabs-changed': AppState;
   'clone-progress': CloneProgress;
+  notice: Notice;
 }

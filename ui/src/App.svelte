@@ -13,6 +13,8 @@
   import type { AppStore } from '$lib/stores/app.svelte';
   import { buildActions } from '$lib/stores/commands';
   import { settings } from '$lib/stores/settings.svelte';
+  import SettingsDialog from '$lib/components/SettingsDialog.svelte';
+  import { settingsUi, startSettingsSync } from '$lib/stores/settingsPanel.svelte';
 
   let { app }: { app: AppStore } = $props();
 
@@ -27,7 +29,10 @@
   onMount(() => {
     settings.apply();
     void app.init();
+    const stopSync = startSettingsSync(app.api);
     const off = installShortcuts();
+    const onFocus = () => app.refreshActiveOnFocus();
+    window.addEventListener('focus', onFocus);
     const gotos = Object.fromEntries(
       Array.from({ length: 9 }, (_, i) => [`tab.goto.${i + 1}`, () => (app.gotoIndex(i + 1), true)])
     );
@@ -42,6 +47,7 @@
       'tab.prev': () => (app.step(-1), true),
       'palette.open': () => ((app.paletteOpen = !app.paletteOpen), true),
       'clone.open': () => (app.openClone(), true),
+      'settings.open': () => (settingsUi.toggle(), true),
       'changes.refresh': () => {
         const tab = entry?.kind === 'repo' ? app.activeTab : null;
         if (!tab) return false;
@@ -63,6 +69,8 @@
     });
     return () => {
       off();
+      stopSync();
+      window.removeEventListener('focus', onFocus);
       offHandlers();
       app.dispose();
     };
@@ -78,6 +86,7 @@
     onnew={() => app.newTab()}
     onreorder={(ids) => app.reorder(ids)}
     onpalette={() => (app.paletteOpen = true)}
+    onsettings={() => settingsUi.open()}
   />
 
   <div id="tabpanel-main" class="main" role="tabpanel" aria-labelledby={app.activeId ? `tab-${app.activeId}` : undefined} tabindex="-1">
@@ -127,6 +136,17 @@
 
 {#if app.cloneOpen}
   <CloneDialog {app} onclose={() => (app.cloneOpen = false)} />
+{/if}
+
+{#if settingsUi.isOpen}
+  <SettingsDialog
+    api={app.api}
+    tabId={entry?.kind === 'repo' ? entry.id : undefined}
+    onclose={() => {
+      settingsUi.close();
+      if (app.activeTab) void app.activeTab.ai.loadState();
+    }}
+  />
 {/if}
 
 {#if app.paletteOpen}

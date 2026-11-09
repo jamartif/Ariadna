@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Snapshot } from '$lib/api/types';
-import { SOFT_TAB_LIMIT } from './app.svelte';
+import { AppStore, SOFT_TAB_LIMIT } from './app.svelte';
 import { toasts } from './toasts.svelte';
-import { loadedTab, readyApp, resetGlobals, waitFor } from '../../test/helpers';
+import { loadedTab, mockApi, readyApp, resetGlobals, waitFor } from '../../test/helpers';
 
 beforeEach(resetGlobals);
 afterEach(resetGlobals);
@@ -158,5 +158,34 @@ describe('AppStore: pestañas', () => {
     const before = (app.entries[0] as { info: { changeCount: number } }).info.changeCount;
     await api.discard('tab-ariadna', ['docs/ipc.md']);
     await waitFor(() => expect((app.entries[0] as { info: { changeCount: number } }).info.changeCount).toBe(before - 1));
+  });
+});
+
+describe('vigilancia de archivos (UI)', () => {
+  it('al recuperar el foco se pide un refresco de la pestaña activa', async () => {
+    const { api, app } = await readyApp();
+    const spy = vi.spyOn(api, 'refresh');
+    app.refreshActiveOnFocus();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(app.activeId);
+  });
+
+  it('el aviso watcherFallback sale como un toast de advertencia', async () => {
+    const api = mockApi();
+    const handlers: Record<string, (p: never) => void> = {};
+    const orig = api.listen.bind(api);
+    api.listen = (async (event: string, h: (p: never) => void) => {
+      handlers[event] = h;
+      return orig(event as 'notice', h as never);
+    }) as typeof api.listen;
+    const app = new AppStore(api);
+    await app.init();
+    handlers['notice']?.({ kind: 'watcherFallback', message: 'sin inotify' } as never);
+    const t = toasts.items.at(-1);
+    expect(t?.kind).toBe('warning');
+    expect(t?.message).toBe('sin inotify');
+    handlers['notice']?.({ kind: 'otra', message: 'x' } as never);
+    expect(toasts.items.length).toBe(1);
+    app.dispose();
   });
 });

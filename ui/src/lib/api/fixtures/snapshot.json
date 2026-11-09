@@ -56,7 +56,7 @@
       "pushUrl": "https://example.invalid/demo.git"
     }
   ],
-  "revision": 1,
+  "revision": 3,
   "status": {
     "ahead": 0,
     "behind": 0,

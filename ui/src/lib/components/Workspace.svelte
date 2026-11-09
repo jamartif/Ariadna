@@ -1,10 +1,13 @@
 <script lang="ts">
   import { t, tn } from '$lib/i18n';
   import type { TabState, Panel } from '$lib/stores/tab.svelte';
+  import { conflictsOf } from '$lib/stores/conflicts.svelte';
   import Banner from './Banner.svelte';
   import BranchDetail from './BranchDetail.svelte';
   import BranchesPanel from './BranchesPanel.svelte';
   import ChangesPanel from './ChangesPanel.svelte';
+  import ConflictEditor from './ConflictEditor.svelte';
+  import ConflictsPanel from './ConflictsPanel.svelte';
   import CommitBar from './CommitBar.svelte';
   import DiffView from './DiffView.svelte';
   import EmptyState from './EmptyState.svelte';
@@ -51,11 +54,25 @@
     }
   }
 
-  const panels: { id: Panel; label: 'panel.changes' | 'panel.history' | 'panel.branches'; icon: 'file-diff' | 'history' | 'git-branch' }[] = [
+  type PanelDef = {
+    id: Panel;
+    label: 'panel.changes' | 'panel.history' | 'panel.branches' | 'panel.conflicts';
+    icon: 'file-diff' | 'history' | 'git-branch' | 'git-merge';
+  };
+  const basePanels: PanelDef[] = [
     { id: 'changes', label: 'panel.changes', icon: 'file-diff' },
     { id: 'history', label: 'panel.history', icon: 'history' },
     { id: 'branches', label: 'panel.branches', icon: 'git-branch' }
   ];
+  /** El panel «Conflictos» solo existe mientras hay un merge, rebase o cherry-pick en curso. */
+  const integrating = $derived((tab.snapshot?.integration ?? 'none') !== 'none');
+  const panels = $derived<PanelDef[]>(integrating ? [...basePanels, { id: 'conflicts', label: 'panel.conflicts', icon: 'git-merge' }] : basePanels);
+  const cc = $derived(conflictsOf(tab));
+
+  // Si la integración termina (o se aborta) con el panel abierto, se vuelve a Cambios.
+  $effect(() => {
+    if (!integrating && tab.panel === 'conflicts' && !tab.loading) tab.panel = 'changes';
+  });
 
   function panelKey(e: KeyboardEvent, i: number) {
     let n = i;
@@ -103,6 +120,21 @@
   {#if missing}
     <EmptyState icon="triangle-alert" tone="danger" title={t('banner.missingTitle')} body={t('banner.missingBody')} />
   {:else}
+    {#if integrating && tab.panel !== 'conflicts'}
+      <div class="banner-slot slim">
+        <Banner
+          kind="warning"
+          title={t(`integration.${snap?.integration ?? 'merging'}`)}
+          message={cc.count > 0 ? tn('conflicts.banner.pending', cc.count) : t('conflicts.banner.ready')}
+        >
+          {#snippet actions()}
+            <button type="button" class="btn btn-primary" onclick={() => (tab.panel = 'conflicts')}>
+              <Icon name="git-merge" size={14} />{cc.count > 0 ? t('conflicts.banner.open') : t('conflicts.banner.continue')}
+            </button>
+          {/snippet}
+        </Banner>
+      </div>
+    {/if}
     <div
       class="columns"
       style:--side="{side}px"
@@ -139,7 +171,12 @@
             >
               <Icon name={p.icon} size={14} />{t(p.label)}
               {#if p.id === 'changes' && tab.info.changeCount > 0}<span class="chip">{tab.info.changeCount}</span>{/if}
-              {#if p.id === 'changes' && conflictCount > 0}
+              {#if p.id === 'conflicts'}
+                <span class="chip conflict" title={tn('tabs.a11y.conflicts', cc.count)}>
+                  <Icon name={cc.count > 0 ? 'triangle-alert' : 'circle-check'} size={11} />{cc.count}
+                </span>
+              {/if}
+              {#if p.id === 'changes' && conflictCount > 0 && !integrating}
                 <span class="chip conflict" title={tn('tabs.a11y.conflicts', conflictCount)}>
                   <Icon name="triangle-alert" size={11} />{conflictCount}
                 </span>
@@ -162,6 +199,8 @@
             </div>
           {:else if tab.panel === 'history'}
             <HistoryPanel {tab} />
+          {:else if tab.panel === 'conflicts'}
+            <ConflictsPanel {tab} />
           {:else}
             <BranchesPanel {tab} />
           {/if}
@@ -184,6 +223,8 @@
           <HistoryDetail {tab} />
         {:else if tab.panel === 'branches'}
           <BranchDetail {tab} />
+        {:else if tab.panel === 'conflicts'}
+          <ConflictEditor {tab} />
         {:else}
           <DiffView {tab} />
         {/if}
@@ -231,6 +272,9 @@
     background: var(--bg-app);
     border-bottom: 1px solid var(--border);
   }
+  .banner-slot.slim {
+    padding: var(--space-2) var(--space-3);
+  }
   .columns {
     flex: 1;
     min-height: 0;
@@ -252,8 +296,10 @@
   }
   .panel-tabs {
     display: flex;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-3) 0;
+    gap: 0;
+    padding: var(--space-2) var(--space-2) 0;
+    overflow-x: auto;
+    scrollbar-width: none;
     border-bottom: 1px solid var(--border);
   }
   .ptab {
@@ -261,7 +307,9 @@
     align-items: center;
     gap: var(--space-2);
     min-height: 32px;
-    padding: 0 var(--space-3);
+    padding: 0 var(--space-2);
+    flex: none;
+    white-space: nowrap;
     border: none;
     border-bottom: 2px solid transparent;
     background: none;

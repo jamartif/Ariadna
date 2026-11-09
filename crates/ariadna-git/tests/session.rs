@@ -727,7 +727,7 @@ async fn open_publica_el_primer_snapshot_y_activa_la_sesion() {
     let RefreshOutcome::Published(snap) = out else {
         panic!("se esperaba Published");
     };
-    assert_eq!(snap.revision, 0);
+    assert_eq!(snap.revision, 1);
     assert_eq!(snap.status.branch_name.as_deref(), Some("main"));
     assert_eq!(s.state(), SessionState::Active);
     watch.changed().await.unwrap();
@@ -736,7 +736,7 @@ async fn open_publica_el_primer_snapshot_y_activa_la_sesion() {
     assert!(kinds.contains(&SessionEventKind::StateChanged {
         state: SessionState::Active
     }));
-    assert!(kinds.contains(&SessionEventKind::SnapshotPublished { revision: 0 }));
+    assert!(kinds.contains(&SessionEventKind::SnapshotPublished { revision: 1 }));
 }
 
 // ---------------------------------------------------------------------------

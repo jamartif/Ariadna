@@ -117,11 +117,20 @@ fn los_codigos_cubren_exactamente_el_contrato() {
     assert!(expected.remove("REPO_MISSING"));
     // `merge_clean` lo produce el núcleo al abortar un merge con conflictos.
     assert!(expected.remove("MERGE_CONFLICTS"));
+    // Los del estudio de conflictos (`resolve_conflict`, `merge_continue`) también son del núcleo.
+    for c in [
+        "CONFLICTS_PENDING",
+        "CONFLICT_MARKERS_REMAIN",
+        "CONFLICT_NOT_TEXT",
+        "CONFLICT_NOT_FOUND",
+    ] {
+        assert!(expected.remove(c), "{c}");
+    }
     for c in AI_CODES.iter().chain(["POLICY", "RATE_LIMITED"].iter()) {
         assert!(expected.remove(c), "{c}");
     }
     assert_eq!(mapped, expected);
-    assert_eq!(ALL_CODES.len(), 35);
+    assert_eq!(ALL_CODES.len(), 39);
 }
 
 #[test]

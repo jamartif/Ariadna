@@ -17,8 +17,9 @@ use tokio::sync::oneshot;
 use crate::core::{
     default_data_dir, locate_git, validate_external_url, AiCommitOptions, AiCommitSuggestion,
     AiContextPreview, AiSettingsPatch, AiState, AmendDraft, ApiError, ApiSnapshot, AppConfig,
-    AppCore, AppEvent, AppState, Closed, CommitResult, CredentialTest, Done, EventSink, HunkArg,
-    OpenResult, Prompter,
+    AppCore, AppEvent, AppState, CliStatus, Closed, CommitResult, ConflictResolution,
+    ContinueResult, CredentialTest, Done, EventSink, GitDetect, GitIdentity, HunkArg,
+    MergeStartResult, MergeState, OpenResult, Prompter, Settings, SettingsView,
 };
 
 type Cmd<T> = Result<T, ApiError>;
@@ -70,12 +71,26 @@ struct TauriSink {
 
 impl EventSink for TauriSink {
     fn emit(&self, event: AppEvent) {
+        // Diagnóstico: `ARIADNA_TRACE_EVENTS=1` vuelca a stderr los eventos de estado.
+        if std::env::var_os("ARIADNA_TRACE_EVENTS").is_some() {
+            match &event {
+                AppEvent::Snapshot(p) => eprintln!(
+                    "[evento] snapshot tab={} revision={} cambios={}",
+                    p.tab_id,
+                    p.snapshot.0.revision,
+                    p.snapshot.0.status.entries.len()
+                ),
+                AppEvent::Notice(p) => eprintln!("[evento] notice {}: {}", p.kind, p.message),
+                _ => {}
+            }
+        }
         let result = match &event {
             AppEvent::Snapshot(p) => self.app.emit("snapshot", p),
             AppEvent::TabUpdated(p) => self.app.emit("tab-updated", p),
             AppEvent::Session(p) => self.app.emit("session-event", p),
             AppEvent::TabsChanged(p) => self.app.emit("tabs-changed", p),
             AppEvent::CloneProgress(p) => self.app.emit("clone-progress", p),
+            AppEvent::Notice(p) => self.app.emit("notice", p),
         };
         if let Err(e) = result {
             eprintln!("no se pudo emitir el evento: {e}");
@@ -181,6 +196,33 @@ async fn open_external_url(app: AppHandle, url: String) -> Cmd<()> {
 }
 
 // --- comandos de IA -----------------------------------------------------------------------
+
+// --- ajustes (specs/rust/ipc.md «Ajustes») ---------------------------------------------------
+
+#[tauri::command]
+async fn get_settings(core: State<'_, AppCore>) -> Cmd<SettingsView> {
+    Ok(core.get_settings())
+}
+
+#[tauri::command]
+async fn save_settings(core: State<'_, AppCore>, settings: Settings) -> Cmd<SettingsView> {
+    core.save_settings(settings).await
+}
+
+#[tauri::command]
+async fn detect_git(core: State<'_, AppCore>, path: Option<String>) -> Cmd<GitDetect> {
+    Ok(core.detect_git(path).await)
+}
+
+#[tauri::command]
+async fn git_identity(core: State<'_, AppCore>) -> Cmd<GitIdentity> {
+    Ok(core.git_identity().await)
+}
+
+#[tauri::command]
+async fn get_cli_status(core: State<'_, AppCore>) -> Cmd<Vec<CliStatus>> {
+    Ok(core.get_cli_status().await)
+}
 
 #[tauri::command]
 async fn ai_state(core: State<'_, AppCore>, tab_id: String) -> Cmd<AiState> {
@@ -400,6 +442,50 @@ async fn mark_resolved(core: State<'_, AppCore>, tab_id: String, path: GitPath) 
     core.mark_resolved(&tab_id, path).await
 }
 
+/// Empieza un merge y, si hay conflictos, lo deja en curso para resolverlos.
+#[tauri::command]
+async fn merge_start(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    branch: String,
+    fast_forward: MergeFastForward,
+) -> Cmd<MergeStartResult> {
+    core.merge_start(&tab_id, branch, fast_forward).await
+}
+
+/// Estado de la integración en curso y resumen de sus conflictos.
+#[tauri::command]
+async fn merge_state(core: State<'_, AppCore>, tab_id: String) -> Cmd<MergeState> {
+    core.merge_state(&tab_id).await
+}
+
+/// Resuelve un archivo (escribe o borra + `git add`) tras confirmación nativa.
+#[tauri::command]
+async fn resolve_conflict(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    path: GitPath,
+    resolution: ConflictResolution,
+) -> Cmd<Done> {
+    core.resolve_conflict(&tab_id, path, resolution).await
+}
+
+/// Termina el merge (o continúa rebase/cherry-pick) con mensaje opcional.
+#[tauri::command]
+async fn merge_continue(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    message: Option<String>,
+) -> Cmd<ContinueResult> {
+    core.merge_continue(&tab_id, message).await
+}
+
+/// Aborta el merge en curso (confirmación nativa).
+#[tauri::command]
+async fn merge_abort(core: State<'_, AppCore>, tab_id: String) -> Cmd<Done> {
+    core.merge_abort(&tab_id).await
+}
+
 #[tauri::command]
 async fn fetch(core: State<'_, AppCore>, tab_id: String, remote: String) -> Cmd<()> {
     core.fetch(&tab_id, remote).await
@@ -411,7 +497,7 @@ async fn pull(
     tab_id: String,
     remote: String,
     refspec: Option<String>,
-    rebase: bool,
+    rebase: Option<bool>,
 ) -> Cmd<MergeResult> {
     core.pull(&tab_id, remote, refspec, rebase).await
 }
@@ -459,6 +545,15 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if let WindowEvent::Focused(focused) = event {
+                // Al volver a la ventana se refresca la pestaña activa (y el sondeo de
+                // respaldo solo corre con la ventana enfocada).
+                let core = window.app_handle().state::<AppCore>().inner().clone();
+                let focused = *focused;
+                tauri::async_runtime::spawn(async move {
+                    core.set_window_focus(focused);
+                });
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 // Cerrar la ventana sigue el mismo camino que cerrar pestañas (spec §3.1).
                 api.prevent_close();
@@ -486,6 +581,11 @@ pub fn run() {
             store_credential,
             test_credential,
             forget_credential,
+            get_settings,
+            save_settings,
+            detect_git,
+            git_identity,
+            get_cli_status,
             ai_state,
             ai_update_settings,
             ai_preview_context,
@@ -515,6 +615,11 @@ pub fn run() {
             get_conflicts,
             write_conflict_resolution,
             mark_resolved,
+            merge_start,
+            merge_state,
+            resolve_conflict,
+            merge_continue,
+            merge_abort,
             fetch,
             pull,
             push,

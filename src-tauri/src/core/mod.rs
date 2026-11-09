@@ -9,8 +9,11 @@ mod commands;
 pub mod error;
 pub mod external;
 mod history_ops;
+mod merge_ops;
 pub mod prompter;
 pub mod session_file;
+pub mod settings;
+pub mod watch;
 
 #[cfg(test)]
 mod tests;
@@ -20,11 +23,19 @@ pub use api::{
     AiCommitOptions, AiCommitSuggestion, AiContextPreview, AiExcludeReason, AiExcludedFile,
     AiPreviewFile, AiProfileInfo, AiProviderState, AiSettingsPatch, AiState, AmendDraft,
     ApiSessionEvent, ApiSessionEventKind, ApiSnapshot, AppEvent, AppState, CloneProgressEvent,
-    Closed, CommitResult, CredentialTest, Done, EventSink, GitInfo, HunkArg, OpenResult,
-    SnapshotEvent, TabInfo,
+    Closed, CommitResult, CredentialTest, Done, EventSink, GitInfo, HunkArg, NoticeEvent,
+    OpenResult, SnapshotEvent, TabInfo,
 };
 pub use app::{default_data_dir, locate_git, AppConfig, AppCore, CLOSE_GRACE, SOFT_TAB_LIMIT};
 pub use error::{ApiError, ApiResult};
 pub use external::validate_external_url;
+pub use merge_ops::{
+    ConflictResolution, ConflictSummary, ContinueResult, HunkChoice, HunkSide, MergeStartResult,
+    MergeState,
+};
 pub use prompter::Prompter;
 pub use session_file::{SavedTab, SessionData, SessionLoad, SessionStore};
+pub use settings::{
+    AboutInfo, CliStatus, GitDetect, GitIdentity, ProfileRule, Settings, SettingsLoadInfo,
+    SettingsLoadStatus, SettingsStore, SettingsView, Theme,
+};

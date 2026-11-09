@@ -111,7 +111,7 @@ describe('Ramas', () => {
     expect(await screen.findByText('Rama «temporal» borrada')).toBeInTheDocument();
   });
 
-  it('fusionar sin conflictos funciona; con conflictos se explica y no se cambia nada', async () => {
+  it('fusionar sin conflictos funciona; con conflictos el merge queda en curso y abre Conflictos', async () => {
     const { tab, api } = await setup();
     await api.createBranch(tab.id, 'limpia', null);
     await api.createBranch(tab.id, 'choca-con-main', null);
@@ -119,16 +119,29 @@ describe('Ramas', () => {
 
     await userEvent.click(row('limpia'));
     await userEvent.click(screen.getByRole('button', { name: /^Fusionar en/ }));
-    expect(screen.getByText(/Solo se fusiona si no hay conflictos/)).toBeInTheDocument();
+    expect(screen.getByText(/la fusión queda en curso/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Fusionar' }));
     expect(await screen.findByText(/«limpia» (fusionada|ya estaba fusionada)/)).toBeInTheDocument();
 
     await userEvent.click(row('choca-con-main'));
     await userEvent.click(screen.getByRole('button', { name: /^Fusionar en/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Fusionar' }));
-    expect(await screen.findByText('Hay conflictos: no se ha fusionado')).toBeInTheDocument();
-    expect(screen.getByText('docs/ipc.md')).toBeInTheDocument();
-    expect(tab.snapshot!.integration).toBe('none');
+    expect(await screen.findByText('Fusión con conflictos: resuélvelos en el panel Conflictos')).toBeInTheDocument();
+    await waitFor(() => expect(tab.snapshot!.integration).toBe('merging'));
+    expect(tab.panel).toBe('conflicts');
+    expect(tab.snapshot!.conflicts.length).toBe(4);
+  });
+
+  it('con una integración en curso no se puede fusionar otra rama y se ofrece abortar o resolver', async () => {
+    const { tab } = await setup();
+    await tab.api.createBranch(tab.id, 'choca-con-main', null);
+    await tab.api.mergeStart(tab.id, 'choca-con-main', 'allow');
+    await waitFor(() => expect(tab.snapshot!.integration).toBe('merging'));
+    await userEvent.click(row('main'));
+    expect(screen.getByRole('button', { name: /^Fusionar en/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Abortar' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Resolver conflictos' }));
+    expect(tab.panel).toBe('conflicts');
   });
 
   it('una rama remota ofrece crear la local y no se puede renombrar ni borrar', async () => {
