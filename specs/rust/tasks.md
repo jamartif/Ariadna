@@ -8,7 +8,10 @@
 - [ ] Spike `claude`: probar `--setting-sources ""`, salida JSON, detección de sesión sin leer credenciales
 - [ ] Spike WebView2: bootstrapper en NSIS y Ctrl+Tab en WebView2
 - [ ] Leer y citar con fecha los términos de Anthropic, OpenAI y GitHub **para uso en empresa**: planes individuales vs organización, y apps de terceros que lanzan el CLI oficial (RF-IA10)
-- [ ] Reunir requisitos corporativos con Javier: planes de IA, aprobación de seguridad, despliegue, firma, proxy/CA, AppLocker/WDAC (D14, §13)
+- [ ] Reunir con Javier: planes de IA de la empresa (Copilot/ChatGPT), aprobación de seguridad, quién despliega y cómo firma, AppLocker/WDAC, SO de los equipos (D14, §13)
+- [ ] Decidir licencia del repo (condiciona SignPath) y registrarla
+- [ ] Spike de perfiles: aislar el login por proveedor con directorio de configuración propio (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, Copilot a verificar) y detectar la cuenta activa
+- [ ] Spike de firma: probar un binario de ejemplo en un equipo de la empresa (SmartScreen/AppLocker) y evaluar las opciones de §10 (D17)
 - [ ] Matriz de trazabilidad: G-01…G-15, RF-IA → tarea → test (generar desde `specs/spec.md` y `Sources/`)
 - [ ] Inventario de los 36 + 8 tests Swift con su tarea Rust
 - [ ] Generar y versionar fixtures de git (con metadatos de versión)
@@ -88,6 +91,9 @@
 - [ ] Detección de disponibilidad, versión y sesión ejecutando el CLI (RF-IA4)
 - [ ] Cola de IA: 2 simultáneas, límite por minuto, cancelación al cerrar pestaña (RF-IA8)
 - [ ] Modo Auto con reglas de RF-IA9
+- [ ] Perfiles Personal/Empresa: modelo, asociación repo→perfil con reglas por remoto, confirmación al cambiar, perfil visible en pestaña y hoja (D16)
+- [ ] Directorio de configuración aislado por perfil y botón «Iniciar sesión» del CLI; aviso si el proveedor comparte login
+- [ ] Consentimiento por perfil y proveedor; Claude desactivado por defecto en Empresa
 - [ ] Política administrable `policy.json` (desactivar IA, proveedores permitidos, tope, vista previa) y su indicador en la UI (RF-IA11)
 - [ ] Mostrar cuenta/organización activa por proveedor (RF-IA12)
 - [ ] Acciones: mensaje de commit, resumen, explicar commit, propuesta de conflicto
@@ -103,9 +109,9 @@
 - [ ] E2E con `tauri-driver` (macOS y Windows x64)
 - [ ] Regresión visual con baselines por SO
 - [ ] Capturas automáticas en CI
-- [ ] Proxy del sistema/PAC/autenticación y CA corporativa para git y CLI de IA
-- [ ] `.dmg` universal con Developer ID + notarización; MSI y NSIS (x64, ARM64 mejor esfuerzo) con comprobación de WebView2
-- [ ] Firma Authenticode de los binarios e instalador (requisito de `v0.1.0`)
+- [ ] Respetar proxy y CA del sistema (mejor esfuerzo; la empresa de Javier no usa proxy)
+- [ ] `.dmg` universal con Developer ID + notarización si hay Apple Developer Program, o firma ad-hoc documentada; MSI y NSIS (x64, ARM64 mejor esfuerzo) con comprobación de WebView2
+- [ ] Firma de binarios e instalador según la opción elegida en D17 (requisito de `v0.1.0`; alfas sin firmar)
 - [ ] Guía de despliegue para TI: MSI silencioso, `policy.json`, proxy, WebView2
 - [ ] Prueba de instalación y desinstalación limpias en VM
 - [ ] Documentar apertura de las alfas sin firmar (Gatekeeper / SmartScreen)

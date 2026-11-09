@@ -46,6 +46,6 @@ Todos aceptados salvo los siguientes, que se **aplazan o rechazan**:
 
 ## Dudas que quedan abiertas
 - ~~macOS 13+ o 15+~~: **resuelto, 15+** (D15).
-- Uso en empresa (D14): añade RF-IA10 ampliado, RF-IA11, RF-IA12, firma obligatoria, MSI y red corporativa. Preguntas en spec §13.
+- Doble uso (D14, D16): añade perfiles Personal/Empresa, RF-IA10 ampliado, RF-IA11, RF-IA12, firma por etapas (D17), MSI. Sin proxy en la empresa: mejor esfuerzo. Preguntas en spec §13. **Estos cambios no pasaron por una segunda revisión con contexto limpio.**
 - ¿Cuál es el sandbox real de Codex en Windows? Lo dirá el spike.
 - ¿Copilot acepta prompt por stdin? Lo dirá el spike.
