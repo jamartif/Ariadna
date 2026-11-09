@@ -99,7 +99,11 @@ async fn el_secreto_del_padre_y_las_claves_prohibidas_no_llegan_al_hijo() {
         let raw = serde_json::to_string(env).unwrap();
         assert!(!raw.contains(SECRET), "{id:?}: el secreto llegó al hijo");
         for k in env.keys() {
+            // Windows sobre ARM64 inyecta estas variables en todo proceso, no las pasa Ariadna.
+            let os_injected = k.eq_ignore_ascii_case("PROCESSOR_ARCHITECTURE")
+                || k.eq_ignore_ascii_case("PROCESSOR_ARCHITEW6432");
             let ok = k.starts_with("FAKE_")
+                || os_injected
                 || COMMON_ALLOW
                     .iter()
                     .any(|pat| ariadna_process::name_matches(pat, k));
@@ -499,7 +503,7 @@ async fn explicar_commit_y_secretos_redactados_en_stdin() {
         .as_str()
         .unwrap()
         .to_string();
-    assert!(!stdin.contains("AKIAABCDEFGHIJKLMNOP"));
+    assert!(!stdin.contains(&format!("AKIA{}", "ABCDEFGHIJKLMNOP")));
     assert!(!stdin.contains("K=1"));
     assert!(stdin.contains("[REDACTED]"));
 }
