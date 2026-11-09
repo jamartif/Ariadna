@@ -27,6 +27,7 @@ Spec §3.3. **El estado vive en Rust**; la interfaz es una vista. Este documento
 | `toggle_favorite` | `path` | `RecentRepository[]` |
 | `forget_recent` | `path` | `RecentRepository[]` |
 | `cancel_operation` | `tabId, operationId` | `boolean` |
+| `open_external_url` | `url` | `void` (abre el navegador del sistema; **solo `https`** y solo hosts de una lista: `learn.microsoft.com`, `dev.azure.com`, `*.visualstudio.com`, `github.com`, `docs.github.com`, `gitlab.com`, `docs.gitlab.com`, `bitbucket.org`, `support.atlassian.com`; sirve para las ayudas de «cómo crear un PAT») |
 | `clone_repository` | `url, destination: string, branch: string \| null` | `OpenResult` (clona y abre una pestaña; emite `clone-progress`; cancelable con `cancel_operation`) |
 | `store_credential` | `url, username, secret` | `void` (entrega el secreto a `git credential approve` por stdin; **nunca** vuelve a la UI) |
 | `test_credential` | `url` | `{ ok: boolean, code: string \| null }` (`git ls-remote`) |
