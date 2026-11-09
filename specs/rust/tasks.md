@@ -8,10 +8,9 @@
 - [ ] Spike `claude`: probar `--setting-sources ""`, salida JSON, detección de sesión sin leer credenciales
 - [ ] Spike WebView2: bootstrapper en NSIS y Ctrl+Tab en WebView2
 - [ ] Leer y citar con fecha los términos de Anthropic, OpenAI y GitHub **para uso en empresa**: planes individuales vs organización, y apps de terceros que lanzan el CLI oficial (RF-IA10)
-- [ ] Reunir con Javier: planes de IA de la empresa (Copilot/ChatGPT), aprobación de seguridad, quién despliega y cómo firma, AppLocker/WDAC, SO de los equipos (D14, §13)
-- [ ] Decidir licencia del repo (condiciona SignPath) y registrarla
+- [x] Licencia MIT (`LICENSE`, D18)
 - [ ] Spike de perfiles: aislar el login por proveedor con directorio de configuración propio (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, Copilot a verificar) y detectar la cuenta activa
-- [ ] Spike de firma: probar un binario de ejemplo en un equipo de la empresa (SmartScreen/AppLocker) y evaluar las opciones de §10 (D17)
+- [ ] Solicitar SignPath Foundation para el proyecto (D17) y leer sus condiciones
 - [ ] Matriz de trazabilidad: G-01…G-15, RF-IA → tarea → test (generar desde `specs/spec.md` y `Sources/`)
 - [ ] Inventario de los 36 + 8 tests Swift con su tarea Rust
 - [ ] Generar y versionar fixtures de git (con metadatos de versión)
@@ -94,8 +93,7 @@
 - [ ] Perfiles Personal/Empresa: modelo, asociación repo→perfil con reglas por remoto, confirmación al cambiar, perfil visible en pestaña y hoja (D16)
 - [ ] Directorio de configuración aislado por perfil y botón «Iniciar sesión» del CLI; aviso si el proveedor comparte login
 - [ ] Consentimiento por perfil y proveedor; Claude desactivado por defecto en Empresa
-- [ ] Política administrable `policy.json` (desactivar IA, proveedores permitidos, tope, vista previa) y su indicador en la UI (RF-IA11)
-- [ ] Mostrar cuenta/organización activa por proveedor (RF-IA12)
+- [ ] Mostrar cuenta activa por proveedor cuando el CLI la exponga (RF-IA12)
 - [ ] Acciones: mensaje de commit, resumen, explicar commit, propuesta de conflicto
 - [ ] Rechazo de propuestas de conflicto que salen de los hunks
 - [ ] Hoja de propuesta: copiar, usar, regenerar, descartar
@@ -109,12 +107,18 @@
 - [ ] E2E con `tauri-driver` (macOS y Windows x64)
 - [ ] Regresión visual con baselines por SO
 - [ ] Capturas automáticas en CI
-- [ ] Respetar proxy y CA del sistema (mejor esfuerzo; la empresa de Javier no usa proxy)
-- [ ] `.dmg` universal con Developer ID + notarización si hay Apple Developer Program, o firma ad-hoc documentada; MSI y NSIS (x64, ARM64 mejor esfuerzo) con comprobación de WebView2
+- [ ] Respetar proxy y CA del sistema (mejor esfuerzo, sin pruebas dedicadas)
+- [ ] `.dmg` universal con firma ad-hoc y guía de «Abrir igualmente» (Developer ID y notarización solo si hay Apple Developer Program); NSIS por usuario (x64, ARM64 mejor esfuerzo) con comprobación de WebView2
 - [ ] Firma de binarios e instalador según la opción elegida en D17 (requisito de `v0.1.0`; alfas sin firmar)
-- [ ] Guía de despliegue para TI: MSI silencioso, `policy.json`, proxy, WebView2
 - [ ] Prueba de instalación y desinstalación limpias en VM
 - [ ] Documentar apertura de las alfas sin firmar (Gatekeeper / SmartScreen)
 - [ ] CHANGELOG y README nuevo
 - [ ] Tag `swift-final`, rama `legacy-swift`, retirar Swift de `main`
 - [ ] Publicar `v0.1.0`
+
+## Después de v0.1 (no entra en esta entrega)
+- [ ] `policy.json` administrable: desactivar IA, proveedores permitidos, tope de contexto (RF-IA11)
+- [ ] Instalador MSI para despliegue gestionado
+- [ ] Mica y vibrancy (D11)
+- [ ] Identidad de commit por perfil
+- [ ] Actualizador automático

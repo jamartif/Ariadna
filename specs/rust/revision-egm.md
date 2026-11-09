@@ -46,6 +46,6 @@ Todos aceptados salvo los siguientes, que se **aplazan o rechazan**:
 
 ## Dudas que quedan abiertas
 - ~~macOS 13+ o 15+~~: **resuelto, 15+** (D15).
-- Doble uso (D14, D16): añade perfiles Personal/Empresa, RF-IA10 ampliado, RF-IA11, RF-IA12, firma por etapas (D17), MSI. Sin proxy en la empresa: mejor esfuerzo. Preguntas en spec §13. **Estos cambios no pasaron por una segunda revisión con contexto limpio.**
+- Doble uso (D14, D16): perfiles Personal/Empresa y RF-IA12. Javier decidió **no gestionar planes ni requisitos de TI**: el CLI hace el login y la empresa aplica sus reglas por su lado; por eso `policy.json` y MSI pasan a «después de v0.1». Licencia MIT (D18). Firma con SignPath (D17). **Estos cambios no pasaron por una segunda revisión con contexto limpio.**
 - ¿Cuál es el sandbox real de Codex en Windows? Lo dirá el spike.
 - ¿Copilot acepta prompt por stdin? Lo dirá el spike.

@@ -50,9 +50,10 @@ Cada requisito es `[P]` paridad con el Swift o `[N]` novedad. Las novedades no p
 | D10 | La IA entra siempre en el binario, apagada hasta consentimiento. Hay un interruptor para desactivarla del todo | **PROPUESTA** (sustituye al flag `ARIADNA_AI`) |
 | D11 | v0.1 sin Mica/vibrancy: fondo sólido con diseño propio. Mica y vibrancy en v0.2 | **PROPUESTA** |
 | D12 | Instalador Windows: NSIS, con bootstrapper de WebView2 | Cerrada (PM) |
-| D14 | **Doble uso: particular y empresa.** La empresa tiene ChatGPT (Codex) y GitHub Copilot, con planes y reglas internas que Javier no conoce en detalle. No usan proxy ni tienen certificado de firma | **Cerrada (Javier)** |
+| D14 | **Doble uso: particular y empresa.** Ariadna usa los CLI oficiales con la sesión que el usuario tenga; **no se gestionan planes ni condiciones de cuenta de la empresa**. No hay proxy ni certificado de firma en la empresa. No se diseña para despliegue gestionado por TI | **Cerrada (Javier)** |
+| D18 | Licencia **MIT** (`LICENSE` en la raíz) | **Cerrada (Javier)** |
 | D16 | **Perfiles Personal y Empresa.** Cada repo se asocia a un perfil. El perfil decide qué proveedores de IA se permiten, con qué cuenta y con qué consentimiento. Claude queda desactivado en el perfil Empresa hasta que se habilite expresamente | **PROPUESTA** |
-| D17 | **Firma de binarios por etapas:** alfas sin firmar; para `v0.1.0`, firma elegida entre las opciones de §10 | **PROPUESTA** |
+| D17 | **Firma de binarios por etapas:** alfas sin firmar; para `v0.1.0`, solicitar **SignPath Foundation** (gratis para OSS; la licencia MIT cumple el requisito de licencia, el resto de condiciones se leen al solicitarla). Si no se concede, se publica sin firmar con la guía de «Abrir igualmente» | **PROPUESTA** |
 | D15 | macOS mínimo **15** (igual que el Swift) | **Cerrada (Javier)** |
 | D13 | Hitos alfa publicables: `alpha.1` tras M5 (Git sin IA), `alpha.2` tras M6 (IA) | **PROPUESTA** |
 
@@ -182,8 +183,8 @@ Un proveedor sin flags verificados no bloquea `alpha.2`; se publica marcado expe
 - **RF-IA7:** esquema de parseo por proveedor y versión mínima, con golden files de salida real. Formato desconocido → «formato no reconocido», nunca texto crudo a la UI.
 - **RF-IA8:** Cola de IA FIFO global con **2 llamadas simultáneas** y límite por minuto. Estado visible (en cola, generando, cancelar). Se cancela al cerrar la pestaña.
 - **RF-IA9:** Auto salta de proveedor solo si el anterior **no está instalado**, y solo entre proveedores con consentimiento. No hay fallback por error de contenido, sesión o cuota. La hoja de propuesta muestra qué proveedor respondió.
-- **RF-IA10:** términos de uso **en contexto de empresa**. La empresa tiene ChatGPT y Copilot (plan exacto sin confirmar; la cuenta mostrada por RF-IA12 y TI lo aclararán) y sus propias reglas sobre IA y código. Antes de `alpha.2` se leen y citan con fecha los vigentes de Anthropic, OpenAI y GitHub y se contestan tres preguntas por proveedor: (a) ¿un plan individual (Pro/Max, Plus, Copilot Individual) puede usarse para trabajo de la empresa?, (b) ¿qué plan de organización corresponde (Team/Enterprise, Business/Enterprise, Copilot Business/Enterprise) y qué cambia en login y retención de datos?, (c) ¿está permitido que una aplicación de terceros lance el CLI oficial con la sesión del usuario? Hasta tener la respuesta, la IA es **opt-in** y la documentación recomienda cuentas de organización. El README advierte que el usuario es responsable del cumplimiento. Fallback si hay ambigüedad en (c): distribuir con la IA desactivada por defecto.
-- **RF-IA11 (política administrable):** un archivo de política opcional con campo `appliesTo` (`empresa` | `todos`), de solo lectura para el usuario (`/Library/Application Support/Ariadna/policy.json` en macOS, `%ProgramData%\Ariadna\policy.json` en Windows), que permite: desactivar la IA, restringir los proveedores permitidos, fijar el tope de contexto y obligar a la vista previa. Si existe, manda sobre los ajustes del usuario y la UI lo indica. Es desplegable con MDM/Intune/GPO.
+- **RF-IA10:** términos de uso. Ariadna solo lanza el CLI oficial con la sesión del propio usuario y no toca sus credenciales. Antes de `alpha.2` se leen y citan con fecha los términos vigentes de Anthropic, OpenAI y GitHub como tarea de cumplimiento; **no bloquea el desarrollo**. El README avisa de que el usuario es responsable de cumplir las condiciones de su cuenta y de las reglas de su empresa.
+- **RF-IA11 (política administrable, POSTERIOR a v0.1):** un archivo de política opcional con campo `appliesTo` (`empresa` | `todos`), de solo lectura para el usuario (`/Library/Application Support/Ariadna/policy.json` en macOS, `%ProgramData%\Ariadna\policy.json` en Windows), que permite: desactivar la IA, restringir los proveedores permitidos, fijar el tope de contexto y obligar a la vista previa. Si existe, manda sobre los ajustes del usuario y la UI lo indica. Es desplegable con MDM/Intune/GPO.
 - **RF-IA12 (cuentas de organización):** el login lo hace siempre el CLI oficial (SSO incluido). Ajustes muestra qué cuenta/organización usa cada proveedor cuando el CLI lo expone, para evitar mandar código de empresa con una cuenta personal. Las pruebas de humo se hacen con cuentas de organización.
 
 ## 6. Seguridad de la aplicación
@@ -246,20 +247,18 @@ Procesos: Job Object de Windows con `KILL_ON_JOB_CLOSE`, proceso creado suspendi
 - CI: `macos-15`, `windows-2025`, `windows-11-arm`, `ubuntu` (núcleo). `cargo fmt --check`, `clippy -D warnings`, `cargo deny`, `cargo test`, gitleaks, build de UI, `vitest`, `axe` en E2E, regresión visual con baseline por SO (tolerancia 0,1 %). Un **job agregador** siempre corre. Caché de cargo.
 - Git mínimo (2.39) y último, ambos en CI.
 - macOS: `.dmg` universal, firma ad-hoc, notarización opcional con los secrets actuales. Se documenta cómo abrir una app no notarizada y se acepta ese límite en v0.1.
-- Windows: **MSI** (despliegue por Intune/GPO/SCCM, instalación por máquina y sin administrador cuando sea posible) más NSIS para uso individual; x64 y ARM64 (mejor esfuerzo). WebView2: se asume presente en Windows 11 y en equipos gestionados; el instalador lo comprueba y lo instala si falta, con opción de instalación sin conexión. Prueba de instalación, actualización y desinstalación limpias en VM.
+- Windows: instalador **NSIS** por usuario (sin administrador), x64 y ARM64 (mejor esfuerzo). WebView2: presente en Windows 11; el instalador lo comprueba y lo instala si falta. Prueba de instalación, actualización y desinstalación limpias en VM. MSI para despliegue gestionado: posterior a v0.1.
 - **Firma de código (D17).** No hay certificado. Sin firma, SmartScreen avisa y los equipos de empresa pueden bloquear el binario. Las alfas salen sin firmar con aviso. Para `v0.1.0` se elige entre (datos de Microsoft Learn consultados al redactar; revisar antes de decidir):
 
 | Opción | Coste aprox. | Condiciones | Encaja |
 |---|---|---|---|
-| **Firma interna de la empresa** (CA corporativa o lista de permitidos por hash en AppLocker/WDAC) | Sin coste externo | Depende de TI | Uso en la empresa. La más simple si TI colabora |
-| **SignPath Foundation** | Gratis para código abierto | El proyecto debe ser OSS: hoy el repo es público **sin licencia** (`license: null`), así que habría que elegir una. Condiciones por leer en signpath.org | Particulares, repo público |
+| **SignPath Foundation** | Gratis para código abierto | Requiere proyecto OSS: el repo es público y desde D18 tiene licencia MIT. Otras condiciones por leer en signpath.org | **Elegida (D17)** |
 | **Azure Artifact Signing** | ~10 USD/mes | Organizaciones en UE/EE. UU./Canadá/Reino Unido con 3+ años de historial fiscal; **particulares solo EE. UU. y Canadá** (no aplica a un particular en España). Suscripción de Azure de pago | Solo si el titular es una empresa elegible |
 | **Certificado OV** de una CA | 150–300 USD/año | Token HSM o HSM en la nube; validación de identidad | Particulares fuera de EE. UU./Canadá |
 | Sin firmar | 0 | SmartScreen avisa; empresas pueden bloquear | Solo alfas |
 
 macOS: Developer ID y notarización requieren Apple Developer Program (de pago). Sin él, firma ad-hoc con el procedimiento de «Abrir igualmente»; los Mac gestionados pueden bloquearlo.
-- Propuesta: alfas sin firmar; la versión de empresa se distribuye por TI con su firma o lista de permitidos; la versión pública usa SignPath si se adopta licencia OSS, o un OV si no.
-- Red corporativa: la empresa de Javier **no usa proxy**, así que proxy con autenticación, PAC y CA propia son **mejor esfuerzo** en v0.1: se respetan las variables y el almacén del sistema, sin pruebas dedicadas en CI.
+- Propuesta (D17): alfas sin firmar; `v0.1.0` con SignPath Foundation; si no se concede, un OV o sin firmar con aviso.
 - Sin telemetría y sin llamadas de red propias: lo único que sale del equipo es lo que hacen `git` y los CLI de IA.
 - Política de ramas: fusionar `main` en `rust-migration` periódicamente.
 - Al lograr la paridad: tag `swift-final`, rama `legacy-swift`, borrar Swift de `main`, README nuevo.
@@ -285,13 +284,9 @@ macOS: Developer ID y notarización requieren Apple Developer Program (de pago).
 | Repos hostiles ejecutan código vía git | §4.1 |
 | WebView2/WKWebView difieren | Matriz, lint CSS, regresión visual |
 | Calidad de ARM64 sin hardware real | Mejor esfuerzo (D7) |
-| Binarios sin firmar bloqueados en equipos de empresa | Firma por etapas (D17); MSI; colaboración con TI |
+| Binarios sin firmar bloqueados en equipos gestionados | Firma por etapas (D17); documentar el aviso |
 | Código de empresa enviado con cuenta personal | RF-IA12 y RF-IA11 |
 | Sandbox de Codex en Windows distinto al de Unix | Humo manual de escritura/ejecución; avisar si no hay garantía |
 
 ## 13. Preguntas abiertas para Javier
-1. ¿Vetas alguna **PROPUESTA** (D7 ARM64, D10, D11 sin Mica, D13 alfas, **D16 perfiles**, **D17 firma por etapas**)?
-2. **Licencia:** el repo es público y no tiene licencia, así que legalmente nadie puede reutilizarlo y SignPath no aplicaría. ¿Quieres una licencia abierta (MIT, Apache-2.0) o mantenerlo propietario? Si lo usas en tu empresa, conviene confirmar con ellos que no reclaman la autoría.
-3. **Planes en la empresa:** ¿sabes si el Copilot es Business o Enterprise y qué ChatGPT tienen (Business, Enterprise)? Se puede ver iniciando sesión con los CLI en M0. ¿Hay que pedir permiso a seguridad para mandar código al proveedor?
-4. **Despliegue y firma en la empresa:** ¿pueden TI firmar con su CA o permitir el binario por hash? ¿El equipo de empresa es Windows, Mac o ambos?
-5. ¿Tu portátil de trabajo tiene AppLocker/WDAC o permisos para instalar software?
+Ninguna bloquea M0. Quedan por confirmar las **PROPUESTAS**: D7 (ARM64 mejor esfuerzo), D10 (IA siempre en el binario, apagada hasta consentir), D11 (sin Mica en 0.1), D13 (alfas), D16 (perfiles Personal/Empresa) y D17 (SignPath). Si no se vetan en M0, pasan a cerradas.

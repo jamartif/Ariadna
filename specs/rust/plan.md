@@ -29,7 +29,7 @@ specs/                     Swift: spec.md, plan.md, tasks.md · Rust: specs/rust
 
 | Hito | Contenido | Criterio de salida |
 |---|---|---|
-| M0 | Requisitos de doble uso con Javier (D14, D16), licencia, spikes (CLI de IA reales, Mica descartado, WebView2), matriz de trazabilidad, inventario de tests, términos de uso, mockups base, rama y andamiaje de specs | Cero hallazgos altos abiertos; spikes documentados |
+| M0 | Licencia MIT, solicitud de SignPath, spikes (CLI de IA reales, Mica descartado, WebView2), matriz de trazabilidad, inventario de tests, términos de uso, mockups base, rama y andamiaje de specs | Cero hallazgos altos abiertos; spikes documentados |
 | M1 | Workspace, CI en 4 runners, `ProcessRunner`, localización de git, `PathSafety`, parsers y fixtures | Tests de parsers y proceso en verde en macOS, Windows, Linux |
 | M2 | `GitEngine`: status, stage, commit, amend, log, búsqueda, diff. Contrato de comandos, errores y eventos | Tests portados = tests Swift del área |
 | M3 | Ramas, remotos, merge, conflictos 3 vías, abort/continue | Tests portados = tests Swift del área |
