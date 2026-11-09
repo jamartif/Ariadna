@@ -4,6 +4,10 @@ name: bundle
 # Solo manual mientras dura la migración. Los binarios NO están firmados.
 on:
   workflow_dispatch:
+  # Se ejecuta al editar este mismo archivo (sirve para lanzarlo desde la rama mientras no exista en main).
+  push:
+    branches: [rust-migration]
+    paths: ['.github/workflows/bundle.yml']
 
 env:
   CARGO_TERM_COLOR: always
