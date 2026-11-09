@@ -1,0 +1,53 @@
+name: bundle
+
+# Empaqueta la app (Tauri): instalador NSIS en Windows y .dmg universal en macOS.
+# Solo manual mientras dura la migración. Los binarios NO están firmados.
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bundle:
+    name: bundle (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-2025
+            args: ""
+            targets: ""
+          - name: macos-universal
+            os: macos-15
+            args: "--target universal-apple-darwin"
+            targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Dependencias de la interfaz
+        run: npm ci --no-audit --no-fund
+        working-directory: ui
+      - name: Construir instalador
+        run: npx --yes @tauri-apps/cli@2 build ${{ matrix.args }}
+      - name: Listar resultado
+        shell: bash
+        run: find target -path '*release/bundle*' -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.msi' \) -print
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ariadna-${{ matrix.name }}
+          if-no-files-found: error
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/universal-apple-darwin/release/bundle/dmg/*.dmg
