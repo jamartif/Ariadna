@@ -87,6 +87,13 @@ pub fn every_git_error() -> Vec<(GitError, &'static str)> {
             },
             "DUBIOUS_OWNERSHIP",
         ),
+        (
+            GitError::Auth {
+                host: "dev.azure.com".into(),
+                hint: "El token ha caducado.".into(),
+            },
+            "AUTH",
+        ),
         (GitError::Io("disco lleno".into()), "IO"),
     ]
 }

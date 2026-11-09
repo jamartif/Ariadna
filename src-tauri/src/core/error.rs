@@ -37,6 +37,7 @@ pub const ALL_CODES: [&str; 21] = [
     "PARSE",
     "LOCKED",
     "DUBIOUS_OWNERSHIP",
+    "AUTH",
     "IO",
     "REPO_MISSING",
 ];
