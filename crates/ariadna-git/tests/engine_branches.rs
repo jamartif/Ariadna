@@ -622,7 +622,7 @@ async fn cherry_pick_conflict_continue() {
 async fn integration_state_follows_linked_worktree_git_dir() {
     let r = conflicted_repo();
     let wt_parent = tempfile::tempdir().unwrap();
-    let wt_path = wt_parent.path().canonicalize().unwrap().join("wt");
+    let wt_path = dunce::canonicalize(wt_parent.path()).unwrap().join("wt");
     r.git(&[
         "worktree",
         "add",
