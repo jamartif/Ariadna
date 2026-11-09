@@ -17,7 +17,7 @@ pub struct ApiError {
 pub type ApiResult<T> = Result<T, ApiError>;
 
 /// Todos los códigos del contrato (para tests y documentación).
-pub const ALL_CODES: [&str; 21] = [
+pub const ALL_CODES: [&str; 22] = [
     "NOT_A_REPOSITORY",
     "GIT_NOT_FOUND",
     "COMMAND_FAILED",

@@ -111,12 +111,12 @@ fn cada_git_error_tiene_su_codigo_exacto_y_mensaje_en_espanol() {
 #[test]
 fn los_codigos_cubren_exactamente_el_contrato() {
     let mapped: BTreeSet<&str> = every_git_error().iter().map(|(_, c)| *c).collect();
-    assert_eq!(mapped.len(), 20, "20 variantes, 20 códigos distintos");
+    assert_eq!(mapped.len(), 21, "21 variantes, 21 códigos distintos");
     let mut expected: BTreeSet<&str> = ALL_CODES.iter().copied().collect();
     // REPO_MISSING no viene de git: lo emite la app (pestaña ausente).
     assert!(expected.remove("REPO_MISSING"));
     assert_eq!(mapped, expected);
-    assert_eq!(ALL_CODES.len(), 21);
+    assert_eq!(ALL_CODES.len(), 22);
 }
 
 #[test]
