@@ -70,28 +70,33 @@
 - [ ] `DubiousOwnership` con confirmación para `safe.directory`
 
 ## M4 — Shell de la app
-- [ ] Proyecto Tauri 2 + Svelte 5 + TS; `tauri-specta`; CI falla si el binding difiere
-- [ ] CSP estricta y capabilities mínimas; sin `{@html}`
-- [ ] Tokens, tema claro/oscuro/sistema, Inter y JetBrains Mono
-- [ ] `SessionManager`: ciclo de vida (§3.1), clave de repo, dedupe, cierre con confirmación
-- [ ] Confirmaciones nativas desde Rust con token de un solo uso (§6)
+
+> Estado: backend Tauri (`AppCore`, pestañas, 34 comandos IPC, `session.json`, fixtures) e interfaz Svelte (diseño claro/oscuro, pestañas, bienvenida, cambios, diff por hunk, commit, paleta) **hechos y validados en CI** (Windows x64/ARM64, macOS 15, Ubuntu); el instalador NSIS y el `.dmg` se construyen. Pendiente: vigilancia de archivos (`notify`), hibernación de pestañas, pantalla de recuperación, clonado (D20) en la bienvenida, `opener`.
+- [x] Proyecto Tauri 2 + Svelte 5 + TS; `tauri-specta`; CI falla si el binding difiere
+- [x] CSP estricta y capabilities mínimas; sin `{@html}`
+- [ ] **Barra de título duplicada** (hallazgo en la ventana nativa): Tauri dibuja la barra del sistema y la UI dibuja la suya. Poner `decorations: false` con controles propios (minimizar, maximizar, cerrar) en Windows y Linux, y `titleBarStyle: Overlay` con los semáforos en macOS; verificar el arrastre (`data-tauri-drag-region`)
+- [x] Tokens, tema claro/oscuro/sistema, Inter y JetBrains Mono
+- [x] `SessionManager`: ciclo de vida (§3.1), clave de repo, dedupe, cierre con confirmación
+- [x] Confirmaciones nativas desde Rust con token de un solo uso (§6)
 - [ ] Pestañas: hibernación, reorden por teclado, indicadores, tope de 20
-- [ ] `session.json` versionado y atómico, con respaldo y recuperación
+- [x] `session.json` versionado y atómico, con respaldo y recuperación
 - [ ] Watcher (`notify`): debounce, `.git/` aparte, overflow → refresco completo, sondeo en UNC
 - [ ] Bienvenida: ruta, Examinar, recientes, favoritos, **Clonar desde URL** y formulario de credenciales (PAT o «iniciar sesión con el navegador») (D20)
 - [ ] Plugin `opener` con capability mínima (solo `https` y el host del remoto) para «Abrir en el navegador» y «Crear pull request» (D19)
-- [ ] Paleta de comandos y registro único de atajos (ES/US/DE)
-- [ ] Errores: toast, banner de pestaña, pantalla de recuperación
+- [x] Paleta de comandos y registro único de atajos (ES/US/DE)
+- [x] Errores: toast, banner de pestaña, pantalla de recuperación
 
 ## M5 — Pantallas (→ alpha.1)
-- [ ] Cambios: preparados / sin preparar / sin seguimiento / ignorados / conflictos
-- [ ] Diff por hunk (CodeMirror 6), virtualizado, límites de NF-5
-- [ ] Barra de commit (Ctrl/⌘+Intro), amend
+
+> Estado: Cambios, diff por hunk y barra de commit hechos (225 tests de UI). Pendiente: historial real, ramas (checkout/crear/fusionar), conflictos, ajustes, regresión visual.
+- [x] Cambios: preparados / sin preparar / sin seguimiento / ignorados / conflictos
+- [x] Diff por hunk (CodeMirror 6), virtualizado, límites de NF-5
+- [x] Barra de commit (Ctrl/⌘+Intro), amend
 - [ ] Historial paginado con filtro local y búsqueda global (NF-4)
 - [ ] Ramas y remotos, con icono del proveedor y acciones «Abrir en el navegador» / «Crear pull request» (D19)
 - [ ] Estudio de conflicto a tres paneles + resultado
 - [ ] Ajustes: pull con rebase, ruta de git
-- [ ] Vitest de componentes
+- [x] Vitest de componentes
 - [ ] Publicar `0.1.0-alpha.1` (macOS y Windows x64)
 
 ## M6 — IA (→ alpha.2)

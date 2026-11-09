@@ -9,7 +9,7 @@ Spec §3.3. **El estado vive en Rust**; la interfaz es una vista. Este documento
 - `GitPath` viaja como **cadena** si es UTF-8 y como **lista de bytes** (`number[]`) si no lo es. La UI debe aceptar ambas (`type GitPath = string | number[]`) y devolverlas sin tocar.
 - Toda llamada de pestaña lleva `tabId` (el `session_id` de Rust). Nunca hay estado global implícito.
 - Las rutas del sistema (carpeta de repo) viajan como `string`.
-- **Errores**: un comando fallido rechaza la promesa con un objeto `ApiError { code, message, detail? }`. `code` es estable (`NOT_A_REPOSITORY`, `GIT_NOT_FOUND`, `COMMAND_FAILED`, `NOTHING_TO_COMMIT`, `EMPTY_COMMIT_MESSAGE`, `DETACHED_HEAD_COMMIT`, `CANNOT_AMEND`, `LOCAL_CHANGES_BLOCK_CHECKOUT`, `DIVERGED_LOCAL_BRANCH`, `INVALID_REFERENCE`, `HUNK_NOT_FOUND`, `NO_INTEGRATION`, `CONFIRMATION_REQUIRED`, `PATH_ESCAPES_REPOSITORY`, `TIMEOUT`, `CANCELLED`, `PARSE`, `LOCKED`, `DUBIOUS_OWNERSHIP`, `IO`, `REPO_MISSING`, `AUTH`, `NOT_FOUND`, `POLICY`, `RATE_LIMITED`, `NETWORK`). `message` ya está en español y listo para mostrar. La UI **nunca** interpreta `message`.
+- **Errores**: un comando fallido rechaza la promesa con un objeto `ApiError { code, message, detail? }`. `code` es estable (`NOT_A_REPOSITORY`, `GIT_NOT_FOUND`, `COMMAND_FAILED`, `NOTHING_TO_COMMIT`, `EMPTY_COMMIT_MESSAGE`, `DETACHED_HEAD_COMMIT`, `CANNOT_AMEND`, `LOCAL_CHANGES_BLOCK_CHECKOUT`, `DIVERGED_LOCAL_BRANCH`, `INVALID_REFERENCE`, `HUNK_NOT_FOUND`, `NO_INTEGRATION`, `CONFIRMATION_REQUIRED`, `PATH_ESCAPES_REPOSITORY`, `TIMEOUT`, `CANCELLED`, `PARSE`, `LOCKED`, `DUBIOUS_OWNERSHIP`, `IO`, `REPO_MISSING`, `AUTH`, `AI_DISABLED`, `AI_NOT_INSTALLED`, `AI_NOT_LOGGED_IN`, `AI_QUOTA`, `AI_BAD_OUTPUT`, `AI_CONTEXT_TOO_LARGE`, `AI_TIMEOUT`, `AI_CONSENT_REQUIRED`, `AI_NO_STAGED_CHANGES`, `AI_SENSITIVE_FILE`, `NOT_FOUND`, `POLICY`, `RATE_LIMITED`, `NETWORK`). `message` ya está en español y listo para mostrar. La UI **nunca** interpreta `message`.
 - **Confirmaciones destructivas**: la UI **no** envía ningún "confirmed". Los comandos destructivos abren un **diálogo nativo desde Rust** que nombra repo, rama y ruta, y devuelven `{ done: false }` si el usuario cancela. Lo hacen `discard`, `write_conflict_resolution`, `abort_integration`, `checkout` cuando hay divergencia, `commit` en HEAD detached y cerrar una pestaña con trabajo pendiente.
 - **Revisión**: cada `Snapshot` lleva `revision` monótona. La UI descarta un snapshot con revisión menor que la que ya tiene.
 - Operaciones largas (`fetch`, `pull`, `push`, IA): emiten `session-event` con `OperationStarted/Finished`; la UI las muestra y puede llamar a `cancel_operation`.
@@ -78,6 +78,33 @@ La sesión (pestañas abiertas y orden) se guarda en `session.json` (versionado,
 | `push` | `remote, refspec: string \| null, setUpstream` | `void` |
 
 Tras cualquier mutación con éxito, Rust ya ha programado un refresco: la UI no tiene que pedirlo, recibirá `snapshot`.
+
+## Comandos de IA (spec §5)
+
+La IA **solo propone**: nunca hace commit ni toca el repo. La UI **nunca** lee el diff para la IA: lo lee Rust (`staged`), lo filtra y lo envía al CLI del proveedor.
+
+| Comando | Argumentos | Devuelve |
+|---|---|---|
+| `ai_state` | `tabId` | `AiState { enabled: boolean, profile: { name, kind: "personal" \| "empresa" }, choice: "auto" \| "claude" \| "codex" \| "copilot", providers: ProviderState[] }` con `ProviderState { id, displayName, availability: "available" \| "missing" \| "failed", version: string \| null, hint: string \| null, enabled: boolean, consented: boolean, loginCommand: string }` |
+| `ai_update_settings` | `patch: { enabled?: boolean, choice?: string, profile?: "personal" \| "empresa", providerEnabled?: { id: string, enabled: boolean }, binaryPath?: { id: string, path: string \| null } }` | `AiState` (se guarda en `ai-settings.json`, escritura atómica; ajuste global, no por pestaña) |
+| `ai_preview_context` | `tabId` | `ContextPreview { provider: string \| null, bytes: number, maxBytes: number, files: { path: GitPath, bytes: number }[], excluded: { path: GitPath, reason: "sensitive" \| "binary" \| "too-large" }[], redactions: number, recentSubjects: number }` (lo que **se enviaría**, sin enviarlo) |
+| `ai_generate_commit_message` | `tabId, options: { template: string \| null, language: "auto" \| "es" \| "en", style: "plain" \| "conventional" }` | `AiCommitSuggestion { subject: string, body: string, provider: string, commandSummary: string, repoRevision: number }` |
+| `ai_cancel` | `tabId` | `boolean` |
+
+Reglas:
+- Genera el mensaje a partir del **diff preparado (staged)**. Sin nada preparado: `AI_NO_STAGED_CHANGES`.
+- Primer uso por perfil y proveedor: Rust abre un **diálogo nativo** de consentimiento (qué se envía, a quién, tamaño). Si el usuario rechaza: `AI_CONSENT_REQUIRED`. El consentimiento se guarda por perfil y proveedor.
+- `language: "auto"` imita el idioma y el estilo de los últimos commits del repo (asuntos de los últimos 20, incluidos en la vista previa).
+- Se excluyen del contexto `.env*`, claves, certificados y binarios, y se redactan secretos (spec §5.1). Si **todos** los archivos preparados son sensibles: `AI_SENSITIVE_FILE`.
+- `AI_NOT_LOGGED_IN` y `AI_NOT_INSTALLED` llevan en `detail` el comando que hay que ejecutar (`claude`, `codex login`, `copilot login`).
+- La sugerencia lleva `repoRevision`: si el repo cambió mientras la IA pensaba, la UI debe avisar de que puede estar obsoleta.
+- El resultado **rellena** los campos de la UI; el usuario siempre revisa y pulsa «Crear commit».
+
+## Ventana
+
+- Windows y Linux: ventana **sin decoraciones** del sistema; la UI dibuja los controles (minimizar, maximizar/restaurar, cerrar) con `@tauri-apps/api/window` y una región arrastrable (`data-tauri-drag-region`).
+- macOS: barra de título integrada (`titleBarStyle: "Overlay"`, `hiddenTitle`); la UI deja hueco a la izquierda para los semáforos.
+- La configuración es por plataforma (`tauri.windows.conf.json`, `tauri.linux.conf.json`, `tauri.macos.conf.json`) y las capabilities de ventana se limitan a `core:window:allow-minimize|toggle-maximize|close|start-dragging|is-maximized`.
 
 ## Eventos (Rust → UI)
 

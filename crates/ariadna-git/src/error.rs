@@ -48,6 +48,10 @@ pub enum GitError {
     /// Otro proceso (otra terminal, un IDE) tiene `index.lock`.
     #[error("El repositorio está bloqueado por otro proceso de git ({lock}). Si no hay ninguno en marcha, borra ese archivo a mano.")]
     Locked { lock: String },
+    /// Fallo de autenticación contra el remoto (credenciales ausentes, caducadas o sin permiso).
+    /// `host` es el servidor; `hint` explica qué hacer (token, `ssh-add`, permisos del PAT…).
+    #[error("No se pudo autenticar en {host}. {hint}")]
+    Auth { host: String, hint: String },
     /// `safe.directory`: el propietario de la carpeta no coincide con el usuario.
     #[error("Git no se fía de la carpeta {path} (propietario distinto). Confírmalo para añadirla a las carpetas seguras.")]
     DubiousOwnership { path: String },

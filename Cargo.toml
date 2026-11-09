@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ariadna-process", "crates/ariadna-git", "crates/ariadna-ai", "src-tauri"]
+members = ["crates/ariadna-process", "crates/ariadna-git", "crates/ariadna-ai", "crates/ariadna-hosting", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0-dev"

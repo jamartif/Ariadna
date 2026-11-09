@@ -233,6 +233,7 @@ export const API_ERROR_CODES = [
   'PARSE',
   'LOCKED',
   'DUBIOUS_OWNERSHIP',
+  'AUTH',
   'IO',
   'REPO_MISSING'
 ] as const;
