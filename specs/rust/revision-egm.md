@@ -45,6 +45,7 @@ Todos aceptados salvo los siguientes, que se **aplazan o rechazan**:
 - Migración de ajustes Swift (R3-H16): solo recientes y favoritos, que viven en un JSON (no en UserDefaults).
 
 ## Dudas que quedan abiertas
-- ¿Se mantiene macOS 13+ (WebView de Tauri) frente al 15+ del Swift? El spec dice 13+ por alcance de usuarios. **Pendiente de Javier.**
+- ~~macOS 13+ o 15+~~: **resuelto, 15+** (D15).
+- Uso en empresa (D14): añade RF-IA10 ampliado, RF-IA11, RF-IA12, firma obligatoria, MSI y red corporativa. Preguntas en spec §13.
 - ¿Cuál es el sandbox real de Codex en Windows? Lo dirá el spike.
 - ¿Copilot acepta prompt por stdin? Lo dirá el spike.

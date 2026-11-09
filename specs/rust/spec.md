@@ -2,7 +2,7 @@
 
 Cliente Git de escritorio para **macOS y Windows**, con IA propuesta por CLI oficiales (Claude, Codex, Copilot) y aspecto moderno. Sustituye a la versión Swift (`Sources/`, `Tests/`), que queda como oráculo de comportamiento hasta alcanzar la paridad.
 
-Estado: v1, tras la revisión con contexto limpio de [revision-egm.md](revision-egm.md). Las decisiones marcadas **PROPUESTA** las ha tomado el PM para resolver la revisión y Javier puede vetarlas.
+Uso previsto: **principalmente en la empresa de Javier** (D14). Estado: v1.1, tras la revisión con contexto limpio de [revision-egm.md](revision-egm.md). Las decisiones marcadas **PROPUESTA** las ha tomado el PM para resolver la revisión y Javier puede vetarlas.
 
 Método: Elephant-Goldfish Model (EGM v0.1.1): brainstorm, borrador, revisión con revisores sin contexto, resolución.
 
@@ -12,7 +12,7 @@ Paridad funcional con el Swift actual, más Windows y pestañas por repo. Nada m
 
 | Plataforma | Estado en v0.1 |
 |---|---|
-| macOS 13+ (universal arm64 + x86_64) | Oficial |
+| macOS 15+ (universal arm64 + x86_64) | Oficial |
 | Windows 10 (22H2) y 11, x64 | Oficial |
 | Windows 11 ARM64 | **PROPUESTA: compilado, con tests unitarios y de integración del núcleo en CI y publicado, sin garantía de IA ni E2E** (ver D7) |
 
@@ -50,6 +50,8 @@ Cada requisito es `[P]` paridad con el Swift o `[N]` novedad. Las novedades no p
 | D10 | La IA entra siempre en el binario, apagada hasta consentimiento. Hay un interruptor para desactivarla del todo | **PROPUESTA** (sustituye al flag `ARIADNA_AI`) |
 | D11 | v0.1 sin Mica/vibrancy: fondo sólido con diseño propio. Mica y vibrancy en v0.2 | **PROPUESTA** |
 | D12 | Instalador Windows: NSIS, con bootstrapper de WebView2 | Cerrada (PM) |
+| D14 | **Uso corporativo.** El primer objetivo es uso en empresa: cuentas de organización para la IA, despliegue gestionado, firma de binarios, proxy y certificados corporativos, y una política administrable que pueda desactivar o limitar la IA | **Cerrada (Javier)** |
+| D15 | macOS mínimo **15** (igual que el Swift) | **Cerrada (Javier)** |
 | D13 | Hitos alfa publicables: `alpha.1` tras M5 (Git sin IA), `alpha.2` tras M6 (IA) | **PROPUESTA** |
 
 ## 3. Arquitectura
@@ -166,7 +168,9 @@ Un proveedor sin flags verificados no bloquea `alpha.2`; se publica marcado expe
 - **RF-IA7:** esquema de parseo por proveedor y versión mínima, con golden files de salida real. Formato desconocido → «formato no reconocido», nunca texto crudo a la UI.
 - **RF-IA8:** Cola de IA FIFO global con **2 llamadas simultáneas** y límite por minuto. Estado visible (en cola, generando, cancelar). Se cancela al cerrar la pestaña.
 - **RF-IA9:** Auto salta de proveedor solo si el anterior **no está instalado**, y solo entre proveedores con consentimiento. No hay fallback por error de contenido, sesión o cuota. La hoja de propuesta muestra qué proveedor respondió.
-- **RF-IA10:** términos de uso. Antes de `alpha.2` se leen y citan con fecha los vigentes de Anthropic, OpenAI y GitHub sobre uso de la suscripción por aplicaciones de terceros. Si hay ambigüedad: uso personal, sin distribución con IA, o modo API opcional. El README advierte que el usuario es responsable del cumplimiento.
+- **RF-IA10:** términos de uso **en contexto de empresa**. Antes de `alpha.2` se leen y citan con fecha los vigentes de Anthropic, OpenAI y GitHub y se contestan tres preguntas por proveedor: (a) ¿un plan individual (Pro/Max, Plus, Copilot Individual) puede usarse para trabajo de la empresa?, (b) ¿qué plan de organización corresponde (Team/Enterprise, Business/Enterprise, Copilot Business/Enterprise) y qué cambia en login y retención de datos?, (c) ¿está permitido que una aplicación de terceros lance el CLI oficial con la sesión del usuario? Hasta tener la respuesta, la IA es **opt-in** y la documentación recomienda cuentas de organización. El README advierte que el usuario es responsable del cumplimiento. Fallback si hay ambigüedad en (c): distribuir con la IA desactivada por defecto.
+- **RF-IA11 (política administrable):** un archivo de política opcional, de solo lectura para el usuario (`/Library/Application Support/Ariadna/policy.json` en macOS, `%ProgramData%\Ariadna\policy.json` en Windows), que permite: desactivar la IA, restringir los proveedores permitidos, fijar el tope de contexto y obligar a la vista previa. Si existe, manda sobre los ajustes del usuario y la UI lo indica. Es desplegable con MDM/Intune/GPO.
+- **RF-IA12 (cuentas de organización):** el login lo hace siempre el CLI oficial (SSO incluido). Ajustes muestra qué cuenta/organización usa cada proveedor cuando el CLI lo expone, para evitar mandar código de empresa con una cuenta personal. Las pruebas de humo se hacen con cuentas de organización.
 
 ## 6. Seguridad de la aplicación
 
@@ -228,7 +232,10 @@ Procesos: Job Object de Windows con `KILL_ON_JOB_CLOSE`, proceso creado suspendi
 - CI: `macos-15`, `windows-2025`, `windows-11-arm`, `ubuntu` (núcleo). `cargo fmt --check`, `clippy -D warnings`, `cargo deny`, `cargo test`, gitleaks, build de UI, `vitest`, `axe` en E2E, regresión visual con baseline por SO (tolerancia 0,1 %). Un **job agregador** siempre corre. Caché de cargo.
 - Git mínimo (2.39) y último, ambos en CI.
 - macOS: `.dmg` universal, firma ad-hoc, notarización opcional con los secrets actuales. Se documenta cómo abrir una app no notarizada y se acepta ese límite en v0.1.
-- Windows: NSIS x64 y ARM64 (mejor esfuerzo), WebView2 con bootstrapper. Sin firma en v0.1: SmartScreen avisará; documentado. Prueba de instalación y desinstalación limpias en VM.
+- Windows: **MSI** (despliegue por Intune/GPO/SCCM, instalación por máquina y sin administrador cuando sea posible) más NSIS para uso individual; x64 y ARM64 (mejor esfuerzo). WebView2: se asume presente en Windows 11 y en equipos gestionados; el instalador lo comprueba y lo instala si falta, con opción de instalación sin conexión. Prueba de instalación, actualización y desinstalación limpias en VM.
+- **Firma de código**: para uso en empresa SmartScreen, AppLocker y WDAC exigen binarios firmados. **Authenticode pasa a ser requisito de `v0.1.0`** (no de las alfas) y macOS pasa a Developer ID + notarización. Requiere certificado (coste y custodia: decisión de Javier, ver §13). Las alfas se distribuyen sin firmar con aviso.
+- Red corporativa: proxy del sistema, PAC, autenticación de proxy y CA propia de la empresa (almacén del sistema) para git, para el `ProcessRunner` de IA y para cualquier descarga. Los CLI de IA reciben las variables de proxy y certificados de la lista blanca (RF-IA3).
+- Sin telemetría y sin llamadas de red propias: lo único que sale del equipo es lo que hacen `git` y los CLI de IA.
 - Política de ramas: fusionar `main` en `rust-migration` periódicamente.
 - Al lograr la paridad: tag `swift-final`, rama `legacy-swift`, borrar Swift de `main`, README nuevo.
 
@@ -248,13 +255,18 @@ Procesos: Job Object de Windows con `KILL_ON_JOB_CLOSE`, proceso creado suspendi
 |---|---|
 | Alcance grande + aprender Rust, Tauri y Svelte | Hitos alfa (D13), núcleo primero, UI delgada |
 | Flags de Codex/Copilot sin verificar | Spike M0, experimental si no se verifica |
-| Términos de uso de suscripciones | RF-IA10 antes de `alpha.2` |
+| Términos de uso de suscripciones en la empresa | RF-IA10 antes de `alpha.2`; IA opt-in y desactivable por política (RF-IA11) |
 | Shims `.cmd` y límites de línea | RF-IA1, RF-IA2 |
 | Repos hostiles ejecutan código vía git | §4.1 |
 | WebView2/WKWebView difieren | Matriz, lint CSS, regresión visual |
 | Calidad de ARM64 sin hardware real | Mejor esfuerzo (D7) |
+| Binarios sin firmar bloqueados en equipos de empresa | Authenticode y notarización obligatorias en `v0.1.0`; MSI |
+| Código de empresa enviado con cuenta personal | RF-IA12 y RF-IA11 |
 | Sandbox de Codex en Windows distinto al de Unix | Humo manual de escritura/ejecución; avisar si no hay garantía |
 
 ## 13. Preguntas abiertas para Javier
 1. ¿Vetas alguna **PROPUESTA** (D7 ARM64 mejor esfuerzo, D10, D11 sin Mica en 0.1, D13 alfas)?
-2. Términos de uso: ¿prefieres uso personal estricto si hay ambigüedad?
+2. Uso en empresa (D14): ¿qué planes de IA tiene tu empresa (Claude Team/Enterprise, ChatGPT Business/Enterprise, Copilot Business/Enterprise) y quién aprueba que el código salga a un proveedor? Eso decide el orden de proveedores y qué se prueba.
+3. ¿La empresa tiene certificado de firma de código o un proceso para firmar, o hay que obtenerlo? ¿Cómo se despliega el software (Intune, GPO, SCCM, instalación libre)?
+4. ¿Las máquinas usan proxy con autenticación o una CA propia? ¿Es Windows de empresa con AppLocker/WDAC?
+5. ¿Hay política interna sobre IA y código fuente que deba reflejarse en `policy.json`?

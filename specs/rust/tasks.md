@@ -7,7 +7,8 @@
 - [ ] Spike CLI de IA: verificar `codex` y `copilot` (flags, stdin, formato de salida, sandbox en Windows). Documentar versiones
 - [ ] Spike `claude`: probar `--setting-sources ""`, salida JSON, detección de sesión sin leer credenciales
 - [ ] Spike WebView2: bootstrapper en NSIS y Ctrl+Tab en WebView2
-- [ ] Leer y citar con fecha los términos de uso de Anthropic, OpenAI y GitHub sobre suscripción en apps de terceros (RF-IA10)
+- [ ] Leer y citar con fecha los términos de Anthropic, OpenAI y GitHub **para uso en empresa**: planes individuales vs organización, y apps de terceros que lanzan el CLI oficial (RF-IA10)
+- [ ] Reunir requisitos corporativos con Javier: planes de IA, aprobación de seguridad, despliegue, firma, proxy/CA, AppLocker/WDAC (D14, §13)
 - [ ] Matriz de trazabilidad: G-01…G-15, RF-IA → tarea → test (generar desde `specs/spec.md` y `Sources/`)
 - [ ] Inventario de los 36 + 8 tests Swift con su tarea Rust
 - [ ] Generar y versionar fixtures de git (con metadatos de versión)
@@ -16,6 +17,7 @@
 - [ ] Javier decide las PROPUESTAS D7, D10, D11, D13
 
 ## M1 — Fundación
+- [ ] Cambiar a macOS 15 como mínimo en la configuración de Tauri y en la CI (D15)
 - [ ] `Cargo.toml` workspace, `rust-toolchain.toml` (≥ 1.77.2), rustfmt, clippy, cargo-deny
 - [ ] CI Rust: macos-15, windows-2025, windows-11-arm, ubuntu; job agregador; caché
 - [ ] `ProcessRunner`: timeout, cancelación, stdin en tarea aparte, stdout/stderr en paralelo, tope de bytes, Job Object (kill-on-close, suspendido) / grupo de procesos, `CREATE_NO_WINDOW` (NF-7) · ProcessAndStoreTests
@@ -86,11 +88,13 @@
 - [ ] Detección de disponibilidad, versión y sesión ejecutando el CLI (RF-IA4)
 - [ ] Cola de IA: 2 simultáneas, límite por minuto, cancelación al cerrar pestaña (RF-IA8)
 - [ ] Modo Auto con reglas de RF-IA9
+- [ ] Política administrable `policy.json` (desactivar IA, proveedores permitidos, tope, vista previa) y su indicador en la UI (RF-IA11)
+- [ ] Mostrar cuenta/organización activa por proveedor (RF-IA12)
 - [ ] Acciones: mensaje de commit, resumen, explicar commit, propuesta de conflicto
 - [ ] Rechazo de propuestas de conflicto que salen de los hunks
 - [ ] Hoja de propuesta: copiar, usar, regenerar, descartar
 - [ ] CLI falso en CI: entorno, argv, stdin, secreto de prueba · AITests
-- [ ] Humo manual con CLI reales en macOS y Windows (checklist)
+- [ ] Humo manual con CLI reales en macOS y Windows, con cuentas de organización (checklist)
 - [ ] Publicar `0.1.0-alpha.2`
 
 ## M7 — Release
@@ -99,9 +103,12 @@
 - [ ] E2E con `tauri-driver` (macOS y Windows x64)
 - [ ] Regresión visual con baselines por SO
 - [ ] Capturas automáticas en CI
-- [ ] `.dmg` universal; NSIS x64 y ARM64 con bootstrapper de WebView2
+- [ ] Proxy del sistema/PAC/autenticación y CA corporativa para git y CLI de IA
+- [ ] `.dmg` universal con Developer ID + notarización; MSI y NSIS (x64, ARM64 mejor esfuerzo) con comprobación de WebView2
+- [ ] Firma Authenticode de los binarios e instalador (requisito de `v0.1.0`)
+- [ ] Guía de despliegue para TI: MSI silencioso, `policy.json`, proxy, WebView2
 - [ ] Prueba de instalación y desinstalación limpias en VM
-- [ ] Documentar apertura de app no notarizada y aviso de SmartScreen
+- [ ] Documentar apertura de las alfas sin firmar (Gatekeeper / SmartScreen)
 - [ ] CHANGELOG y README nuevo
 - [ ] Tag `swift-final`, rama `legacy-swift`, retirar Swift de `main`
 - [ ] Publicar `v0.1.0`
