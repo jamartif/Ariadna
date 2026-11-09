@@ -27,7 +27,7 @@ impl TestRepo {
     pub fn init() -> Self {
         let dir = tempfile::tempdir().unwrap();
         let git = git_path();
-        let root = dir.path().canonicalize().unwrap();
+        let root = dunce::canonicalize(dir.path()).unwrap();
         let r = Self {
             repo: Repository {
                 path: root.clone(),

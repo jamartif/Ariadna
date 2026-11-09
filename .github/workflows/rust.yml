@@ -55,7 +55,7 @@ jobs:
           git config --global user.email "ci@example.invalid"
           git config --global init.defaultBranch main
           git --version
-      - run: cargo test --workspace
+      - run: cargo test --workspace --no-fail-fast
 
   test-windows-arm64:
     name: test (windows-11-arm, mejor esfuerzo)
@@ -71,7 +71,7 @@ jobs:
           git config --global user.name "Ariadna CI"
           git config --global user.email "ci@example.invalid"
           git config --global init.defaultBranch main
-      - run: cargo test --workspace
+      - run: cargo test --workspace --no-fail-fast
 
   gitleaks:
     runs-on: ubuntu-24.04
