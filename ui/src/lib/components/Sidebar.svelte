@@ -1,13 +1,27 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import type { Snapshot } from '$lib/api/types';
+  import type { TabState } from '$lib/stores/tab.svelte';
+  import { branchesOf } from '$lib/stores/branches.svelte';
   import Icon from './Icon.svelte';
   import EmptyState from './EmptyState.svelte';
 
-  let { snapshot, loading }: { snapshot: Snapshot | null; loading: boolean } = $props();
+  let { tab, snapshot, loading }: { tab: TabState; snapshot: Snapshot | null; loading: boolean } = $props();
 
-  // Selección local de la lista; cambiar de rama, crear y fusionar viven en el panel de Ramas.
+  // Marca la fila pulsada y lleva al panel de Ramas con esa rama seleccionada (cambiar de rama,
+  // crear y fusionar viven allí).
   let current = $state<string | null>(null);
+
+  function openBranch(name: string): void {
+    current = name;
+    branchesOf(tab).select(name);
+    tab.panel = 'branches';
+  }
+
+  function openRemotes(name: string): void {
+    current = name;
+    tab.panel = 'branches';
+  }
 </script>
 
 <nav class="sidebar" aria-label={t('sidebar.label')}>
@@ -29,7 +43,7 @@
               class:head={b.isHead}
               aria-current={b.isHead ? 'true' : undefined}
               aria-pressed={current === b.name}
-              onclick={() => (current = b.name)}
+              onclick={() => openBranch(b.name)}
             >
               <Icon name="git-branch" size={14} />
               <span class="name mono">{b.name}</span>
@@ -48,7 +62,7 @@
         <ul>
           {#each snapshot.remoteBranches as b (b.name)}
             <li>
-              <button type="button" class="item" aria-pressed={current === b.name} onclick={() => (current = b.name)}>
+              <button type="button" class="item" aria-pressed={current === b.name} onclick={() => openBranch(b.name)}>
                 <Icon name="cloud" size={14} />
                 <span class="name mono">{b.name}</span>
               </button>
@@ -64,7 +78,7 @@
         <ul>
           {#each snapshot.remotes as r (r.name)}
             <li>
-              <button type="button" class="item two" aria-pressed={current === r.name} onclick={() => (current = r.name)}>
+              <button type="button" class="item two" aria-pressed={current === r.name} onclick={() => openRemotes(r.name)}>
                 <Icon name="cloud" size={14} />
                 <span class="stack">
                   <span class="name">{r.name}</span>

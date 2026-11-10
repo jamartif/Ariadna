@@ -141,7 +141,7 @@
       style:--mid="{mid}px"
     >
       <aside class="col side">
-        <Sidebar snapshot={snap} loading={tab.loading} />
+        <Sidebar {tab} snapshot={snap} loading={tab.loading} />
       </aside>
       <Splitter
         value={side}

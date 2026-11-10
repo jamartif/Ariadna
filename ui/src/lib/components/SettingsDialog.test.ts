@@ -2,9 +2,10 @@ import { render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { settingsUi } from '$lib/stores/settingsPanel.svelte';
-import { mockApi, resetGlobals } from '../../test/helpers';
+import { loadedTab, mockApi, resetGlobals } from '../../test/helpers';
 import SettingsDialog from './SettingsDialog.svelte';
 import Sidebar from './Sidebar.svelte';
+import { branchesOf } from '$lib/stores/branches.svelte';
 
 beforeEach(() => {
   resetGlobals();
@@ -224,9 +225,19 @@ describe('Ajustes: Cuentas, Acerca de y aviso de archivo dañado', () => {
 
 describe('Barra lateral', () => {
   it('ya no anuncia que cambiar de rama, crear y fusionar «llegan en la siguiente versión»', async () => {
-    const api = mockApi();
-    const snap = await api.getSnapshot('tab-ariadna');
-    render(Sidebar, { props: { snapshot: snap, loading: false } });
+    const { tab } = await loadedTab();
+    const snap = tab.snapshot!;
+    render(Sidebar, { props: { tab, snapshot: snap, loading: false } });
     expect(screen.queryByText(/siguiente versión/)).toBeNull();
+  });
+
+  it('al pulsar una rama abre el panel de Ramas con esa rama seleccionada', async () => {
+    const { tab } = await loadedTab();
+    const snap = tab.snapshot!;
+    render(Sidebar, { props: { tab, snapshot: snap, loading: false } });
+    const name = snap.branches[snap.branches.length - 1]!.name;
+    await userEvent.click(screen.getByRole('button', { name: new RegExp(name) }));
+    expect(tab.panel).toBe('branches');
+    expect(branchesOf(tab).selected).toBe(name);
   });
 });

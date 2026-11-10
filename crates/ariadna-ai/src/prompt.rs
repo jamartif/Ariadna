@@ -281,8 +281,8 @@ Rules:
 - Output ONLY the commit message. No markdown fences, no quotes around it and no preamble \
 or labels such as \"Subject:\".
 - First line: subject, imperative mood, at most 72 characters, no trailing period.
-- Optional body after one blank line: brief bullet points (\"- ...\") saying what changed and why. \
-Leave the body out for trivial changes.
+- ALWAYS include a body after one blank line: 2 to 5 brief bullet points (\"- ...\") saying what \
+changed and why, each at most 100 characters. Never return the subject alone, even for small changes.
 - {language}
 - {style}
 - If a TEMPLATE section is present, follow it when it fits."
@@ -583,6 +583,7 @@ mod tests {
         assert!(p.text.contains("at most 72 characters"));
         assert!(p.text.contains("imperative mood"));
         assert!(p.text.contains("bullet points"));
+        assert!(p.text.contains("ALWAYS include a body"));
         assert!(p.text.contains("\"Subject:\""));
     }
 
