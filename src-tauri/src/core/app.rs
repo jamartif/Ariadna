@@ -779,6 +779,7 @@ impl AppCore {
                 worktree: repo.path.clone(),
                 git_dir: repo.git_dir.clone(),
                 timings,
+                git: self.runner().ok().map(|r| r.git_path().to_path_buf()),
             },
             trigger,
             Arc::clone(&self.inner.focused),

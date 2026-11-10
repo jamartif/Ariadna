@@ -2,17 +2,21 @@
 //!
 //! * Worktree recursivo + `.git/{HEAD,index,refs,…}` aparte; el ruido (`.git/objects`,
 //!   `*.lock`, `node_modules`, `target`, `dist`…) se descarta en el propio callback de `notify`.
+//!   Las carpetas de compilación con nombres comunes (`bin`, `obj`, `packages`) solo se
+//!   descartan si git las ignora (`git check-ignore`, una vez por carpeta).
 //! * Los eventos se coalescen: 300 ms de silencio, con tope de 2 s desde el primero.
 //! * Si el vigilante no arranca, desborda o el sistema de archivos no emite eventos (WSL
 //!   `/mnt/c`, redes, UNC) se cae a un sondeo ligero que solo corre con la ventana enfocada.
 //!
 //! La lógica pura ([`PathFilter`], [`Coalescer`]) no toca el disco y se prueba aparte.
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -46,7 +50,12 @@ const IGNORED_DIRS: &[&str] = &[
     "venv",
     ".gradle",
     ".idea",
+    ".vs",
 ];
+
+/// Carpetas de compilación (.NET, NuGet…) cuyo nombre también se usa para código versionado
+/// (`bin/` con scripts, p. ej.): solo se descartan si git las ignora.
+const BUILD_DIRS_IF_IGNORED: &[&str] = &["bin", "obj", "packages"];
 
 /// Ficheros del directorio git cuyo cambio altera el estado visible.
 const GIT_STATE_FILES: &[&str] = &[
@@ -87,6 +96,54 @@ pub struct PathFilter {
     roots: Vec<PathBuf>,
     git_dirs: Vec<PathBuf>,
     case_insensitive: bool,
+    ignore_probe: Option<Arc<IgnoreProbe>>,
+}
+
+/// Pregunta a git si una carpeta está ignorada y recuerda la respuesta.
+#[derive(Debug)]
+pub struct IgnoreProbe {
+    git: PathBuf,
+    worktree: PathBuf,
+    cache: Mutex<HashMap<Vec<String>, bool>>,
+}
+
+impl IgnoreProbe {
+    pub fn new(git: PathBuf, worktree: PathBuf) -> Self {
+        Self {
+            git,
+            worktree,
+            cache: Mutex::default(),
+        }
+    }
+
+    /// ¿Ignora git la carpeta `rel` (componentes relativos al worktree)? Si git no responde,
+    /// se vigila: es mejor un refresco de más que perder un cambio real.
+    fn is_ignored_dir(&self, rel: &[String]) -> bool {
+        if let Some(known) = self.cache.lock().ok().and_then(|c| c.get(rel).copied()) {
+            return known;
+        }
+        // La barra final hace que los patrones de solo carpeta (`bin/`) también cuenten.
+        let path = format!("{}/", rel.join("/"));
+        let mut cmd = Command::new(&self.git);
+        cmd.arg("-C")
+            .arg(&self.worktree)
+            .args(["check-ignore", "-q", "--"])
+            .arg(&path)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        let ignored = cmd.status().map(|s| s.code() == Some(0)).unwrap_or(false);
+        if let Ok(mut c) = self.cache.lock() {
+            c.insert(rel.to_vec(), ignored);
+        }
+        ignored
+    }
 }
 
 fn variants(p: &Path) -> Vec<PathBuf> {
@@ -114,7 +171,27 @@ impl PathFilter {
             roots: variants(worktree),
             git_dirs,
             case_insensitive: cfg!(any(windows, target_os = "macos")),
+            ignore_probe: None,
         }
+    }
+
+    /// Activa el descarte de `bin`/`obj`/`packages` cuando git los ignora.
+    pub fn with_ignore_probe(mut self, probe: IgnoreProbe) -> Self {
+        self.ignore_probe = Some(Arc::new(probe));
+        self
+    }
+
+    /// ¿Hay en `rel` una carpeta de compilación que git ignora?
+    fn inside_ignored_build_dir(&self, rel: &[String]) -> bool {
+        let Some(probe) = &self.ignore_probe else {
+            return false;
+        };
+        rel.iter().enumerate().any(|(i, c)| {
+            BUILD_DIRS_IF_IGNORED
+                .iter()
+                .any(|d| d.eq_ignore_ascii_case(c))
+                && probe.is_ignored_dir(&rel[..=i])
+        })
     }
 
     /// Parte de `path` bajo `base`, comparando componente a componente.
@@ -149,7 +226,11 @@ impl PathFilter {
         }
         for r in &self.roots {
             if let Some(rel) = self.strip(path, r) {
-                return classify_worktree(&rel);
+                let verdict = classify_worktree(&rel);
+                if verdict == Verdict::Worktree && self.inside_ignored_build_dir(&rel) {
+                    return Verdict::Ignore;
+                }
+                return verdict;
             }
         }
         Verdict::Ignore
@@ -287,6 +368,9 @@ pub struct WatchConfig {
     pub worktree: PathBuf,
     pub git_dir: PathBuf,
     pub timings: WatchTimings,
+    /// Ejecutable de git para preguntar qué carpetas de compilación ignora. Sin él, `bin`,
+    /// `obj` y `packages` se vigilan como cualquier otra carpeta.
+    pub git: Option<PathBuf>,
 }
 
 enum Msg {
@@ -316,17 +400,31 @@ impl TabWatcher {
         on_degraded: OnDegraded,
     ) -> Self {
         let common = read_common_dir(&cfg.git_dir);
-        let filter = PathFilter::new(&cfg.worktree, &cfg.git_dir, common.as_deref());
+        let mut filter = PathFilter::new(&cfg.worktree, &cfg.git_dir, common.as_deref());
+        if let Some(git) = &cfg.git {
+            filter = filter.with_ignore_probe(IgnoreProbe::new(git.clone(), cfg.worktree.clone()));
+        }
         let (tx, rx) = mpsc::unbounded_channel::<Msg>();
         let polling = Arc::new(AtomicBool::new(false));
+        // Un solo `Msg::Change` en la cola a la vez: mientras el refresco está en marcha, una
+        // tormenta de eventos (npm install, dotnet restore) no la hace crecer sin límite.
+        let change_queued = Arc::new(AtomicBool::new(false));
 
         let mut degraded = false;
+        let mut budget = MAX_WATCHED_DIRS;
         let watcher = if fs_never_notifies(&cfg.worktree) {
             // Entorno conocido sin eventos fiables: sondeo directo y sin aviso.
             polling.store(true, Ordering::SeqCst);
             None
         } else {
-            match setup_native(&cfg, common.as_deref(), &filter, &tx) {
+            match setup_native(
+                &cfg,
+                common.as_deref(),
+                &filter,
+                &tx,
+                &change_queued,
+                &mut budget,
+            ) {
                 Ok(w) => Some(w),
                 Err(reason) => {
                     degraded = true;
@@ -342,6 +440,8 @@ impl TabWatcher {
             watcher,
             filter,
             rx,
+            change_queued,
+            budget,
             cfg.timings,
             trigger,
             focused,
@@ -364,6 +464,9 @@ async fn run(
     mut watcher: Option<RecommendedWatcher>,
     filter: PathFilter,
     mut rx: mpsc::UnboundedReceiver<Msg>,
+    change_queued: Arc<AtomicBool>,
+    // Lo que dejó el primer recorrido: el tope de carpetas es uno para toda la vida del vigilante.
+    mut budget: usize,
     timings: WatchTimings,
     trigger: Trigger,
     focused: Arc<AtomicBool>,
@@ -379,13 +482,16 @@ async fn run(
     poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     // Sin canal de eventos (modo sondeo puro) el receptor se cierra: se sigue sondeando.
     let mut rx_open = true;
-    let mut budget = MAX_WATCHED_DIRS;
     loop {
         let deadline = co.deadline().map(tokio::time::Instant::from_std);
         tokio::select! {
             msg = rx.recv(), if rx_open => match msg {
                 None => rx_open = false,
-                Some(Msg::Change) => co.push(Instant::now()),
+                Some(Msg::Change) => {
+                    // Primero se baja la bandera: un evento posterior volverá a encolar.
+                    change_queued.store(false, Ordering::SeqCst);
+                    co.push(Instant::now());
+                }
                 Some(Msg::NewDir(dir)) => {
                     co.push(Instant::now());
                     if let Some(w) = watcher.as_mut() {
@@ -431,9 +537,12 @@ fn setup_native(
     common: Option<&Path>,
     filter: &PathFilter,
     tx: &mpsc::UnboundedSender<Msg>,
+    change_queued: &Arc<AtomicBool>,
+    budget: &mut usize,
 ) -> Result<RecommendedWatcher, String> {
     let cb_filter = filter.clone();
     let cb_tx = tx.clone();
+    let cb_queued = Arc::clone(change_queued);
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| match res {
         Ok(ev) => {
             if ev.need_rescan() {
@@ -467,7 +576,7 @@ fn setup_native(
                     }
                 }
             }
-            if relevant {
+            if relevant && !cb_queued.swap(true, Ordering::SeqCst) {
                 let _ = cb_tx.send(Msg::Change);
             }
         }
@@ -477,8 +586,7 @@ fn setup_native(
     })
     .map_err(describe)?;
 
-    let mut budget = MAX_WATCHED_DIRS;
-    watch_tree(&mut watcher, &cfg.worktree, filter, &mut budget)?;
+    watch_tree(&mut watcher, &cfg.worktree, filter, budget)?;
     // `.git` sin recursión (HEAD, index, MERGE_HEAD…) y `refs/` completo; nunca `objects/`.
     let mut git_dirs = vec![cfg.git_dir.clone()];
     if let Some(c) = common {

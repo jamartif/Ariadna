@@ -100,6 +100,17 @@ async fn anadir_remoto_rechaza_contrasenas_transportes_raros_y_nombres_malos_sin
     for (name, url) in [
         ("o", "https://usuario:secreto@github.com/a/b.git"),
         ("o", "https://:token@github.com/a/b.git"),
+        (
+            "o",
+            "https://ghp_abcdefghijklmnopqrstuvwxyz0123456789@github.com/o/r.git",
+        ),
+        ("o", "https://github_pat_11ABCDEF@github.com/o/r.git"),
+        ("o", "https://glpat-xxxxxxxxxxxxxxxxxxxx@gitlab.com/o/r.git"),
+        ("o", "https://usuario%3Asecreto@github.com/a/b.git"),
+        (
+            "o",
+            "https://abcdefghijklmnopqrstuvwxyz0123456789abcd@dev.azure.com/o/p/_git/r",
+        ),
         ("o", "ext::sh -c touch% /tmp/pwned"),
         ("o", "fd::17/foo"),
         ("o", "-oProxyCommand=x"),
@@ -116,6 +127,7 @@ async fn anadir_remoto_rechaza_contrasenas_transportes_raros_y_nombres_malos_sin
             .unwrap_err();
         assert_eq!(e.code, "INVALID_REFERENCE", "{name:?} {url:?}");
         assert!(!e.message.contains("secreto"), "no se repite el secreto");
+        assert!(!e.message.contains("ghp_"), "no se repite el token");
     }
     assert_eq!(
         env.prompter.count(),
@@ -134,6 +146,43 @@ async fn anadir_remoto_rechaza_contrasenas_transportes_raros_y_nombres_malos_sin
         .await
         .unwrap();
     assert!(r.done);
+    // Y también una organización de Azure DevOps como usuario.
+    let r = env
+        .core
+        .add_remote(
+            &tab,
+            "azure".into(),
+            "https://mi-organizacion@dev.azure.com/mi-organizacion/p/_git/r".into(),
+        )
+        .await
+        .unwrap();
+    assert!(r.done);
+}
+
+#[test]
+fn userinfo_que_parece_token_se_rechaza() {
+    use crate::core::remote_ops::userinfo_has_secret;
+    for secret in [
+        "u:p",
+        ":token",
+        "u%3ap",
+        "ghp_xxxxxxxxxxxxxxxxxxxx",
+        "GHP_short",
+        "github_pat_x",
+        "glpat-x",
+        "0123456789abcdef0123456789abcdef",
+    ] {
+        assert!(userinfo_has_secret(secret), "{secret}");
+    }
+    for user in [
+        "git",
+        "usuario",
+        "mi-organizacion",
+        "jamartif",
+        "first.last",
+    ] {
+        assert!(!userinfo_has_secret(user), "{user}");
+    }
 }
 
 #[tokio::test]

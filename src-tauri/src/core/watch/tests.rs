@@ -98,6 +98,59 @@ fn worktree_enlazado_usa_su_git_dir_y_el_comun() {
     assert_eq!(v(&f, "/w/main/.git/objects/ab/cd"), Verdict::Ignore);
 }
 
+#[test]
+fn carpetas_de_visual_studio_nunca_disparan() {
+    let f = filter();
+    assert_eq!(v(&f, "/w/repo/.vs/App/v17/.suo"), Verdict::Ignore);
+}
+
+#[test]
+fn bin_obj_y_packages_solo_se_ignoran_si_git_los_ignora() {
+    let tmp = tempfile::tempdir().unwrap();
+    let work = dunce::canonicalize(tmp.path()).unwrap();
+    let git = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&work)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    git(&["init", "-q"]);
+    std::fs::write(work.join(".gitignore"), "App/bin/\nApp/obj/\npackages/\n").unwrap();
+    for d in [
+        "App/bin/Debug",
+        "App/obj",
+        "packages/Newtonsoft",
+        "bin",
+        "tools/obj",
+    ] {
+        std::fs::create_dir_all(work.join(d)).unwrap();
+    }
+    let f = PathFilter::new(&work, &work.join(".git"), None)
+        .with_ignore_probe(IgnoreProbe::new(PathBuf::from("git"), work.clone()));
+    let c = |rel: &str| f.classify(&work.join(rel));
+
+    assert_eq!(c("App/bin/Debug/App.dll"), Verdict::Ignore);
+    assert_eq!(c("App/obj/project.assets.json"), Verdict::Ignore);
+    assert_eq!(c("App/obj"), Verdict::Ignore);
+    assert_eq!(c("packages/Newtonsoft/lib.dll"), Verdict::Ignore);
+    // Versionadas (git no las ignora): se vigilan.
+    assert_eq!(c("bin/deploy.sh"), Verdict::Worktree);
+    assert_eq!(c("tools/obj/notes.md"), Verdict::Worktree);
+    assert_eq!(c("App/Program.cs"), Verdict::Worktree);
+    // Sin sonda (git desconocido) no se ignoran: mejor un refresco de más.
+    assert_eq!(
+        filter().classify(Path::new("/w/repo/App/obj/x")),
+        Verdict::Worktree
+    );
+}
+
 #[cfg(windows)]
 #[test]
 fn windows_ignora_mayusculas_y_acepta_prefijo_verbatim() {
@@ -267,6 +320,7 @@ impl Fake {
                 worktree: self.work.clone(),
                 git_dir: self.git.clone(),
                 timings: fast(),
+                git: None,
             },
             c.trigger(),
             Arc::new(AtomicBool::new(true)),
@@ -370,6 +424,7 @@ async fn si_no_puede_vigilar_sondea_solo_con_foco_y_avisa_una_vez() {
             worktree: missing.clone(),
             git_dir: missing.join(".git"),
             timings: fast(),
+            git: None,
         },
         c.trigger(),
         Arc::clone(&focused),

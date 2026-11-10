@@ -72,6 +72,39 @@ fn invalid(what: &str) -> ApiError {
     ApiError::new("INVALID_REFERENCE", what.to_owned(), None)
 }
 
+/// Prefijos de tokens personales conocidos (GitHub y GitLab); los demás suelen ser largos.
+const TOKEN_PREFIXES: &[&str] = &[
+    "ghp_",
+    "gho_",
+    "ghu_",
+    "ghs_",
+    "ghr_",
+    "github_pat_",
+    "glpat-",
+    "gldt-",
+];
+
+/// ¿Lleva el usuario de la URL una contraseña o algo que parece un token?
+///
+/// `usuario:contraseña@` siempre (también con `:` codificado como `%3A`). Sin dos puntos, git
+/// manda el usuario tal cual y muchos servicios aceptan el token en ese hueco
+/// (`https://ghp_xxx@github.com/…`), así que también se rechazan los prefijos de token
+/// conocidos y las cadenas largas sin separadores. El límite de 32 deja pasar usuarios y
+/// organizaciones normales (`https://mi-organizacion@dev.azure.com/…`).
+pub(crate) fn userinfo_has_secret(userinfo: &str) -> bool {
+    let lower = userinfo.to_ascii_lowercase();
+    if lower.contains(':') || lower.contains("%3a") {
+        return true;
+    }
+    if TOKEN_PREFIXES.iter().any(|p| lower.starts_with(p)) {
+        return true;
+    }
+    userinfo.len() >= 32
+        && userinfo
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "_-.~%".contains(c))
+}
+
 /// Rechaza lo que no debe llegar a `git remote add`: contraseñas en la URL (acabarían en
 /// `.git/config` en claro) y transportes auxiliares `algo::…` (p. ej. `ext::`, que ejecutaría
 /// programas). `-x` lo rechaza el motor.
@@ -97,7 +130,7 @@ pub(crate) fn check_new_remote_url(url: &str) -> ApiResult<()> {
     if let Some((_, rest)) = url.split_once("://") {
         let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
         if let Some((userinfo, _)) = authority.rsplit_once('@') {
-            if userinfo.contains(':') {
+            if userinfo_has_secret(userinfo) {
                 return Err(ApiError::new(
                     "INVALID_REFERENCE",
                     "La dirección no puede llevar la contraseña o el token: se guardaría en claro en el repositorio. Quítala; git la pedirá cuando haga falta.",

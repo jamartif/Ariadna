@@ -136,11 +136,79 @@ fn source_label(message: &str) -> Option<String> {
     Some(line[start..start + len].to_owned())
 }
 
-/// Mensaje de git sin las líneas de comentario (`# Conflicts: …`).
-fn clean_message(raw: &str) -> String {
-    let kept: Vec<&str> = raw.lines().filter(|l| !l.starts_with('#')).collect();
-    let text = kept.join("\n");
-    format!("{}\n", text.trim_end())
+/// `# Conflicts:` con el carácter de comentario que use el repositorio (`core.commentChar`
+/// puede ser `;`, o `auto` y git elige uno que no aparezca en el mensaje).
+fn is_conflicts_header(line: &str) -> Option<char> {
+    let mut chars = line.chars();
+    let c = chars.next()?;
+    (!c.is_alphanumeric() && !c.is_whitespace() && chars.as_str() == " Conflicts:").then_some(c)
+}
+
+/// Mensaje de git sin el bloque final de conflictos (`# Conflicts:` y las rutas comentadas
+/// que lo siguen). El resto se respeta tal cual: una línea como `#123 arregla login` es
+/// parte del mensaje.
+pub(crate) fn clean_message(raw: &str) -> String {
+    let lines: Vec<&str> = raw.lines().collect();
+    let mut end = lines.len();
+    if let Some((start, c)) = lines
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(i, l)| is_conflicts_header(l).map(|c| (i, c)))
+    {
+        // Solo si es el final: tras la cabecera únicamente hay líneas comentadas o en blanco.
+        if lines[start + 1..]
+            .iter()
+            .all(|l| l.starts_with(c) || l.trim().is_empty())
+        {
+            end = start;
+        }
+    }
+    format!("{}\n", lines[..end].join("\n").trim_end())
+}
+
+/// Comprueba que las elecciones cubren exactamente los bloques del archivo: ni repetidas, ni
+/// de bloques que no existen, ni falta ninguno (y en ese caso dice cuál).
+fn check_hunk_choices(region_count: usize, choices: &[HunkChoice]) -> ApiResult<()> {
+    let mut seen = vec![false; region_count];
+    for c in choices {
+        match seen.get_mut(c.id) {
+            None => {
+                return Err(ApiError::new(
+                    "HUNK_NOT_FOUND",
+                    format!(
+                        "El archivo no tiene un bloque {} (tiene {region_count}). Vuelve a cargar el conflicto.",
+                        c.id + 1
+                    ),
+                    None,
+                ))
+            }
+            Some(true) => {
+                return Err(ApiError::new(
+                    "HUNK_NOT_FOUND",
+                    format!("El bloque {} está elegido dos veces.", c.id + 1),
+                    None,
+                ))
+            }
+            Some(slot) => *slot = true,
+        }
+    }
+    let missing: Vec<String> = seen
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| !**s)
+        .map(|(i, _)| (i + 1).to_string())
+        .collect();
+    match missing.as_slice() {
+        [] => Ok(()),
+        [one] => Err(markers_remain(&format!(
+            "Falta elegir qué hacer con el bloque {one}."
+        ))),
+        many => Err(markers_remain(&format!(
+            "Falta elegir qué hacer con los bloques {}.",
+            many.join(", ")
+        ))),
+    }
 }
 
 /// Aplica la elección por bloque sobre el archivo con marcadores.
@@ -149,12 +217,14 @@ fn apply_hunks(working: &[u8], choices: &[HunkChoice]) -> ApiResult<Vec<u8>> {
     if parsed.unterminated {
         return Err(markers_remain("El archivo tiene marcadores sin cerrar."));
     }
+    check_hunk_choices(parsed.regions.len(), choices)?;
     let mut out = Vec::with_capacity(working.len());
     let mut cursor = 0;
     for region in &parsed.regions {
         out.extend_from_slice(&working[cursor..region.start]);
         let choice = choices.iter().find(|c| c.id == region.hunk.id);
         match choice.map(|c| c.choice) {
+            // `check_hunk_choices` garantiza que todos los bloques tienen elección.
             None => out.extend_from_slice(&working[region.start..region.end]),
             Some(HunkSide::Ours) => out.extend_from_slice(&region.hunk.ours),
             Some(HunkSide::Theirs) => out.extend_from_slice(&region.hunk.theirs),
@@ -452,5 +522,68 @@ impl AppCore {
             ));
         }
         self.abort_integration(tab_id).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    #[test]
+    fn clean_message_quita_solo_el_bloque_final_de_conflictos() {
+        let raw = "Merge branch 'feature'\n\n#123 arregla login\n# no es comentario de git\n\n# Conflicts:\n#\tc.txt\n#\tsrc/a.rs\n";
+        assert_eq!(
+            clean_message(raw),
+            "Merge branch 'feature'\n\n#123 arregla login\n# no es comentario de git\n"
+        );
+    }
+
+    #[test]
+    fn clean_message_respeta_core_comment_char() {
+        let raw = "Merge branch 'x'\n\n#42 sigue\n\n; Conflicts:\n;\tc.txt\n";
+        assert_eq!(clean_message(raw), "Merge branch 'x'\n\n#42 sigue\n");
+    }
+
+    #[test]
+    fn clean_message_sin_bloque_o_con_texto_detras_no_quita_nada() {
+        assert_eq!(clean_message("Merge\n\n#1 a\n"), "Merge\n\n#1 a\n");
+        let raw = "Merge\n\n# Conflicts:\n#\ta\nTexto del usuario\n";
+        assert_eq!(clean_message(raw), raw);
+    }
+
+    fn choice(id: usize) -> HunkChoice {
+        HunkChoice {
+            id,
+            choice: HunkSide::Ours,
+        }
+    }
+
+    #[test]
+    fn las_elecciones_deben_cubrir_exactamente_los_bloques() {
+        assert!(check_hunk_choices(2, &[choice(1), choice(0)]).is_ok());
+        assert!(check_hunk_choices(0, &[]).is_ok());
+
+        let e = check_hunk_choices(2, &[choice(0), choice(0), choice(1)]).unwrap_err();
+        assert_eq!(e.code, "HUNK_NOT_FOUND");
+        assert!(e.message.contains("bloque 1"), "{}", e.message);
+
+        let e = check_hunk_choices(2, &[choice(0), choice(1), choice(2)]).unwrap_err();
+        assert_eq!(e.code, "HUNK_NOT_FOUND");
+        assert!(e.message.contains("bloque 3"), "{}", e.message);
+
+        let e = check_hunk_choices(3, &[choice(1)]).unwrap_err();
+        assert_eq!(e.code, "CONFLICT_MARKERS_REMAIN");
+        assert!(e.message.contains("bloques 1, 3"), "{}", e.message);
+    }
+
+    #[test]
+    fn el_texto_manual_admite_subrayados_y_separadores_sueltos() {
+        // Títulos de Markdown/RST: `=======` o `>>>>>>>` sueltos no son un conflicto.
+        let rst = b"Titulo\n=======\n\ntexto\n>>>>>>> cita\n";
+        assert!(check_no_markers(rst).is_ok());
+        // La secuencia completa sí, y un `<<<<<<<` sin cerrar también.
+        assert!(check_no_markers(b"<<<<<<< a\n1\n=======\n2\n>>>>>>> b\n").is_err());
+        assert!(check_no_markers(b"a\n<<<<<<< HEAD\nb\n").is_err());
     }
 }
