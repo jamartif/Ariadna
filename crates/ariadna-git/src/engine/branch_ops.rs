@@ -698,6 +698,25 @@ impl GitCliEngine {
         Ok(())
     }
 
+    /// Renombra un remoto (`git remote rename`): git también reescribe las ramas de
+    /// seguimiento (`refs/remotes/<old>/*`) y el `branch.<x>.remote` que apuntaban a él.
+    pub async fn rename_remote(&self, repo: &Repository, old: &str, new: &str) -> GitResult<()> {
+        check_ref(old)?;
+        check_ref(new)?;
+        self.bo_ok(repo, CommandKind::Mutate, &["remote", "rename", old, new])
+            .await?;
+        Ok(())
+    }
+
+    /// Quita un remoto (`git remote remove`): también borra sus ramas de seguimiento y la
+    /// configuración de las ramas locales que lo usaban como upstream.
+    pub async fn remove_remote(&self, repo: &Repository, name: &str) -> GitResult<()> {
+        check_ref(name)?;
+        self.bo_ok(repo, CommandKind::Mutate, &["remote", "remove", name])
+            .await?;
+        Ok(())
+    }
+
     pub async fn fetch(&self, repo: &Repository, remote: &str) -> GitResult<()> {
         check_ref(remote)?;
         self.bo_ok(repo, CommandKind::Network, &["fetch", remote])

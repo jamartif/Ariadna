@@ -86,6 +86,9 @@ export class TabState {
 
   /** Descartados (para tests y depuración). */
   discardedSnapshots = 0;
+  /** Pestaña oculta que liberó su snapshot y su historial; se rehidrata al activarse. */
+  hibernated = $state(false);
+  private hibernateHooks = new Set<() => void>();
 
   private selectedIndex = 0;
   private pendingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -183,8 +186,50 @@ export class TabState {
     }
   }
 
+  // ---- Hibernación -----------------------------------------------------------------------
+
+  /** Registra algo que liberar al hibernar (historial, diffs cargados…). Devuelve el des-registro. */
+  onHibernate(fn: () => void): () => void {
+    this.hibernateHooks.add(fn);
+    return () => this.hibernateHooks.delete(fn);
+  }
+
+  /** ¿Se puede soltar sin perder trabajo? No si hay operaciones, commit en marcha o integración. */
+  get canHibernate(): boolean {
+    if (this.hibernated || this.disposed) return false;
+    if (this.loading || this.committing || this.operations.length > 0 || this.pending.size > 0) return false;
+    if (this.ai.status === 'generating') return false;
+    if (this.info.busy || this.info.missing || this.info.conflictCount > 0) return false;
+    if ((this.snapshot?.integration ?? 'none') !== 'none') return false;
+    return true;
+  }
+
+  /**
+   * Libera lo pesado (snapshot e historial cargado). Se conservan el borrador del commit, el
+   * panel elegido y los contadores de `info`. Devuelve `false` si no procede.
+   */
+  hibernate(): boolean {
+    if (!this.canHibernate) return false;
+    this.hibernated = true;
+    for (const fn of this.hibernateHooks) fn();
+    this.snapshot = null;
+    this.selected = null;
+    this.selectedIndex = 0;
+    this.clearPending();
+    return true;
+  }
+
+  /** Al activarse: vuelve a pedir el estado a Rust (que además refresca al activar). */
+  wake(): void {
+    if (!this.hibernated) return;
+    this.hibernated = false;
+    void this.load();
+  }
+
   /** Aplica un snapshot. Devuelve `false` si se descartó por tener revisión antigua. */
   applySnapshot(s: Snapshot): boolean {
+    // Hibernada: no se guarda nada; al despertar `load()` trae el estado vigente.
+    if (this.hibernated) return false;
     const current = this.snapshot;
     if (current && s.revision <= current.revision) {
       this.discardedSnapshots++;

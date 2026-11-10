@@ -33,6 +33,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'tab.prev', combo: 'Ctrl+Shift+Tab', scope: 'global', label: 'shortcut.prevTab' },
   { id: 'tab.moveLeft', combo: 'Alt+Shift+ArrowLeft', scope: 'global', label: 'shortcut.moveTabLeft' },
   { id: 'tab.moveRight', combo: 'Alt+Shift+ArrowRight', scope: 'global', label: 'shortcut.moveTabRight' },
+  { id: 'repo.open', combo: 'Mod+O', scope: 'global', label: 'shortcut.openRepo' },
   { id: 'palette.open', combo: 'Mod+K', scope: 'global', label: 'shortcut.palette' },
   { id: 'changes.refresh', combo: 'Mod+R', scope: 'tab', label: 'shortcut.refresh' },
   { id: 'changes.stageAll', combo: 'Mod+Shift+A', scope: 'tab', label: 'shortcut.stageAll' },
@@ -172,6 +173,22 @@ export function runShortcut(id: string): boolean {
   return fn() !== false;
 }
 
+/** Última ejecución de cada atajo por teclado (para no repetir la que ya hizo el menú nativo). */
+const keyRuns = new Map<string, number>();
+/** Ventana en la que un elemento de menú se considera eco de la tecla que acaba de ejecutarse. */
+export const MENU_ECHO_MS = 250;
+
+/**
+ * Ejecuta el atajo `id` por un elemento del menú nativo (evento `menu-action`). Si la misma tecla
+ * lo acaba de ejecutar (aceleradores a la vez en menú y en la ventana) se ignora el eco, de modo
+ * que nunca se ejecuta dos veces. Devuelve `true` si había manejador o era un eco.
+ */
+export function runMenuAction(id: string, now = Date.now()): boolean {
+  const last = keyRuns.get(id);
+  if (last !== undefined && now - last >= 0 && now - last < MENU_ECHO_MS) return true;
+  return runShortcut(id);
+}
+
 export function dispatchKey(e: KeyboardEvent, mac = isMac()): boolean {
   for (const def of SHORTCUTS) {
     if (!matches(e, def, mac)) continue;
@@ -183,6 +200,7 @@ export function dispatchKey(e: KeyboardEvent, mac = isMac()): boolean {
     const fn = list?.[list.length - 1];
     if (!fn) continue;
     if (fn() === false) continue;
+    keyRuns.set(def.id, Date.now());
     e.preventDefault();
     e.stopPropagation();
     return true;

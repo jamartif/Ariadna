@@ -74,6 +74,27 @@ export interface Remote {
   pushUrl: string;
 }
 
+/** Proveedor de alojamiento reconocido por Rust (`ariadna-hosting`). */
+export type RemoteProviderId = 'azureDevOps' | 'github' | 'gitlab' | 'bitbucket' | 'other';
+
+/** Un remoto con proveedor y capacidades de enlace (`list_remotes`). */
+export interface RemoteView {
+  name: string;
+  fetchUrl: string;
+  pushUrl: string;
+  provider: RemoteProviderId;
+  providerLabel: string;
+  /** Host normalizado (`dev.azure.com` para toda forma de Azure DevOps); vacío en remotos locales. */
+  host: string;
+  /** Hay página web del repositorio y su host pasa la política de enlaces. */
+  canOpen: boolean;
+  canCreatePullRequest: boolean;
+  ssh: boolean;
+}
+
+/** Página del proveedor que se abre con `open_remote_url`. */
+export type WebTarget = 'repo' | 'branch' | 'pull-request';
+
 export type MergeFastForward = 'allow' | 'only' | 'never';
 
 export type MergeResult =
@@ -244,6 +265,8 @@ export interface AppState {
 export interface OpenResult {
   tab: TabInfo;
   alreadyOpen: boolean;
+  /** Aviso no bloqueante (tope blando de pestañas, worktree de un repo ya abierto). */
+  warning?: string | null;
 }
 
 export interface AmendDraft {
@@ -562,4 +585,10 @@ export interface ApiEvents {
   'tabs-changed': AppState;
   'clone-progress': CloneProgress;
   notice: Notice;
+  /** Elemento del menú nativo pulsado: `id` es un id del registro de atajos. */
+  'menu-action': MenuAction;
+}
+
+export interface MenuAction {
+  id: string;
 }

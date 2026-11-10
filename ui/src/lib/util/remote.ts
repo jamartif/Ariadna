@@ -117,6 +117,47 @@ export function parseRemote(input: string): RemoteGuess | null {
   return null;
 }
 
+/** `dev.azure.com` para toda forma de Azure DevOps (como hace `ariadna-hosting`). */
+function webHost(g: RemoteGuess): string {
+  return g.provider === 'azure' ? 'dev.azure.com' : g.host;
+}
+
+/** Página web del repo (solo https; `null` si no se puede deducir). Lo usa el backend simulado. */
+export function repoWebUrl(input: string): string | null {
+  const g = parseRemote(input);
+  if (!g || !g.host.includes('.') || (!g.owner && g.provider !== 'azure')) return null;
+  const enc = encodeURIComponent;
+  if (g.provider === 'azure') {
+    if (!g.owner) return null;
+    return `https://dev.azure.com/${enc(g.owner)}/${enc(g.project ?? g.repo)}/_git/${enc(g.repo)}`;
+  }
+  const owner = (g.owner ?? '').split('/').map(enc).join('/');
+  return `https://${webHost(g)}/${owner}/${enc(g.repo)}`;
+}
+
+/** Enlace de rama o de «nueva pull request» (formas de `ariadna-hosting`); `null` si no hay. */
+export function remoteBranchUrl(input: string, kind: 'branch' | 'pull-request', branch: string): string | null {
+  const g = parseRemote(input);
+  const base = repoWebUrl(input);
+  if (!g || !base || branch.trim() === '' || /[\u0000-\u001f\u007f]/.test(branch)) return null;
+  const slash = (s: string) => s.split('/').map(encodeURIComponent).join('/');
+  const flat = encodeURIComponent;
+  switch (g.provider) {
+    case 'github':
+      return kind === 'branch' ? `${base}/tree/${slash(branch)}` : `${base}/pull/new/${slash(branch)}`;
+    case 'azure':
+      return kind === 'branch' ? `${base}?version=GB${flat(branch)}` : `${base}/pullrequestcreate?sourceRef=${flat(branch)}`;
+    case 'gitlab':
+      return kind === 'branch'
+        ? `${base}/-/tree/${slash(branch)}`
+        : `${base}/-/merge_requests/new?merge_request[source_branch]=${flat(branch)}`;
+    case 'bitbucket':
+      return kind === 'branch' ? `${base}/branch/${slash(branch)}` : `${base}/pull-requests/new?source=${flat(branch)}`;
+    default:
+      return null;
+  }
+}
+
 export type CloneUrlProblem = 'empty' | 'invalid' | 'embedded-secret';
 
 export function checkCloneUrl(input: string): CloneUrlProblem | null {

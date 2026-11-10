@@ -85,6 +85,7 @@ export function buildActions(app: AppStore): PaletteAction[] {
     }
   }
 
+  add({ id: 'repo.open', label: t('shortcut.openRepo'), group: g('palette.group.repo'), shortcut: combo('repo.open'), run: () => void app.openViaDialog() });
   add({ id: 'clone.open', label: t('shortcut.clone'), group: g('palette.group.repo'), shortcut: combo('clone.open'), run: () => app.openClone() });
   if (tab && app.activeEntry?.kind === 'repo') {
     add({

@@ -3,6 +3,7 @@
   import type { TabState } from '$lib/stores/tab.svelte';
   import { branchesOf } from '$lib/stores/branches.svelte';
   import { conflictsOf } from '$lib/stores/conflicts.svelte';
+  import { remotesOf } from '$lib/stores/remotes.svelte';
   import { branchNameProblem } from '$lib/util/branchName';
   import EmptyState from './EmptyState.svelte';
   import Icon from './Icon.svelte';
@@ -16,6 +17,12 @@
   const current = $derived(b.current);
   const busy = $derived(b.busy !== null);
   const integrating = $derived((tab.snapshot?.integration ?? 'none') !== 'none');
+
+  const remotes = $derived(remotesOf(tab));
+  /** Remoto y rama para los enlaces al navegador (null = sin remoto con página web). */
+  const web = $derived(br ? remotes.linkFor(br.name, remote) : null);
+  const webOk = $derived(web !== null && web.remote.canOpen);
+  const prOk = $derived(web !== null && web.remote.canCreatePullRequest);
 
   let renaming = $state(false);
   let renameTo = $state('');
@@ -124,6 +131,25 @@
         </button>
       {/if}
     </div>
+    <div class="buttons web" role="group" aria-label={t('remotes.open')}>
+      <button type="button" class="btn" disabled={!webOk || busy || remotes.isBusy()} onclick={() => web && remotes.open(web.remote.name, 'branch', web.branch)}>
+        <Icon name="external-link" size={14} />{t('branches.openBranch')}
+      </button>
+      <button
+        type="button"
+        class="btn"
+        disabled={!prOk || busy || remotes.isBusy()}
+        title={web && prOk ? t('branches.createPrHint', { provider: web.remote.providerLabel, branch: web.branch }) : undefined}
+        onclick={() => web && remotes.open(web.remote.name, 'pull-request', web.branch)}
+      >
+        <Icon name="git-merge" size={14} />{t('branches.createPr')}
+      </button>
+    </div>
+    {#if web && webOk}
+      <p class="note"><Icon name="cloud" size={12} />{t('branches.webVia', { remote: web.remote.name, provider: web.remote.providerLabel })}</p>
+    {:else}
+      <p class="note"><Icon name="info" size={12} />{t('branches.noWebRemote')}</p>
+    {/if}
     {#if br.isHead}<p class="note"><Icon name="info" size={12} />{t('branches.cannotDeleteCurrent')}</p>{/if}
     {#if remote}<p class="note"><Icon name="info" size={12} />{t('branches.remoteNote')}</p>{/if}
   {/if}

@@ -66,6 +66,12 @@ export function createTauriApi(): Api {
     fetch: (tabId, remote) => call('fetch', { tabId, remote }),
     pull: (tabId, remote, refspec, rebase) => call('pull', { tabId, remote, refspec, rebase: rebase ?? null }),
 
+    listRemotes: (tabId) => call('list_remotes', { tabId }),
+    addRemote: (tabId, name, url) => call('add_remote', { tabId, name, url }),
+    renameRemote: (tabId, oldName, newName) => call('rename_remote', { tabId, old: oldName, new: newName }),
+    removeRemote: (tabId, name) => call('remove_remote', { tabId, name }),
+    openRemoteUrl: (tabId, remote, kind, branch) => call('open_remote_url', { tabId, remote, kind, branch }),
+
     getSettings: () => call('get_settings'),
     saveSettings: (settings) => call('save_settings', { settings }),
     detectGit: (path) => call('detect_git', { path }),

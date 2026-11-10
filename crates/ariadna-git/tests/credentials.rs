@@ -106,15 +106,19 @@ async fn approve_recibe_los_campos_por_stdin_y_el_secreto_no_esta_en_argv_ni_ent
     let log = h.read("log.txt");
     let cmdlines = h.read("anc-cmdline-store.txt");
     let environ = h.read("anc-environ-store.txt");
-    assert!(
-        cmdlines.contains("credential approve"),
-        "ancestros: {cmdlines}"
-    );
-    assert!(
-        environ.contains("GIT_TERMINAL_PROMPT=0"),
-        "el entorno de git debe verse"
-    );
-    for (name, text) in [("log", &log), ("argv", &cmdlines), ("env", &environ)] {
+    // `/proc` solo existe en Linux: en macOS no se pueden inspeccionar los ancestros.
+    if cfg!(target_os = "linux") {
+        assert!(
+            cmdlines.contains("credential approve"),
+            "ancestros: {cmdlines}"
+        );
+        assert!(
+            environ.contains("GIT_TERMINAL_PROMPT=0"),
+            "el entorno de git debe verse"
+        );
+    }
+    let checks = [("log", &log), ("argv", &cmdlines), ("env", &environ)];
+    for (name, text) in checks {
         assert!(
             !text.contains(&token),
             "el secreto aparece en {name}: {text}"

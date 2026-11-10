@@ -166,6 +166,12 @@ impl GitServing for GitCliEngine {
     async fn add_remote(&self, repo: &Repository, name: &str, url: &str) -> GitResult<()> {
         self.add_remote(repo, name, url).await
     }
+    async fn rename_remote(&self, repo: &Repository, old: &str, new: &str) -> GitResult<()> {
+        self.rename_remote(repo, old, new).await
+    }
+    async fn remove_remote(&self, repo: &Repository, name: &str) -> GitResult<()> {
+        self.remove_remote(repo, name).await
+    }
     async fn fetch(&self, repo: &Repository, remote: &str) -> GitResult<()> {
         self.fetch(repo, remote).await
     }

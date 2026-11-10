@@ -9,6 +9,7 @@ import {
   type TabInfo
 } from '$lib/api/types';
 import { t } from '$lib/i18n';
+import { runMenuAction } from '$lib/shortcuts/registry';
 import { moveItem } from '$lib/util/virtual';
 import { TabState } from './tab.svelte';
 import { toasts } from './toasts.svelte';
@@ -18,12 +19,17 @@ export type Entry = { id: string; kind: 'repo'; info: TabInfo } | { id: string; 
 /** Tope blando de pestañas (spec §8): avisa pero no impide abrir. */
 export const SOFT_TAB_LIMIT = 20;
 
+/** Una pestaña que lleva este tiempo sin verse libera sus datos pesados (spec §8). */
+export const HIBERNATE_AFTER_MS = 10 * 60 * 1000;
+/** Cada cuánto revisa la ventana qué pestañas toca hibernar. */
+export const HIBERNATE_CHECK_MS = 60 * 1000;
+
 export type OpenOutcome = { ok: true } | { ok: false; error: ApiError };
 
 /** Estado de la ventana: pestañas (repos y «nuevas»), recientes, git y paleta. */
 export class AppStore {
   entries = $state.raw<Entry[]>([]);
-  activeId = $state<string | null>(null);
+  private activeRaw = $state<string | null>(null);
   recents = $state.raw<RecentRepository[]>([]);
   git = $state.raw<GitInfo | null>(null);
   gitProblem = $state<string | null>(null);
@@ -37,8 +43,26 @@ export class AppStore {
   private tabStores = new Map<string, TabState>();
   private unlisten: (() => void)[] = [];
   private draftCounter = 0;
+  /** Desde cuándo no se ve cada pestaña (ms). Solo cuentan las que no son la activa. */
+  private idleSince = new Map<string, number>();
+  private lastActive: string | null = null;
+  /** Borradores a los que ya se les avisó del tope de pestañas (para no avisar dos veces). */
+  private limitWarned = new Set<string>();
 
-  constructor(readonly api: Api) {}
+  constructor(
+    readonly api: Api,
+    private readonly clock: () => number = () => Date.now()
+  ) {}
+
+  get activeId(): string | null {
+    return this.activeRaw;
+  }
+
+  /** Cambiar de pestaña arranca el reloj de la anterior y despierta la nueva (hibernación). */
+  set activeId(id: string | null) {
+    this.activeRaw = id;
+    this.trackActive(id);
+  }
 
   // ---- Arranque -----------------------------------------------------------------
 
@@ -48,6 +72,9 @@ export class AppStore {
       this.api.listen('tab-updated', (info) => this.patchInfo(info)),
       this.api.listen('notice', (n) => {
         if (n.kind === 'watcherFallback') toasts.push({ kind: 'warning', title: t('toast.watcherFallback'), message: n.message });
+      }),
+      this.api.listen('menu-action', (a) => {
+        runMenuAction(a.id);
       })
     ]);
     this.unlisten = offs;
@@ -62,6 +89,40 @@ export class AppStore {
   refreshActiveOnFocus(): void {
     const tab = this.activeTab;
     if (tab) void tab.refresh();
+  }
+
+  // ---- Hibernación (spec §8) ------------------------------------------------------------
+  // Rust ya libera el vigilante de las pestañas ocultas y las refresca al activarlas. Aquí se
+  // libera lo pesado de la interfaz (snapshot, historial y diffs cargados) tras N minutos.
+
+  /** Llamar cuando cambia la pestaña activa: arranca el reloj de la anterior y despierta la nueva. */
+  trackActive(id: string | null): void {
+    const prev = this.lastActive;
+    if (prev === id) return;
+    const now = this.clock();
+    if (prev) this.idleSince.set(prev, now);
+    this.lastActive = id;
+    if (id) {
+      this.idleSince.delete(id);
+      this.tabStores.get(id)?.wake();
+    }
+  }
+
+  /** Hiberna las pestañas ocultas que llevan `afterMs` sin verse. Devuelve las hibernadas. */
+  hibernateIdle(afterMs: number = HIBERNATE_AFTER_MS): string[] {
+    const now = this.clock();
+    const done: string[] = [];
+    for (const e of this.entries) {
+      if (e.kind !== 'repo' || e.id === this.activeId) continue;
+      const since = this.idleSince.get(e.id);
+      if (since === undefined) {
+        this.idleSince.set(e.id, now);
+        continue;
+      }
+      if (now - since < afterMs) continue;
+      if (this.tabStores.get(e.id)?.hibernate()) done.push(e.id);
+    }
+    return done;
   }
 
   async reload(): Promise<void> {
@@ -110,6 +171,9 @@ export class AppStore {
     // Libera los TabState de pestañas que ya no existen.
     for (const id of [...this.tabStores.keys()]) {
       if (!next.some((e) => e.id === id)) this.dropTabState(id);
+    }
+    for (const id of [...this.idleSince.keys()]) {
+      if (!next.some((e) => e.id === id)) this.idleSince.delete(id);
     }
   }
 
@@ -167,10 +231,11 @@ export class AppStore {
       this.activeId = existing.id;
       return;
     }
+    const draft = this.makeDraft();
     if (this.entries.length >= SOFT_TAB_LIMIT) {
       toasts.warning(t('tabs.limitTitle'), t('tabs.limitBody', { n: SOFT_TAB_LIMIT }));
+      this.limitWarned.add(draft.id);
     }
-    const draft = this.makeDraft();
     this.entries = [...this.entries, draft];
     this.activeId = draft.id;
   }
@@ -281,6 +346,11 @@ export class AppStore {
     this.entries = next;
     this.activeId = tab.tabId;
     if (res.alreadyOpen) toasts.info(t('welcome.alreadyOpen', { name: tab.name }));
+    // Avisos de Rust (tope de pestañas, worktree). El del tope ya salió al crear la pestaña nueva.
+    else if (res.warning && !(draftId && this.limitWarned.has(draftId))) {
+      toasts.warning(t('tabs.limitTitle'), res.warning);
+    }
+    if (draftId) this.limitWarned.delete(draftId);
     // Refresca la lista de recientes desde Rust.
     void this.api
       .appState()
@@ -288,6 +358,15 @@ export class AppStore {
         this.recents = s.recents;
       })
       .catch(() => undefined);
+  }
+
+  /** Abrir repositorio… (⌘O / Ctrl+O y menú Archivo): diálogo de carpeta nativo y abrir en una pestaña. */
+  async openViaDialog(): Promise<void> {
+    const path = await this.browse();
+    if (!path) return;
+    const draft = this.activeEntry?.kind === 'new' ? this.activeEntry.id : undefined;
+    const out = await this.openPath(path, draft);
+    if (!out.ok) toasts.error(t('repo.openFailed'), out.error);
   }
 
   openClone(): void {

@@ -70,6 +70,37 @@ pub fn validate_external_url(raw: &str) -> ApiResult<Url> {
     Ok(url)
 }
 
+/// Valida un enlace web **construido a partir de un remoto del repo** (repo, rama, nueva PR).
+///
+/// El remoto es un dato del repositorio (cualquiera puede ponerle lo que quiera), así que se
+/// aplica la misma política que a un enlace externo, salvo que el host permitido no es una lista
+/// fija sino **el host del propio remoto** (`expected_host`, ya normalizado por `ariadna-hosting`):
+/// solo `https`, sin credenciales, puerto estándar, nombre de dominio (nada de IP ni `localhost`)
+/// y host idéntico al del remoto.
+pub fn validate_remote_web_url(raw: &str, expected_host: &str) -> ApiResult<Url> {
+    let raw = raw.trim();
+    let url = Url::parse(raw).map_err(|_| denied(raw, "no es una dirección válida"))?;
+    if url.scheme() != "https" {
+        return Err(denied(raw, "solo se abren enlaces https"));
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(denied(raw, "el enlace lleva credenciales"));
+    }
+    if url.port().is_some_and(|p| p != 443) {
+        return Err(denied(raw, "el enlace usa un puerto no estándar"));
+    }
+    let Some(Host::Domain(host)) = url.host() else {
+        return Err(denied(raw, "el enlace no apunta a un nombre de dominio"));
+    };
+    if host == "localhost" || host.ends_with(".localhost") || !host.contains('.') {
+        return Err(denied(raw, "el enlace apunta a una máquina local"));
+    }
+    if expected_host.is_empty() || !host.eq_ignore_ascii_case(expected_host) {
+        return Err(denied(raw, "el enlace no es del servidor del remoto"));
+    }
+    Ok(url)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -142,6 +173,34 @@ mod tests {
         ] {
             let e = validate_external_url(u).unwrap_err();
             assert_eq!(e.code, "POLICY", "{u}");
+        }
+    }
+
+    #[test]
+    fn enlaces_de_remoto_solo_https_y_su_host() {
+        let ok = |u: &str, h: &str| validate_remote_web_url(u, h).is_ok();
+        assert!(ok("https://github.com/o/r", "github.com"));
+        assert!(ok("https://git.acme.com/g/r/-/tree/a%2Fb", "git.acme.com"));
+        assert!(ok("https://GIT.acme.com/x", "git.acme.com"));
+        for (u, h) in [
+            ("http://github.com/o/r", "github.com"),
+            ("javascript:alert(1)", "github.com"),
+            ("file:///etc/passwd", "github.com"),
+            ("ssh://git@github.com/o/r", "github.com"),
+            ("https://evil.com/o/r", "github.com"),
+            ("https://github.com.evil.com/o/r", "github.com"),
+            ("https://u:p@github.com/o/r", "github.com"),
+            ("https://u@github.com/o/r", "github.com"),
+            ("https://github.com:8443/o/r", "github.com"),
+            ("https://127.0.0.1/o/r", "127.0.0.1"),
+            ("https://[::1]/o/r", "[::1]"),
+            ("https://localhost/o/r", "localhost"),
+            ("https://intranet/o/r", "intranet"),
+            ("https://github.com/o/r", ""),
+            ("", "github.com"),
+        ] {
+            let e = validate_remote_web_url(u, h).unwrap_err();
+            assert_eq!(e.code, "POLICY", "{u} / {h}");
         }
     }
 

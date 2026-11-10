@@ -58,7 +58,15 @@
     return activeId;
   }
 
+  /** Foco en un campo de texto fuera de la barra: Alt+Mayús+←/→ es «seleccionar por palabras». */
+  function typingElsewhere(): boolean {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || (scroller && scroller.contains(el))) return false;
+    return el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || !!el.closest?.('[data-scope~="editor"]');
+  }
+
   function move(delta: number): boolean {
+    if (typingElsewhere()) return false;
     const id = currentTabId();
     if (!id) return false;
     const from = ids.indexOf(id);

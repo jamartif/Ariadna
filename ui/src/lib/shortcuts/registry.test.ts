@@ -8,6 +8,8 @@ import {
   matches,
   normalizeCombo,
   registerHandler,
+  runMenuAction,
+  MENU_ECHO_MS,
   type ShortcutDef
 } from './registry';
 
@@ -112,5 +114,33 @@ describe('despacho', () => {
     const e = key({ key: 'w', ctrlKey: true });
     expect(dispatchKey(e, false)).toBe(false);
     expect(e.defaultPrevented).toBe(false);
+  });
+});
+
+describe('menú nativo: eco de la tecla', () => {
+  it('un elemento de menú ejecuta el atajo; si la tecla acaba de hacerlo, el eco se ignora', () => {
+    let runs = 0;
+    const off = registerHandler('repo.open', () => {
+      runs++;
+    });
+    try {
+      // Menú solo: una ejecución.
+      expect(runMenuAction('repo.open', 1_000)).toBe(true);
+      expect(runs).toBe(1);
+      // Tecla (Ctrl+O) y, a la vez, el elemento de menú con el mismo acelerador: una sola vez.
+      expect(dispatchKey(key({ key: 'o', ctrlKey: true }), false)).toBe(true);
+      expect(runs).toBe(2);
+      expect(runMenuAction('repo.open')).toBe(true);
+      expect(runs).toBe(2);
+      // Pasado el plazo, el menú vuelve a ejecutar.
+      expect(runMenuAction('repo.open', Date.now() + MENU_ECHO_MS + 50)).toBe(true);
+      expect(runs).toBe(3);
+    } finally {
+      off();
+    }
+  });
+
+  it('sin manejador no hace nada y lo dice', () => {
+    expect(runMenuAction('no.existe', 5_000)).toBe(false);
   });
 });

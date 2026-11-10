@@ -1289,3 +1289,83 @@ async fn pull_merge_conflict_leaves_merge_in_progress() {
         IntegrationState::Merging
     );
 }
+
+#[tokio::test]
+async fn rename_remote_moves_tracking_branches_and_upstream() {
+    let r = TestRepo::with_initial_commit();
+    let _bare = r.with_bare_origin();
+    let e = &r.engine;
+    e.push(&r.repo, "origin", Some("main"), true).await.unwrap();
+
+    e.rename_remote(&r.repo, "origin", "upstream")
+        .await
+        .unwrap();
+    let remotes = e.list_remotes(&r.repo).await.unwrap();
+    assert_eq!(remotes.len(), 1);
+    assert_eq!(remotes[0].name, "upstream");
+    let tracking: Vec<String> = e
+        .remote_tracking_branches(&r.repo)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|b| b.name)
+        .collect();
+    assert_eq!(tracking, ["upstream/main"]);
+    let main = &e.branches(&r.repo).await.unwrap()[0];
+    assert_eq!(main.upstream.as_deref(), Some("upstream/main"));
+}
+
+#[tokio::test]
+async fn remove_remote_drops_tracking_branches_and_upstream() {
+    let r = TestRepo::with_initial_commit();
+    let _bare = r.with_bare_origin();
+    let e = &r.engine;
+    e.push(&r.repo, "origin", Some("main"), true).await.unwrap();
+    assert_eq!(e.remote_tracking_branches(&r.repo).await.unwrap().len(), 1);
+
+    e.remove_remote(&r.repo, "origin").await.unwrap();
+    assert!(e.list_remotes(&r.repo).await.unwrap().is_empty());
+    assert!(e
+        .remote_tracking_branches(&r.repo)
+        .await
+        .unwrap()
+        .is_empty());
+    assert_eq!(e.branches(&r.repo).await.unwrap()[0].upstream, None);
+}
+
+#[tokio::test]
+async fn rename_and_remove_remote_validate_names_and_report_git_errors() {
+    let r = TestRepo::with_initial_commit();
+    let _bare = r.with_bare_origin();
+    let e = &r.engine;
+    e.add_remote(&r.repo, "otro", "/tmp/x.git").await.unwrap();
+
+    for bad in ["-x", "a b", "", "a..b"] {
+        let err = e.rename_remote(&r.repo, "origin", bad).await.unwrap_err();
+        assert!(
+            matches!(err, GitError::InvalidReference(_)),
+            "{bad:?}: {err:?}"
+        );
+        let err = e.rename_remote(&r.repo, bad, "nuevo").await.unwrap_err();
+        assert!(
+            matches!(err, GitError::InvalidReference(_)),
+            "{bad:?}: {err:?}"
+        );
+        let err = e.remove_remote(&r.repo, bad).await.unwrap_err();
+        assert!(
+            matches!(err, GitError::InvalidReference(_)),
+            "{bad:?}: {err:?}"
+        );
+    }
+    // Destino ya existente, origen inexistente: errores de git, el repo queda igual.
+    let err = e
+        .rename_remote(&r.repo, "origin", "otro")
+        .await
+        .unwrap_err();
+    assert!(matches!(err, GitError::CommandFailed { .. }), "{err:?}");
+    let err = e.rename_remote(&r.repo, "nada", "nuevo").await.unwrap_err();
+    assert!(matches!(err, GitError::CommandFailed { .. }), "{err:?}");
+    let err = e.remove_remote(&r.repo, "nada").await.unwrap_err();
+    assert!(matches!(err, GitError::CommandFailed { .. }), "{err:?}");
+    assert_eq!(e.list_remotes(&r.repo).await.unwrap().len(), 2);
+}

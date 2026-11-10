@@ -5,11 +5,13 @@
  * Un test comprueba que toda clave usada en el código existe aquí.
  */
 import { esConflicts } from './es.conflicts';
+import { esRemotes } from './es.remotes';
 import { esScreens } from './es.screens';
 import { esSettings } from './es.settings';
 
 export const es = {
   ...esScreens,
+  ...esRemotes,
   ...esSettings,
   ...esConflicts,
   // Aplicación

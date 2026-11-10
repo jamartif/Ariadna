@@ -8,6 +8,7 @@
   import Banner from './Banner.svelte';
   import EmptyState from './EmptyState.svelte';
   import Icon from './Icon.svelte';
+  import RemotesSection from './RemotesSection.svelte';
 
   let { tab }: { tab: TabState } = $props();
 
@@ -119,6 +120,7 @@
   {/if}
 
   <div class="scroll">
+    <RemotesSection {tab} />
     {#if b.locals.length === 0 && b.remotes.length === 0}
       <EmptyState compact icon="git-branch" title={t('branches.emptyTitle')} body={t('branches.emptyBody')} />
     {:else}

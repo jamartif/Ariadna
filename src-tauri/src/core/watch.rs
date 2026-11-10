@@ -444,7 +444,18 @@ fn setup_native(
                 return;
             }
             let mut relevant = false;
+            // macOS (FSEvents) y Windows avisan de que una carpeta «cambió» cuando se crea o
+            // borra algo dentro, incluso si ese algo es ruido; el hijo ya genera su propio evento.
+            let dir_modified = matches!(
+                ev.kind,
+                EventKind::Modify(notify::event::ModifyKind::Data(_))
+                    | EventKind::Modify(notify::event::ModifyKind::Metadata(_))
+                    | EventKind::Modify(notify::event::ModifyKind::Any)
+            );
             for p in &ev.paths {
+                if dir_modified && p.is_dir() {
+                    continue;
+                }
                 let v = cb_filter.classify(p);
                 if v.is_relevant() {
                     relevant = true;

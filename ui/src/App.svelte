@@ -10,7 +10,7 @@
   import Workspace from '$lib/components/Workspace.svelte';
   import { t } from '$lib/i18n';
   import { installShortcuts, registerHandlers } from '$lib/shortcuts/registry';
-  import type { AppStore } from '$lib/stores/app.svelte';
+  import { HIBERNATE_CHECK_MS, type AppStore } from '$lib/stores/app.svelte';
   import { buildActions } from '$lib/stores/commands';
   import { settings } from '$lib/stores/settings.svelte';
   import SettingsDialog from '$lib/components/SettingsDialog.svelte';
@@ -32,6 +32,7 @@
     const stopSync = startSettingsSync(app.api);
     const off = installShortcuts();
     const onFocus = () => app.refreshActiveOnFocus();
+    const hibernation = setInterval(() => app.hibernateIdle(), HIBERNATE_CHECK_MS);
     window.addEventListener('focus', onFocus);
     const gotos = Object.fromEntries(
       Array.from({ length: 9 }, (_, i) => [`tab.goto.${i + 1}`, () => (app.gotoIndex(i + 1), true)])
@@ -47,11 +48,13 @@
       'tab.prev': () => (app.step(-1), true),
       'palette.open': () => ((app.paletteOpen = !app.paletteOpen), true),
       'clone.open': () => (app.openClone(), true),
+      'repo.open': () => (void app.openViaDialog(), true),
       'settings.open': () => (settingsUi.toggle(), true),
       'changes.refresh': () => {
+        // Ctrl/⌘+R siempre se consume: si no, la WebView recargaría la página entera y se
+        // perdería el estado de la interfaz.
         const tab = entry?.kind === 'repo' ? app.activeTab : null;
-        if (!tab) return false;
-        void tab.refresh();
+        if (tab) void tab.refresh();
         return true;
       },
       'changes.stageAll': () => {
@@ -71,6 +74,7 @@
       off();
       stopSync();
       window.removeEventListener('focus', onFocus);
+      clearInterval(hibernation);
       offHandlers();
       app.dispose();
     };

@@ -559,6 +559,25 @@ impl RemoteInfo {
         })
     }
 
+    /// Página de la rama `branch` en el navegador (`https`). `None` si el proveedor es `other`,
+    /// la rama está vacía o lleva caracteres de control, o no hay URL web.
+    pub fn branch_web_url(&self, branch: &str) -> Option<String> {
+        let branch = branch.trim();
+        if branch.is_empty() || branch.chars().any(char::is_control) {
+            return None;
+        }
+        let base = self.web_url.as_deref()?;
+        Some(match self.provider {
+            Provider::GitHub => format!("{base}/tree/{}", percent_encode(branch, true)),
+            Provider::AzureDevOps => {
+                format!("{base}?version=GB{}", percent_encode(branch, false))
+            }
+            Provider::GitLab => format!("{base}/-/tree/{}", percent_encode(branch, true)),
+            Provider::Bitbucket => format!("{base}/branch/{}", percent_encode(branch, true)),
+            Provider::Other => return None,
+        })
+    }
+
     /// Cómo crear un token de acceso personal en este proveedor y qué permisos pedirle.
     pub fn pat_help(&self) -> PatHelp {
         match self.provider {
@@ -1329,6 +1348,39 @@ mod tests {
         assert_eq!(other.new_pull_request_url("a"), None);
         assert_eq!(gh.new_pull_request_url(""), None);
         assert_eq!(gh.new_pull_request_url("a\nb"), None);
+    }
+
+    #[test]
+    fn urls_de_rama() {
+        let gh = RemoteInfo::parse("https://github.com/o/r.git");
+        assert_eq!(
+            gh.branch_web_url("feature/x y").as_deref(),
+            Some("https://github.com/o/r/tree/feature/x%20y")
+        );
+        let az = RemoteInfo::parse("https://dev.azure.com/org/p/_git/r");
+        assert_eq!(
+            az.branch_web_url("feature/x&y").as_deref(),
+            Some("https://dev.azure.com/org/p/_git/r?version=GBfeature%2Fx%26y")
+        );
+        let gl = RemoteInfo::parse("https://gitlab.com/g/s/r.git");
+        assert_eq!(
+            gl.branch_web_url("a/b").as_deref(),
+            Some("https://gitlab.com/g/s/r/-/tree/a/b")
+        );
+        let bb = RemoteInfo::parse("git@bitbucket.org:w/r.git");
+        assert_eq!(
+            bb.branch_web_url("a/b").as_deref(),
+            Some("https://bitbucket.org/w/r/branch/a/b")
+        );
+        let other = RemoteInfo::parse("https://git.acme.com/x/r.git");
+        assert_eq!(other.branch_web_url("a"), None);
+        assert_eq!(gh.branch_web_url(" "), None);
+        assert_eq!(gh.branch_web_url("a\nb"), None);
+        // Una rama con `?`, `#` o `..` no puede salirse de la ruta: se codifica.
+        assert_eq!(
+            gh.branch_web_url("x?y#z").as_deref(),
+            Some("https://github.com/o/r/tree/x%3Fy%23z")
+        );
     }
 
     #[test]

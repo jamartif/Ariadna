@@ -160,6 +160,29 @@ export class HistoryController {
     this.gen++;
     this.detailGen++;
   }
+
+  /**
+   * Hibernación: suelta los commits, el grafo y los diffs cargados. Las respuestas en vuelo se
+   * descartan; al volver a mostrar el panel `reload()` lo trae de nuevo.
+   */
+  release(): void {
+    this.dispose();
+    this.commits = [];
+    this.rows = [];
+    this.graphWidth = 1;
+    this.graph = emptyGraphState();
+    this.query = '';
+    this.loading = false;
+    this.loadingMore = false;
+    this.hasMore = true;
+    this.error = null;
+    this.selected = null;
+    this.files = [];
+    this.filesLoading = false;
+    this.filesError = null;
+    this.fileIndex = 0;
+    this.loadedRevision = -1;
+  }
 }
 
 const registry = new WeakMap<TabState, HistoryController>();
@@ -168,8 +191,10 @@ const registry = new WeakMap<TabState, HistoryController>();
 export function historyOf(tab: TabState): HistoryController {
   let h = registry.get(tab);
   if (!h) {
-    h = new HistoryController(tab);
-    registry.set(tab, h);
+    const created = new HistoryController(tab);
+    h = created;
+    registry.set(tab, created);
+    tab.onHibernate(() => created.release());
   }
   return h;
 }

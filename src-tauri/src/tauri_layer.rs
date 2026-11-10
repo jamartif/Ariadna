@@ -9,17 +9,21 @@ use ariadna_git::{
     RecentRepository, Secret,
 };
 use async_trait::async_trait;
+use serde::Serialize;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 
+use crate::core::menu::{app_menu, effect_of, Effect, Entry, Role};
 use crate::core::{
     default_data_dir, locate_git, validate_external_url, AiCommitOptions, AiCommitSuggestion,
     AiContextPreview, AiSettingsPatch, AiState, AmendDraft, ApiError, ApiSnapshot, AppConfig,
     AppCore, AppEvent, AppState, CliStatus, Closed, CommitResult, ConflictResolution,
     ContinueResult, CredentialTest, Done, EventSink, GitDetect, GitIdentity, HunkArg,
-    MergeStartResult, MergeState, OpenResult, Prompter, Settings, SettingsView,
+    MergeStartResult, MergeState, OpenResult, Prompter, RemoteView, Settings, SettingsView,
+    WebTarget,
 };
 
 type Cmd<T> = Result<T, ApiError>;
@@ -193,6 +197,137 @@ async fn open_external_url(app: AppHandle, url: String) -> Cmd<()> {
     app.opener()
         .open_url(url.as_str(), None::<&str>)
         .map_err(|e| ApiError::io(format!("no se pudo abrir el navegador: {e}")))
+}
+
+/// Abre en el navegador una página web de un remoto del repo (repo, rama o nueva pull request).
+/// La URL la construye Rust a partir de la configuración real del remoto y se valida (solo
+/// `https`, sin credenciales y con el host del propio remoto); la UI solo envía el nombre del
+/// remoto y la rama. Es solo un enlace: la integración por API es M8.
+#[tauri::command]
+async fn open_remote_url(
+    app: AppHandle,
+    core: State<'_, AppCore>,
+    tab_id: String,
+    remote: String,
+    kind: WebTarget,
+    branch: Option<String>,
+) -> Cmd<()> {
+    let url = core
+        .remote_web_url(&tab_id, &remote, kind, branch.as_deref())
+        .await?;
+    app.opener()
+        .open_url(url.as_str(), None::<&str>)
+        .map_err(|e| ApiError::io(format!("no se pudo abrir el navegador: {e}")))
+}
+
+#[tauri::command]
+async fn list_remotes(core: State<'_, AppCore>, tab_id: String) -> Cmd<Vec<RemoteView>> {
+    core.list_remote_views(&tab_id).await
+}
+
+#[tauri::command]
+async fn add_remote(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    name: String,
+    url: String,
+) -> Cmd<Done> {
+    core.add_remote(&tab_id, name, url).await
+}
+
+#[tauri::command]
+async fn rename_remote(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    old: String,
+    new: String,
+) -> Cmd<Done> {
+    core.rename_remote(&tab_id, old, new).await
+}
+
+#[tauri::command]
+async fn remove_remote(core: State<'_, AppCore>, tab_id: String, name: String) -> Cmd<Done> {
+    core.remove_remote(&tab_id, name).await
+}
+
+// --- menú nativo ----------------------------------------------------------------------------
+
+/// Carga de `menu-action`: id del atajo en el registro de la interfaz.
+#[derive(Clone, Serialize)]
+struct MenuActionEvent {
+    id: &'static str,
+}
+
+fn role_item(app: &AppHandle, role: Role) -> tauri::Result<PredefinedMenuItem<tauri::Wry>> {
+    match role {
+        Role::About => PredefinedMenuItem::about(app, None, None),
+        Role::Undo => PredefinedMenuItem::undo(app, None),
+        Role::Redo => PredefinedMenuItem::redo(app, None),
+        Role::Cut => PredefinedMenuItem::cut(app, None),
+        Role::Copy => PredefinedMenuItem::copy(app, None),
+        Role::Paste => PredefinedMenuItem::paste(app, None),
+        Role::SelectAll => PredefinedMenuItem::select_all(app, None),
+        Role::Minimize => PredefinedMenuItem::minimize(app, None),
+        Role::Maximize => PredefinedMenuItem::maximize(app, None),
+        Role::Fullscreen => PredefinedMenuItem::fullscreen(app, None),
+        Role::Hide => PredefinedMenuItem::hide(app, None),
+        Role::HideOthers => PredefinedMenuItem::hide_others(app, None),
+        Role::ShowAll => PredefinedMenuItem::show_all(app, None),
+    }
+}
+
+/// Construye el menú nativo a partir de la especificación de `core::menu`.
+fn build_menu(app: &AppHandle, mac: bool) -> tauri::Result<Menu<tauri::Wry>> {
+    let menu = Menu::new(app)?;
+    for sub in app_menu(mac) {
+        let submenu = Submenu::new(app, sub.label, true)?;
+        for entry in sub.entries {
+            match entry {
+                Entry::Separator => submenu.append(&PredefinedMenuItem::separator(app)?)?,
+                Entry::Role { role } => submenu.append(&role_item(app, role)?)?,
+                Entry::Item {
+                    id,
+                    label,
+                    accelerator,
+                    ..
+                } => submenu.append(&MenuItem::with_id(app, id, label, true, accelerator)?)?,
+            }
+        }
+        menu.append(&submenu)?;
+    }
+    Ok(menu)
+}
+
+/// Salir por el mismo camino que cerrar la ventana: confirma el trabajo pendiente (spec §3.1).
+fn request_quit(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let core = app.state::<AppCore>().inner().clone();
+        if core.shutdown().await {
+            app.exit(0);
+        }
+    });
+}
+
+fn on_menu_event(app: &AppHandle, id: &str) {
+    match effect_of(id) {
+        Some(Effect::Shortcut(shortcut)) => {
+            if let Err(e) = app.emit("menu-action", MenuActionEvent { id: shortcut }) {
+                eprintln!("no se pudo emitir menu-action: {e}");
+            }
+        }
+        Some(Effect::Quit) => request_quit(app.clone()),
+        Some(Effect::Url(raw)) => {
+            let opened = validate_external_url(raw).and_then(|url| {
+                app.opener()
+                    .open_url(url.as_str(), None::<&str>)
+                    .map_err(|e| ApiError::io(format!("no se pudo abrir el navegador: {e}")))
+            });
+            if let Err(e) = opened {
+                eprintln!("{}", e.message);
+            }
+        }
+        None => {}
+    }
 }
 
 // --- comandos de IA -----------------------------------------------------------------------
@@ -522,6 +657,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let handle = app.handle().clone();
+            let handle_for_menu = handle.clone();
             let data_dir = match default_data_dir() {
                 Ok(d) => d,
                 Err(_) => app.path().app_config_dir()?,
@@ -538,12 +674,18 @@ pub fn run() {
                 }),
                 Arc::new(TauriSink { app: handle }),
             );
+            // El menú nativo solo se adjunta en macOS (barra de menús del sistema). En Windows y
+            // Linux la barra de título es de la interfaz y una barra nativa la duplicaría.
+            if cfg!(target_os = "macos") {
+                app.set_menu(build_menu(&handle_for_menu, true)?)?;
+            }
             app.manage(core.clone());
             tauri::async_runtime::spawn(async move {
                 core.restore_session().await;
             });
             Ok(())
         })
+        .on_menu_event(|app, event| on_menu_event(app, event.id().as_ref()))
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(focused) = event {
                 // Al volver a la ventana se refresca la pestaña activa (y el sondeo de
@@ -557,13 +699,7 @@ pub fn run() {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 // Cerrar la ventana sigue el mismo camino que cerrar pestañas (spec §3.1).
                 api.prevent_close();
-                let app = window.app_handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let core = app.state::<AppCore>().inner().clone();
-                    if core.shutdown().await {
-                        app.exit(0);
-                    }
-                });
+                request_quit(window.app_handle().clone());
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -577,6 +713,11 @@ pub fn run() {
             forget_recent,
             cancel_operation,
             open_external_url,
+            open_remote_url,
+            list_remotes,
+            add_remote,
+            rename_remote,
+            remove_remote,
             clone_repository,
             store_credential,
             test_credential,

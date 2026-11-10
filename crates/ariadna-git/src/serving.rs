@@ -147,6 +147,18 @@ pub trait GitServing: Send + Sync {
     ) -> GitResult<()>;
     async fn list_remotes(&self, repo: &Repository) -> GitResult<Vec<Remote>>;
     async fn add_remote(&self, repo: &Repository, name: &str, url: &str) -> GitResult<()>;
+    /// Renombra un remoto (git reescribe sus ramas de seguimiento).
+    async fn rename_remote(&self, _repo: &Repository, old: &str, new: &str) -> GitResult<()> {
+        Err(GitError::Io(format!(
+            "renombrar el remoto {old} a {new} no está soportado por este motor"
+        )))
+    }
+    /// Quita un remoto y sus ramas de seguimiento.
+    async fn remove_remote(&self, _repo: &Repository, name: &str) -> GitResult<()> {
+        Err(GitError::Io(format!(
+            "quitar el remoto {name} no está soportado por este motor"
+        )))
+    }
     async fn fetch(&self, repo: &Repository, remote: &str) -> GitResult<()>;
     async fn pull(
         &self,

@@ -45,6 +45,8 @@ import {
   type OpenResult,
   type RecentRepository,
   type Remote,
+  type RemoteProviderId,
+  type RemoteView,
   type SettingsView,
   type Snapshot,
   type StatusEntry,
@@ -52,6 +54,52 @@ import {
 } from './types';
 import { pathText } from '../util/gitpath';
 import { matchRule, normalizePattern } from '../util/profileRules';
+import { parseRemote, remoteBranchUrl, repoWebUrl } from '../util/remote';
+
+const PROVIDER_IDS: Record<string, RemoteProviderId> = {
+  azure: 'azureDevOps',
+  github: 'github',
+  gitlab: 'gitlab',
+  bitbucket: 'bitbucket',
+  other: 'other'
+};
+const PROVIDER_LABELS: Record<RemoteProviderId, string> = {
+  azureDevOps: 'Azure DevOps',
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  bitbucket: 'Bitbucket',
+  other: 'Otro'
+};
+
+function remoteView(r: Remote): RemoteView {
+  const g = parseRemote(r.fetchUrl);
+  const provider = PROVIDER_IDS[g?.provider ?? 'other'] ?? 'other';
+  const canOpen = repoWebUrl(r.fetchUrl) !== null;
+  return {
+    name: r.name,
+    fetchUrl: r.fetchUrl,
+    pushUrl: r.pushUrl,
+    provider,
+    providerLabel: PROVIDER_LABELS[provider],
+    host: g ? (g.provider === 'azure' ? 'dev.azure.com' : g.host) : '',
+    canOpen,
+    canCreatePullRequest: canOpen && provider !== 'other',
+    ssh: g?.scheme === 'ssh'
+  };
+}
+
+/** Misma política que `check_new_remote_url` de Rust (el mock debe fallar igual). */
+function badRemoteUrl(url: string): string | null {
+  const u = url.trim();
+  if (u === '' || u.startsWith('-') || /[\u0000-\u001f\u007f]/.test(u)) return 'La dirección del remoto no es válida.';
+  if (/^[A-Za-z0-9+.-]+::/.test(u)) return 'Ese tipo de dirección (transporte auxiliar de git) no se admite.';
+  const m = /^[^:/]+:\/\/([^/?#]*)/.exec(u);
+  const auth = m?.[1] ?? '';
+  const at = auth.lastIndexOf('@');
+  if (at >= 0 && auth.slice(0, at).includes(':')) return 'La dirección no puede llevar la contraseña o el token.';
+  return null;
+}
+const REMOTE_NAME = /^[A-Za-z0-9_][A-Za-z0-9._/-]*$/;
 
 export interface MockOptions {
   /** Latencia simulada por llamada en ms (por defecto 120; 0 en tests). */
@@ -377,7 +425,16 @@ const BASE_RECENTS: RecentRepository[] = [
  * estado (stage, unstage, commit…) modifican el modelo y emiten `snapshot` con
  * una `revision` creciente, igual que Rust.
  */
-export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<string, MockRepo>; __lastPullRebase: () => boolean | null } {
+export type MockApi = Api & {
+  __repos: Map<string, MockRepo>;
+  __lastPullRebase: () => boolean | null;
+  /** Enlaces que habría abierto `openRemoteUrl`, en orden. */
+  __openedUrls: () => string[];
+  /** Simula un elemento del menú nativo (`menu-action`). */
+  __menuAction: (id: string) => void;
+};
+
+export function createMockApi(options: MockOptions = {}): MockApi {
   const scenario = options.scenario;
   const latency = (options.latency ?? 120) * (scenario === 'slow' ? 6 : 1);
   const now = options.now ?? (() => new Date());
@@ -428,6 +485,8 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
   /** Credenciales «guardadas» por host: solo si el token era válido; el secreto NO se conserva. */
   const credentials = new Map<string, { username: string; valid: boolean }>();
   const cloneOps = new Map<number, () => void>();
+  /** Enlaces que habría abierto el navegador (solo pruebas). */
+  const openedUrls: string[] = [];
 
   if (scenario !== 'empty' && scenario !== 'nogit' && scenario !== 'error') {
     for (const r of [buildAriadna(), buildConflicts(), buildMissing()]) {
@@ -718,7 +777,7 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
     sortHunks(to);
   }
 
-  const api: Api & { __repos: Map<string, MockRepo>; __lastPullRebase: () => boolean | null } = {
+  const api: MockApi = {
     __repos: repos,
 
     async appState() {
@@ -754,7 +813,8 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
       activeTabId = repo.tabId;
       touchRecent(repo);
       emit('tabs-changed', appState());
-      return { tab: tabInfo(repo), alreadyOpen: false };
+      const warning = order.length > 20 ? `Tienes ${order.length} pestañas abiertas. Más de 20 puede ir lento: cierra las que no uses.` : null;
+      return { tab: tabInfo(repo), alreadyOpen: false, warning };
     },
     async closeTab(tabId) {
       await delay(Math.min(latency, 60));
@@ -1250,6 +1310,67 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
       await delay(latency * 3);
     },
 
+    async listRemotes(tabId) {
+      await delay(Math.min(latency, 40));
+      return repoOf(tabId).remotes.map(remoteView);
+    },
+    async addRemote(tabId, name, url) {
+      const r = repoOf(tabId);
+      await delay();
+      const n = name.trim();
+      const bad = badRemoteUrl(url) ?? (REMOTE_NAME.test(n) && !n.includes('..') ? null : 'El nombre del remoto no es válido.');
+      if (bad) throw err('INVALID_REFERENCE', bad);
+      if (!confirmFn(`¿Añadir el remoto «${n}» (${url.trim()}) a ${r.name}?`)) return { done: false };
+      if (r.remotes.some((x) => x.name === n)) {
+        throw err('COMMAND_FAILED', `Ya existe un remoto llamado «${n}».`, `error: remote ${n} already exists.`);
+      }
+      r.remotes = [...r.remotes, { name: n, fetchUrl: url.trim(), pushUrl: url.trim() }];
+      publish(r);
+      return { done: true };
+    },
+    async renameRemote(tabId, oldName, newName) {
+      const r = repoOf(tabId);
+      await delay();
+      const n = newName.trim();
+      if (!r.remotes.some((x) => x.name === oldName)) throw err('INVALID_REFERENCE', 'Ese remoto ya no existe.');
+      if (!REMOTE_NAME.test(n) || n.includes('..')) throw err('INVALID_REFERENCE', 'El nombre nuevo del remoto no es válido.');
+      if (!confirmFn(`¿Renombrar el remoto «${oldName}» a «${n}» en ${r.name}?`)) return { done: false };
+      if (r.remotes.some((x) => x.name === n)) {
+        throw err('COMMAND_FAILED', `Ya existe un remoto llamado «${n}».`, `error: remote ${n} already exists.`);
+      }
+      const from = `${oldName}/`;
+      r.remotes = r.remotes.map((x) => (x.name === oldName ? { ...x, name: n } : x));
+      r.remoteBranches = r.remoteBranches.map((b) => (b.name.startsWith(from) ? { ...b, name: `${n}/${b.name.slice(from.length)}` } : b));
+      r.branches = r.branches.map((b) => (b.upstream?.startsWith(from) ? { ...b, upstream: `${n}/${b.upstream.slice(from.length)}` } : b));
+      publish(r);
+      return { done: true };
+    },
+    async removeRemote(tabId, name) {
+      const r = repoOf(tabId);
+      await delay();
+      if (!r.remotes.some((x) => x.name === name)) throw err('INVALID_REFERENCE', 'Ese remoto ya no existe.');
+      if (!confirmFn(`¿Quitar el remoto «${name}» de ${r.name}? Se borran sus ramas de seguimiento locales.`)) return { done: false };
+      const from = `${name}/`;
+      r.remotes = r.remotes.filter((x) => x.name !== name);
+      r.remoteBranches = r.remoteBranches.filter((b) => !b.name.startsWith(from));
+      r.branches = r.branches.map((b) => (b.upstream?.startsWith(from) ? { ...b, upstream: null, ahead: 0, behind: 0 } : b));
+      publish(r);
+      return { done: true };
+    },
+    async openRemoteUrl(tabId, remote, kind, branch) {
+      const r = repoOf(tabId);
+      await delay(Math.min(latency, 40));
+      const rem = r.remotes.find((x) => x.name === remote);
+      if (!rem) throw err('INVALID_REFERENCE', 'Ese remoto ya no existe.');
+      const b = branch?.trim() ?? '';
+      if (kind !== 'repo' && (b === '' || b.startsWith('-') || b.includes('..') || /\s/.test(b))) {
+        throw err('INVALID_REFERENCE', 'Falta una rama válida para ese enlace.');
+      }
+      const url = kind === 'repo' ? repoWebUrl(rem.fetchUrl) : remoteBranchUrl(rem.fetchUrl, kind, b);
+      if (!url) throw err('POLICY', `No se conoce la página web de «${remote}»: no se puede abrir ese enlace.`);
+      openedUrls.push(url);
+    },
+
     async aiState(tabId) {
       await delay(Math.min(latency, 60));
       return withRule(tabId);
@@ -1321,6 +1442,10 @@ export function createMockApi(options: MockOptions = {}): Api & { __repos: Map<s
     },
     /** Solo pruebas: lo último que recibió `pull`. */
     __lastPullRebase: () => lastPullRebase,
+    /** Solo pruebas: enlaces abiertos con `openRemoteUrl`, en orden. */
+    __openedUrls: () => [...openedUrls],
+    /** Solo pruebas: simula el menú nativo pulsando un elemento. */
+    __menuAction: (id: string) => emit('menu-action', { id }),
 
     async aiPreviewContext(tabId): Promise<ContextPreview> {
       await delay(Math.min(latency, 80));

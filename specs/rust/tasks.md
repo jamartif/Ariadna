@@ -71,20 +71,21 @@
 
 ## M4 — Shell de la app
 
-> Segunda oleada hecha: rediseño visual con barra de título propia, botón de IA para el commit (`ai_generate_commit_message`, consentimiento Personal/Empresa), clonado con PAT (askpass temporal, nunca guardado), historial virtualizado con grafo y ramas (crear, cambiar, renombrar, borrar, fusionar sin conflictos). Deuda: test de cancelar clonado ignorado con git 2.53; retirar el aviso de la barra lateral sobre ramas; resolución de conflictos; panel de remotos.
+> Segunda oleada hecha: rediseño visual con barra de título propia, botón de IA para el commit (`ai_generate_commit_message`, consentimiento Personal/Empresa), clonado con PAT (askpass temporal, nunca guardado), historial virtualizado con grafo y ramas (crear, cambiar, renombrar, borrar, fusionar sin conflictos). Deuda: test de cancelar clonado ignorado con git 2.53; retirar el aviso de la barra lateral sobre ramas. (Panel de remotos, menú nativo, hibernación y `opener` hechos en la tercera oleada.)
 
-> Estado: backend Tauri (`AppCore`, pestañas, 34 comandos IPC, `session.json`, fixtures) e interfaz Svelte (diseño claro/oscuro, pestañas, bienvenida, cambios, diff por hunk, commit, paleta) **hechos y validados en CI** (Windows x64/ARM64, macOS 15, Ubuntu); el instalador NSIS y el `.dmg` se construyen. Pendiente: hibernación de pestañas, pantalla de recuperación, clonado (D20) en la bienvenida, `opener`.
+> Estado: backend Tauri (`AppCore`, pestañas, 34 comandos IPC, `session.json`, fixtures) e interfaz Svelte (diseño claro/oscuro, pestañas, bienvenida, cambios, diff por hunk, commit, paleta) **hechos y validados en CI** (Windows x64/ARM64, macOS 15, Ubuntu); el instalador NSIS y el `.dmg` se construyen. Pendiente: pantalla de recuperación, clonado (D20) en la bienvenida. Hechos después: hibernación de pestañas, `opener` y menú nativo.
 - [x] Proyecto Tauri 2 + Svelte 5 + TS; `tauri-specta`; CI falla si el binding difiere
 - [x] CSP estricta y capabilities mínimas; sin `{@html}`
 - [ ] **Barra de título duplicada** (hallazgo en la ventana nativa): Tauri dibuja la barra del sistema y la UI dibuja la suya. Poner `decorations: false` con controles propios (minimizar, maximizar, cerrar) en Windows y Linux, y `titleBarStyle: Overlay` con los semáforos en macOS; verificar el arrastre (`data-tauri-drag-region`)
 - [x] Tokens, tema claro/oscuro/sistema, Inter y JetBrains Mono
 - [x] `SessionManager`: ciclo de vida (§3.1), clave de repo, dedupe, cierre con confirmación
 - [x] Confirmaciones nativas desde Rust con token de un solo uso (§6)
-- [ ] Pestañas: hibernación, reorden por teclado, indicadores, tope de 20
+- [x] Pestañas: tope blando de 20 con aviso (Rust `OpenResult.warning` + UI al crear pestaña), reorden por ratón y teclado (`Alt+Mayús+←/→`, que ya no roba «seleccionar por palabras» a los campos de texto), indicadores de cambios/conflictos/ocupado/missing revisados (a11y y tests), hibernación a los 10 min (la UI libera snapshot e historial; Rust ya soltaba el vigilante de las ocultas) — `ipc.md` «Pestañas: tope, orden con teclado, indicadores e hibernación». Sin hacer: sondeo ligero de contadores de pestañas ocultas (spec §8, cada 60 s)
+- [x] Menú nativo (Archivo, Editar, Ver, Ventana, Ayuda; en macOS también «Ariadna») generado de `core/menu.rs` con aceleradores del registro único (`⌘/Ctrl+O` abrir repo, `⌘/Ctrl+R` refrescar…), `menu-action` → `runMenuAction`, tamaño mínimo 980×640 y config de ventana verificadas por test (`window_config`), `trafficLightPosition` para los semáforos de macOS. **Sin verificar a ojo**: macOS (semáforos, menú) y que Windows/Linux no necesiten barra nativa (no se adjunta)
 - [x] `session.json` versionado y atómico, con respaldo y recuperación
 - [x] Watcher (`notify`): debounce 300 ms/tope 2 s, `.git/` aparte, solo la pestaña activa, overflow → refresco completo + sondeo (UNC, 9p/WSL), refresco al recuperar el foco, toast único si degrada; la revisión sube con cada cambio externo y un refresco sin cambios no publica
 - [ ] Bienvenida: ruta, Examinar, recientes, favoritos, **Clonar desde URL** y formulario de credenciales (PAT o «iniciar sesión con el navegador») (D20)
-- [ ] Plugin `opener` con capability mínima (solo `https` y el host del remoto) para «Abrir en el navegador» y «Crear pull request» (D19)
+- [x] Plugin `opener` con capability mínima para «Abrir en el navegador» y «Crear pull request» (D19): la ventana no tiene ningún permiso `opener:*`; `open_remote_url` (Rust) construye la URL desde la config real del remoto y valida https + host del remoto, `open_external_url` mantiene su lista cerrada (`ipc.md` «Remotos y “Abrir en el navegador”»)
 - [x] Paleta de comandos y registro único de atajos (ES/US/DE)
 - [x] Errores: toast, banner de pestaña, pantalla de recuperación
 
@@ -95,7 +96,7 @@
 - [x] Diff por hunk (CodeMirror 6), virtualizado, límites de NF-5
 - [x] Barra de commit (Ctrl/⌘+Intro), amend
 - [ ] Historial paginado con filtro local y búsqueda global (NF-4)
-- [ ] Ramas y remotos, con icono del proveedor y acciones «Abrir en el navegador» / «Crear pull request» (D19)
+- [x] Ramas y remotos, con icono del proveedor y acciones «Abrir en el navegador» / «Crear pull request» (D19): sección «Remotos» en el panel Ramas (lista con proveedor, traer/bajar/subir la rama actual, añadir/renombrar/quitar con confirmación nativa) y botones en el detalle de rama. `list_remotes`, `add_remote`, `rename_remote`, `remove_remote`, `open_remote_url`. Solo enlaces: la API de PR es M8
 - [x] Estudio de conflicto a tres paneles + resultado (panel «Conflictos», `merge_start`/`merge_state`/`resolve_conflict`/`merge_continue`/`merge_abort`; textarea con resultado editable, sin CodeMirror: no está en el proyecto)
 - [x] Ajustes: pantalla (General, Git, IA, Cuentas, Acerca de), `settings.json` versionado y atómico, pull con rebase, ruta de git con «Detectar», reglas repo → perfil (`ipc.md` «Ajustes»)
 - [x] Vitest de componentes

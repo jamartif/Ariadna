@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permisos mínimos de la ventana principal: núcleo de Tauri (eventos), diálogos nativos, los cinco controles de ventana que dibuja la interfaz y abrir URL https de una lista cerrada. Sin shell ni fs.",
+  "description": "Permisos mínimos de la ventana principal: núcleo de Tauri (eventos), diálogos nativos y los cinco controles de ventana que dibuja la interfaz. Sin shell, fs ni opener: abrir el navegador lo hacen los comandos open_external_url y open_remote_url de Rust, que validan https y el host; la interfaz no puede llamar al plugin opener.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -10,20 +10,6 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
-    "core:window:allow-is-maximized",
-    {
-      "identifier": "opener:allow-open-url",
-      "allow": [
-        { "url": "https://learn.microsoft.com/*" },
-        { "url": "https://dev.azure.com/*" },
-        { "url": "https://*.visualstudio.com/*" },
-        { "url": "https://github.com/*" },
-        { "url": "https://docs.github.com/*" },
-        { "url": "https://gitlab.com/*" },
-        { "url": "https://docs.gitlab.com/*" },
-        { "url": "https://bitbucket.org/*" },
-        { "url": "https://support.atlassian.com/*" }
-      ]
-    }
+    "core:window:allow-is-maximized"
   ]
 }

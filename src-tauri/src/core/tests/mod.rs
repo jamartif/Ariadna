@@ -7,10 +7,12 @@ mod destructive;
 mod errors;
 mod fixtures;
 mod merge;
+mod remotes;
 mod session;
 mod settings;
 mod tabs;
 mod watch;
+mod window_config;
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};

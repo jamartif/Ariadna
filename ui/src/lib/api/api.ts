@@ -27,6 +27,8 @@ import type {
   MergeFastForward,
   MergeResult,
   MergeStartResult,
+  RemoteView,
+  WebTarget,
   MergeState,
   OpenResult,
   RecentRepository,
@@ -106,6 +108,17 @@ export interface Api {
   /** `rebase` omitido (o `null`) = usa el ajuste «pull con rebase» de Ajustes → Git. */
   pull(tabId: string, remote: string, refspec: string | null, rebase?: boolean | null): Promise<MergeResult>;
   push(tabId: string, remote: string, refspec: string | null, setUpstream: boolean): Promise<void>;
+
+  // Remotos (ipc.md «Remotos»). Añadir, renombrar y quitar abren confirmación nativa en Rust.
+  listRemotes(tabId: string): Promise<RemoteView[]>;
+  addRemote(tabId: string, name: string, url: string): Promise<DoneResult>;
+  renameRemote(tabId: string, oldName: string, newName: string): Promise<DoneResult>;
+  removeRemote(tabId: string, name: string): Promise<DoneResult>;
+  /**
+   * Abre en el navegador la página del repo, de una rama o de «nueva pull request». La URL la
+   * construye y valida Rust (https y host del remoto); la UI solo manda remoto y rama.
+   */
+  openRemoteUrl(tabId: string, remote: string, kind: WebTarget, branch: string | null): Promise<void>;
 
   // Ajustes (`settings.json`; la ruta de git y el pull con rebase los usa el motor)
   getSettings(): Promise<SettingsView>;

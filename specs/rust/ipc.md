@@ -44,9 +44,13 @@ Spec §3.3. **El estado vive en Rust**; la interfaz es una vista. Este documento
 | `complete_pull_request` | `tabId, id, options` | `{ done: boolean }` (confirmación nativa; respeta las políticas del proveedor) |
 | `abandon_pull_request` / `reopen_pull_request` | `tabId, id` | `{ done: boolean }` |
 | `checkout_pull_request` | `tabId, id` | `{ done: boolean }` |
-| `open_remote_url` | `tabId, remote, kind: "repo" \| "pull-request", branch: string \| null` | `void` (abre el navegador del sistema; solo `https` y solo el host del remoto) |
+| `open_remote_url` | `tabId, remote, kind: "repo" \| "branch" \| "pull-request", branch: string \| null` | `void` (abre el navegador del sistema; ver «Remotos»: la URL la construye y valida Rust; solo `https` y solo el host del remoto) |
+| `list_remotes` | `tabId` | `RemoteView[]` (ver «Remotos») |
+| `add_remote` | `tabId, name, url` | `{ done: boolean }` (confirmación nativa) |
+| `rename_remote` | `tabId, old, new` | `{ done: boolean }` (confirmación nativa) |
+| `remove_remote` | `tabId, name` | `{ done: boolean }` (confirmación nativa) |
 
-`TabInfo { tabId, path, name, branch: string \| null, detached: boolean, changeCount: number, conflictCount: number, busy: string \| null, missing: boolean }`. `GitInfo { path, version }`.
+`TabInfo { tabId, path, name, branch: string \| null, detached: boolean, changeCount: number, conflictCount: number, busy: string \| null, missing: boolean }`. `GitInfo { path, version }`. `OpenResult { tab, alreadyOpen, warning?: string }`: `warning` (ausente si no hay nada que avisar) sale al pasar del **tope blando de 20 pestañas** («Tienes 21 pestañas abiertas. Más de 20 puede ir lento: cierra las que no uses.») o al abrir un worktree de un repo ya abierto; la interfaz lo muestra como aviso y **no impide** abrir.
 
 La sesión (pestañas abiertas y orden) se guarda en `session.json` (versionado, escritura atómica) y se restaura al arrancar; una ruta que ya no existe aparece como pestaña con `missing: true`.
 
@@ -94,6 +98,16 @@ La sesión (pestañas abiertas y orden) se guarda en `session.json` (versionado,
 - **UI**: el panel «Conflictos» (cuarta pestaña del workspace) solo existe con `integration != none`; banner con contador en la pestaña; atajos de ámbito `editor`: `Alt+↓/↑` (siguiente/anterior bloque), `Alt+1/2/3` (nuestro/suyo/ambos). «Marcar como resuelto» está deshabilitado mientras queden marcadores. Abortar con ediciones sin aplicar avisa antes en la UI y luego Rust confirma.
 
 Para ver los archivos y el diff de un commit se usa `diff` con `scope: { commit: sha }` (primer padre en merges; los commits raíz también). El historial de la UI es una lista virtualizada que pide `log_page` al acercarse al final; el grafo de ramas se calcula en la UI a partir de `parents` (algoritmo incremental, `ui/src/lib/util/graph.ts`).
+
+### Remotos y «Abrir en el navegador» (D19)
+
+Sección «Remotos» al principio del panel **Ramas** (`RemotesSection`) y botones «Abrir rama en el navegador» / «Crear pull request» en el detalle de rama (`BranchDetail`). `fetch`, `pull` y `push` son los comandos de pestaña de siempre; la UI los usa sobre la rama actual (`pull` con refspec si la rama no sigue a ese remoto; `push` con `--set-upstream` si todavía no tiene origen).
+
+`RemoteView { name, fetchUrl, pushUrl, provider: "azureDevOps" \| "github" \| "gitlab" \| "bitbucket" \| "other", providerLabel, host, canOpen, canCreatePullRequest, ssh }`. Lo calcula Rust con `ariadna-hosting` (`RemoteInfo::parse`) sobre el snapshot (las credenciales de la URL ya vienen redactadas); `host` es el normalizado (`dev.azure.com` para toda forma de Azure DevOps) y vacío en remotos locales. `canOpen` = hay página web del repo y su host pasa la política; `canCreatePullRequest` = además el proveedor tiene página de «nueva PR» (GitHub, Azure DevOps, GitLab, Bitbucket; no `other`).
+
+- **Añadir / renombrar / quitar**: diálogo **nativo desde Rust** (nombra repo, remoto y URL; «quitar» cuenta las ramas de seguimiento que se borran y las ramas locales que pierden su origen y avisa de que no se toca el servidor); `{ done: false }` si se cancela. Se valida **antes** de preguntar: nombre de remoto válido y existente, y para `add_remote` la URL no puede estar vacía, empezar por `-`, llevar caracteres de control, usar transportes auxiliares `algo::…` (p. ej. `ext::`) ni llevar **contraseña o token** (`https://usuario:secreto@…`; el usuario solo sí vale) — se rechazan con `INVALID_REFERENCE` y sin repetir el secreto en el mensaje. `git remote rename` actualiza ramas de seguimiento y `branch.<x>.remote`; `remove` borra las ramas de seguimiento.
+- **`open_remote_url`**: la UI envía solo `remote` y `branch`. Rust busca el remoto en la configuración real del repo, valida la rama (nombre de rama de git válido; en `branch` y `pull-request` es obligatoria) y construye la URL con `RemoteInfo` (`repo_web_url`, `branch_web_url`, `new_pull_request_url`: GitHub `/tree/{rama}` y `/pull/new/{rama}`; Azure DevOps `?version=GB{rama}` y `/pullrequestcreate?sourceRef={rama}`; GitLab `/-/tree/{rama}` y `/-/merge_requests/new?…`; Bitbucket `/branch/{rama}` y `/pull-requests/new?source=…`; la rama va codificada). Después `validate_remote_web_url`: **solo `https`**, sin credenciales, puerto estándar, nombre de dominio (nada de IP ni `localhost`) y **host idéntico al del remoto**. Sin página conocida (remoto local, proveedor `other` en PR, sin dueño en la ruta…) rechaza con `POLICY`. Solo es un enlace: la integración por API es M8. El puerto de una URL https no se conserva (no se distingue del de SSH): el enlace va al puerto estándar del mismo host.
+- **Capability del plugin `opener`**: la ventana **no tiene ningún permiso `opener:*`**. Abrir el navegador lo hacen únicamente `open_external_url` (lista cerrada de hosts de ayuda) y `open_remote_url` (host del remoto) desde Rust, que validan antes de llamar al plugin; la interfaz no puede abrir URLs por su cuenta. Un test (`window_config`) lo comprueba.
 
 ### Clonar y PAT (D20)
 
@@ -165,7 +179,26 @@ Comportamiento de `ai_generate_commit_message` (el comando que genera asunto y d
 
 - Windows y Linux: ventana **sin decoraciones** del sistema; la UI dibuja los controles (minimizar, maximizar/restaurar, cerrar) con `@tauri-apps/api/window` y una región arrastrable (`data-tauri-drag-region`).
 - macOS: barra de título integrada (`titleBarStyle: "Overlay"`, `hiddenTitle`); la UI deja hueco a la izquierda para los semáforos.
-- La configuración es por plataforma (`tauri.windows.conf.json`, `tauri.linux.conf.json`, `tauri.macos.conf.json`) y las capabilities de ventana se limitan a `core:window:allow-minimize|toggle-maximize|close|start-dragging|is-maximized`.
+- La configuración es por plataforma (`tauri.windows.conf.json`, `tauri.linux.conf.json`, `tauri.macos.conf.json`) y las capabilities de ventana se limitan a `core:window:allow-minimize|toggle-maximize|close|start-dragging|is-maximized` (más `core:default` y `dialog:default`; ningún `opener:*`).
+- **Tamaño mínimo 980×640** (`minWidth`/`minHeight` en las cuatro configuraciones; tamaño inicial 1280×800). Lo comprueba el test `window_config`.
+- **macOS**: `trafficLightPosition { x: 16, y: 13 }` sitúa los semáforos centrados en la barra de 40 px (`--titlebar-h`); la UI deja 68 px de hueco (`.mac-inset`) más el relleno de la barra. **No verificado a ojo en macOS** (solo hay CI de compilación): comprobar que los semáforos no pisan la marca ni la primera pestaña y que el arrastre funciona en el hueco.
+
+### Menú nativo y atajos
+
+El menú es **dato** (`core/menu.rs`, `app_menu(mac)`) y la capa Tauri lo construye: Archivo (Abrir repositorio… `⌘/Ctrl+O`, Clonar… `⌘/Ctrl+Mayús+O`, Nueva pestaña `⌘/Ctrl+T`, Cerrar pestaña `⌘/Ctrl+W`; en Windows/Linux también Ajustes… y Salir), Editar (deshacer, rehacer, cortar, copiar, pegar, seleccionar todo), Ver (Refrescar `⌘/Ctrl+R`, Paleta de comandos `⌘/Ctrl+K`, pantalla completa), Ventana (minimizar, zoom, pestaña siguiente/anterior `Ctrl+Tab`/`Ctrl+Mayús+Tab`) y Ayuda (documentación e incidencias, enlaces fijos que pasan por `validate_external_url`). macOS añade el menú «Ariadna» (Acerca de, Ajustes… `⌘,`, ocultar, Salir `⌘Q`).
+
+- **Solo macOS adjunta el menú** (barra de menús del sistema). En Windows y Linux la barra de título es la de la interfaz y una barra nativa la duplicaría: no se adjunta y las mismas acciones están en los atajos y en la paleta. Sin verificar en una ventana real de Windows/Linux (decisión de diseño, no probada visualmente).
+- **Un solo registro de atajos**: cada elemento propio lleva el **id del registro** (`ui/src/lib/shortcuts/registry.ts`) y su acelerador es el mismo combo (`Mod` → `CmdOrCtrl`). Al pulsarlo, Rust emite `menu-action { id }` y la UI lo ejecuta con `runMenuAction(id)`, que ignora el eco si la misma tecla acaba de ejecutarlo (250 ms; nunca se ejecuta dos veces). El test de Rust genera `ui/src/lib/api/fixtures/menu.json` (falla si cambia sin regenerar) y Vitest comprueba que cada acelerador coincide con el registro. Salir (`app.quit`) y los enlaces de ayuda los resuelve Rust: salir sigue el mismo camino que cerrar la ventana (confirma trabajo pendiente).
+- «Mover pestaña» (`Alt+Mayús+←/→`) **no** está en el menú: en macOS un acelerador de menú impediría «seleccionar por palabras» en los campos de texto. Además el atajo se ignora cuando el foco está en un campo de texto fuera de la barra de pestañas.
+- `⌘/Ctrl+R` se **consume siempre** (sin repo abierto no hace nada): si no, la WebView recargaría la página y perdería el estado de la interfaz.
+- Atajos nuevos: `repo.open` (`Mod+O`, global, también en la paleta y en el menú).
+
+### Pestañas: tope, orden con teclado, indicadores e hibernación
+
+- **Tope blando de 20** (spec §8): Rust avisa en `OpenResult.warning` y la UI avisa también al crear una pestaña nueva a partir de 20 (una sola vez por pestaña nueva). No impide abrir más.
+- **Reordenar**: ratón (arrastrar) o teclado (`Alt+Mayús+←/→`, atajo global `tab.moveLeft`/`tab.moveRight`; las flechas sin modificador solo mueven el foco entre pestañas). Persiste con `reorder_tabs`.
+- **Indicadores** (`TabInfo`): rama, nº de cambios, nº de conflictos, ocupado y `missing`, accesibles en el nombre de la pestaña. Las pestañas ocultas muestran el último contador conocido; se corrige al activarlas (spec §8: el sondeo ligero cada 60 s queda para después).
+- **Hibernación**: Rust ya libera el vigilante de las pestañas no activas y las refresca al activarse (ver «Vigilancia de archivos»). La UI, además, tras **10 minutos** oculta (`HIBERNATE_AFTER_MS`, revisión cada minuto) libera el `Snapshot` y el historial cargado (commits, grafo, diffs) de la pestaña (`TabState.hibernate()`); conserva borrador del commit, panel y contadores. Una pestaña hibernada **ignora** los `snapshot` que lleguen; al activarse se rehidrata (`load()`; Rust refresca además al activar). No hiberna con operación en curso, commit/IA en marcha, conflictos o integración en curso (hay ediciones sin aplicar).
 
 ## Eventos (Rust → UI)
 
@@ -176,6 +209,7 @@ Comportamiento de `ai_generate_commit_message` (el comando que genera asunto y d
 | `session-event` | `SessionEvent` de `ariadna-git` (`sessionId`, `revision`, `kind`) |
 | `tabs-changed` | `AppState` (abrir, cerrar, reordenar, restaurar) |
 | `notice` | `{ kind: string, message: string }`: aviso no intrusivo (toast de advertencia). Hoy solo `watcherFallback`: la vigilancia nativa no pudo arrancar o desbordó (p. ej. límite de inotify) y se sondea; sale **una sola vez** por ejecución |
+| `menu-action` | `{ id: string }`: elemento del menú nativo pulsado (solo macOS); `id` es un id del registro de atajos (ver «Menú nativo y atajos») |
 | `clone-progress` | `{ operationId, phase: string, percent: number \| null }` (`operationId` en un rango propio, no pertenece a ninguna pestaña) |
 
 ## Vigilancia de archivos
