@@ -14,17 +14,19 @@ use std::time::Duration;
 use ariadna_process::{CancellationToken, ProcessError, ProcessSpec};
 use async_trait::async_trait;
 
-use crate::commands::{build_args, command_summary, prompt_via_stdin, version_args};
+use crate::commands::{account_args, build_args, command_summary, prompt_via_stdin, version_args};
 use crate::env::{provider_env, EnvOptions};
 use crate::models::{
-    new_suggestion_id, now_millis, AiContextPolicy, AiError, AiSuggestion, Availability,
-    CommitOptions, ProviderId, SuggestionKind, SuggestionStatus, SummaryStyle,
+    new_suggestion_id, now_millis, AccountInfo, AiContextPolicy, AiError, AiSuggestion,
+    Availability, CommitOptions, ProviderId, SuggestionKind, SuggestionStatus, SummaryStyle,
 };
 use crate::parse::{
-    error_from_failed_run, parse_conflict_proposal, parse_output, split_commit_message,
-    strip_fences, ParsedReply,
+    error_from_failed_run, parse_claude_auth_status, parse_conflict_proposal, parse_output,
+    split_commit_message, strip_fences, ParsedReply,
 };
-use crate::prompt::{validate_conflict_proposal, ConflictInput, PromptBuilder, PromptPreview};
+use crate::prompt::{
+    validate_conflict_proposal, ConflictInput, PromptBuilder, PromptPreview, PullRequestInput,
+};
 use crate::resolve::{resolve_binary, ResolvedBinary, SearchEnv};
 
 /// Timeout duro de una llamada (RF-IA6).
@@ -84,6 +86,22 @@ pub trait AiProvider: Send + Sync {
     ) -> Result<AiSuggestion, AiError> {
         self.suggest_commit_message(ctx, diff, opts.template.as_deref())
             .await
+    }
+    /// Título (en `subject`) y descripción (en `body`) de una pull request. Por defecto no
+    /// está soportado.
+    async fn suggest_pull_request(
+        &self,
+        _ctx: &CallContext,
+        _input: &PullRequestInput,
+    ) -> Result<AiSuggestion, AiError> {
+        Err(AiError::Io(
+            "este proveedor no sabe describir pull requests".into(),
+        ))
+    }
+    /// Cuenta activa según el propio CLI (RF-IA12), con el directorio de configuración del
+    /// perfil. Por defecto «no disponible».
+    async fn account(&self, _config_dir: Option<&Path>) -> AccountInfo {
+        AccountInfo::unavailable(self.id(), "Este CLI no expone la cuenta activa.")
     }
     async fn summarize_diff(
         &self,
@@ -415,6 +433,66 @@ impl AiProvider for CliProvider {
             None,
             reply.note,
         ))
+    }
+
+    async fn suggest_pull_request(
+        &self,
+        ctx: &CallContext,
+        input: &PullRequestInput,
+    ) -> Result<AiSuggestion, AiError> {
+        let preview = PromptBuilder::pull_request(input);
+        let reply = self.complete(ctx, &preview).await?;
+        let (title, body) = split_commit_message(&reply.text);
+        if title.is_empty() {
+            return Err(AiError::BadOutput("respuesta vacía".into()));
+        }
+        Ok(self.make(
+            ctx,
+            SuggestionKind::PullRequest,
+            &preview,
+            Some(title),
+            body,
+            None,
+            None,
+            reply.note,
+        ))
+    }
+
+    async fn account(&self, config_dir: Option<&Path>) -> AccountInfo {
+        let id = self.cfg.id;
+        let Some(args) = account_args(id) else {
+            return AccountInfo::unavailable(
+                id,
+                "El CLI no expone la cuenta activa de forma verificada.",
+            );
+        };
+        let resolved = match self.resolve() {
+            Ok(r) => r,
+            Err(e) => return AccountInfo::unavailable(id, e.to_string()),
+        };
+        let dir = match CallDir::create(&self.cfg.sandbox_dir) {
+            Ok(d) => d,
+            Err(e) => return AccountInfo::unavailable(id, e.to_string()),
+        };
+        let mut ctx = CallContext::new("");
+        ctx.config_dir = config_dir.map(Path::to_path_buf);
+        let spec = match self.spec(&resolved, &args, &dir.0, Some(&ctx)) {
+            Ok(s) => s.timeout(Some(self.cfg.version_timeout)),
+            Err(e) => return AccountInfo::unavailable(id, e.to_string()),
+        };
+        let out = match ariadna_process::run(spec, CancellationToken::new()).await {
+            Ok(o) => o,
+            Err(e) => return AccountInfo::unavailable(id, self.map_process_error(e).to_string()),
+        };
+        drop(dir);
+        if out.timed_out || out.truncated {
+            return AccountInfo::unavailable(id, "El CLI no respondió a tiempo.");
+        }
+        // `claude auth status` sale con 1 sin sesión pero imprime el JSON igualmente.
+        match id {
+            ProviderId::Claude => parse_claude_auth_status(&out.stdout_lossy()),
+            _ => AccountInfo::unavailable(id, "El CLI no expone la cuenta activa."),
+        }
     }
 
     async fn summarize_diff(

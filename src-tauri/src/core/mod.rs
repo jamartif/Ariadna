@@ -11,6 +11,7 @@ pub mod external;
 mod history_ops;
 pub mod menu;
 mod merge_ops;
+mod pr_ops;
 pub mod prompter;
 mod remote_ops;
 pub mod session_file;
@@ -22,11 +23,12 @@ mod tests;
 
 pub use ai::{AiSettingsLoad, AiStore, StoredAi};
 pub use api::{
-    AiCommitOptions, AiCommitSuggestion, AiContextPreview, AiExcludeReason, AiExcludedFile,
-    AiPreviewFile, AiProfileInfo, AiProviderState, AiSettingsPatch, AiState, AmendDraft,
-    ApiSessionEvent, ApiSessionEventKind, ApiSnapshot, AppEvent, AppState, CloneProgressEvent,
-    Closed, CommitResult, CredentialTest, Done, EventSink, GitInfo, HunkArg, NoticeEvent,
-    OpenResult, SnapshotEvent, TabInfo,
+    AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitSuggestion, AiContextPreview,
+    AiExcludeReason, AiExcludedFile, AiLoginInfo, AiLoginRequest, AiPreviewFile, AiProfileInfo,
+    AiProviderState, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState,
+    AmendDraft, ApiSessionEvent, ApiSessionEventKind, ApiSnapshot, AppEvent, AppState,
+    CloneProgressEvent, Closed, CommitResult, CredentialTest, Done, EventSink, GitInfo, HunkArg,
+    NoticeEvent, OpenResult, SnapshotEvent, TabInfo,
 };
 pub use app::{default_data_dir, locate_git, AppConfig, AppCore, CLOSE_GRACE, SOFT_TAB_LIMIT};
 pub use error::{ApiError, ApiResult};
@@ -35,6 +37,7 @@ pub use merge_ops::{
     ConflictResolution, ConflictSummary, ContinueResult, HunkChoice, HunkSide, MergeStartResult,
     MergeState,
 };
+pub use pr_ops::{CommentInput, PrAction, PrDiff, PrOmitted, PrProviderFactory, PrSupport};
 pub use prompter::Prompter;
 pub use remote_ops::{RemoteView, WebTarget};
 pub use session_file::{SavedTab, SessionData, SessionLoad, SessionStore};

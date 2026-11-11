@@ -4,6 +4,8 @@ import { createTauriApi } from './tauriApi';
 
 export type { Api, Unlisten } from './api';
 export * from './types';
+export * from './prTypes';
+export type { PullRequestApi } from './prApi';
 
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;

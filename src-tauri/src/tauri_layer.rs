@@ -18,12 +18,19 @@ use tokio::sync::oneshot;
 
 use crate::core::menu::{app_menu, effect_of, Effect, Entry, Role};
 use crate::core::{
-    default_data_dir, locate_git, validate_external_url, AiCommitOptions, AiCommitSuggestion,
-    AiContextPreview, AiSettingsPatch, AiState, AmendDraft, ApiError, ApiSnapshot, AppConfig,
-    AppCore, AppEvent, AppState, CliStatus, Closed, CommitResult, ConflictResolution,
-    ContinueResult, CredentialTest, Done, EventSink, GitDetect, GitIdentity, HunkArg,
-    MergeStartResult, MergeState, OpenResult, Prompter, RemoteView, Settings, SettingsView,
-    WebTarget,
+    default_data_dir, locate_git, validate_external_url, AiAccounts, AiAccountsRequest,
+    AiCommitOptions, AiCommitSuggestion, AiContextPreview, AiLoginInfo, AiLoginRequest,
+    AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState, AmendDraft, ApiError,
+    ApiSnapshot, AppConfig, AppCore, AppEvent, AppState, CliStatus, Closed, CommitResult,
+    ConflictResolution, ContinueResult, CredentialTest, Done, EventSink, GitDetect, GitIdentity,
+    HunkArg, MergeStartResult, MergeState, OpenResult, Prompter, RemoteView, Settings,
+    SettingsView, WebTarget,
+};
+
+use crate::core::{CommentInput, PrAction, PrDiff, PrSupport};
+use ariadna_hosting::{
+    CompleteOptions, NewPullRequest, PrFilter, PullRequestDetail, PullRequestPage, ReviewThread,
+    Vote,
 };
 
 type Cmd<T> = Result<T, ApiError>;
@@ -250,6 +257,118 @@ async fn remove_remote(core: State<'_, AppCore>, tab_id: String, name: String) -
     core.remove_remote(&tab_id, name).await
 }
 
+// --- pull requests (M8; contrato en `specs/rust/ipc.md`) -------------------------------------
+// Solo hay red cuando la UI llama a estos comandos (sin sondeo). El token nunca pasa por aquí:
+// lo obtiene `ariadna-hosting` con `git credential fill` en cada operación.
+
+#[tauri::command]
+async fn pull_request_support(core: State<'_, AppCore>, tab_id: String) -> Cmd<PrSupport> {
+    core.pull_request_support(&tab_id).await
+}
+
+#[tauri::command]
+async fn list_pull_requests(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    filter: PrFilter,
+    page: u32,
+) -> Cmd<PullRequestPage> {
+    core.list_pull_requests(&tab_id, filter, page).await
+}
+
+#[tauri::command]
+async fn get_pull_request(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    id: u64,
+) -> Cmd<PullRequestDetail> {
+    core.get_pull_request(&tab_id, id).await
+}
+
+#[tauri::command]
+async fn create_pull_request(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    draft: NewPullRequest,
+) -> Cmd<PullRequestDetail> {
+    core.create_pull_request(&tab_id, draft).await
+}
+
+#[tauri::command]
+async fn pull_request_template(core: State<'_, AppCore>, tab_id: String) -> Cmd<Option<String>> {
+    core.pull_request_template(&tab_id).await
+}
+
+#[tauri::command]
+async fn pull_request_diff(core: State<'_, AppCore>, tab_id: String, id: u64) -> Cmd<PrDiff> {
+    core.pull_request_diff(&tab_id, id).await
+}
+
+#[tauri::command]
+async fn pull_request_threads(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    id: u64,
+) -> Cmd<Vec<ReviewThread>> {
+    core.pull_request_threads(&tab_id, id).await
+}
+
+#[tauri::command]
+async fn add_pull_request_comment(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    id: u64,
+    thread: CommentInput,
+) -> Cmd<ReviewThread> {
+    core.add_pull_request_comment(&tab_id, id, thread).await
+}
+
+#[tauri::command]
+async fn resolve_pull_request_thread(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    id: u64,
+    thread_id: String,
+    resolved: bool,
+) -> Cmd<ReviewThread> {
+    core.resolve_pull_request_thread(&tab_id, id, &thread_id, resolved)
+        .await
+}
+
+/// Confirmación nativa desde Rust si el voto es de rechazo.
+#[tauri::command]
+async fn vote_pull_request(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    id: u64,
+    vote: Vote,
+    comment: Option<String>,
+) -> Cmd<PrAction> {
+    core.vote_pull_request(&tab_id, id, vote, comment).await
+}
+
+/// Confirmación nativa desde Rust; las políticas del proveedor mandan.
+#[tauri::command]
+async fn complete_pull_request(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    id: u64,
+    options: CompleteOptions,
+) -> Cmd<PrAction> {
+    core.complete_pull_request(&tab_id, id, options).await
+}
+
+/// Confirmación nativa desde Rust.
+#[tauri::command]
+async fn abandon_pull_request(core: State<'_, AppCore>, tab_id: String, id: u64) -> Cmd<PrAction> {
+    core.abandon_pull_request(&tab_id, id).await
+}
+
+#[tauri::command]
+async fn reopen_pull_request(core: State<'_, AppCore>, tab_id: String, id: u64) -> Cmd<PrAction> {
+    core.reopen_pull_request(&tab_id, id).await
+}
+
 // --- menú nativo ----------------------------------------------------------------------------
 
 /// Carga de `menu-action`: id del atajo en el registro de la interfaz.
@@ -390,6 +509,29 @@ async fn ai_generate_commit_message(
 #[tauri::command]
 async fn ai_cancel(core: State<'_, AppCore>, tab_id: String) -> Cmd<bool> {
     core.ai_cancel(&tab_id)
+}
+
+#[tauri::command]
+async fn ai_accounts(
+    core: State<'_, AppCore>,
+    request: Option<AiAccountsRequest>,
+) -> Cmd<AiAccounts> {
+    core.ai_accounts(request.unwrap_or_default()).await
+}
+
+#[tauri::command]
+async fn ai_login(core: State<'_, AppCore>, request: AiLoginRequest) -> Cmd<AiLoginInfo> {
+    core.ai_login(request).await
+}
+
+#[tauri::command]
+async fn ai_generate_pull_request(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    options: Option<AiPullRequestOptions>,
+) -> Cmd<AiPullRequestSuggestion> {
+    core.ai_generate_pull_request(&tab_id, options.unwrap_or_default())
+        .await
 }
 
 // --- comandos de pestaña ------------------------------------------------------------------
@@ -718,6 +860,19 @@ pub fn run() {
             add_remote,
             rename_remote,
             remove_remote,
+            pull_request_support,
+            list_pull_requests,
+            get_pull_request,
+            create_pull_request,
+            pull_request_template,
+            pull_request_diff,
+            pull_request_threads,
+            add_pull_request_comment,
+            resolve_pull_request_thread,
+            vote_pull_request,
+            complete_pull_request,
+            abandon_pull_request,
+            reopen_pull_request,
             clone_repository,
             store_credential,
             test_credential,
@@ -732,6 +887,9 @@ pub fn run() {
             ai_preview_context,
             ai_generate_commit_message,
             ai_cancel,
+            ai_accounts,
+            ai_login,
+            ai_generate_pull_request,
             get_snapshot,
             refresh,
             stage,

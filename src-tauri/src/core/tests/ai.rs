@@ -387,3 +387,520 @@ async fn la_regla_de_perfil_decide_con_que_perfil_se_genera_y_donde_se_guarda_el
     let e = ai.generate().await.unwrap_err();
     assert!(e.code.starts_with("AI_"), "{e:?}");
 }
+
+// ---------------------------------------------------------------- aislamiento, cuenta y login
+
+use std::sync::{Arc, Mutex};
+
+use ariadna_ai::login::TerminalLauncher;
+
+use crate::core::api::{AiAccountsRequest, AiLoginRequest, AiPullRequestOptions, BinaryPathPatch};
+
+/// Terminal falsa: guarda la ruta y el contenido del script en vez de abrir una ventana.
+#[derive(Default)]
+struct RecordingTerminal {
+    opened: Mutex<Vec<(PathBuf, String)>>,
+}
+
+impl TerminalLauncher for RecordingTerminal {
+    fn open(&self, script: &Path) -> Result<(), ariadna_ai::AiError> {
+        let text = std::fs::read_to_string(script).unwrap();
+        self.opened
+            .lock()
+            .unwrap()
+            .push((script.to_path_buf(), text));
+        Ok(())
+    }
+}
+
+/// `claude` falso que responde a `auth status --json` con la cuenta y el directorio recibido.
+fn account_script(dump: &Path) -> String {
+    format!(
+        "if [ \"$1\" = \"auth\" ]; then\n\
+         printf '{{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"configDirectory\":\"%s\",\"email\":\"ana@empresa.com\",\"orgName\":\"Empresa SL\",\"subscriptionType\":\"team\"}}\\n' \"$CLAUDE_CONFIG_DIR\"\n\
+         exit 0\nfi\n\
+         printf '%s' \"$CLAUDE_CONFIG_DIR\" > '{d}.cfg'\n{}",
+        ok_script(dump),
+        d = dump.display()
+    )
+}
+
+async fn patch(ai: &Ai, p: AiSettingsPatch) -> crate::core::api::AiState {
+    ai.env.core.ai_update_settings(p).await.unwrap()
+}
+
+async fn use_claude_in(ai: &Ai, profile: &str) {
+    patch(
+        ai,
+        AiSettingsPatch {
+            profile: Some(profile.into()),
+            provider_enabled: Some(crate::core::api::ProviderEnabledPatch {
+                id: "claude".into(),
+                enabled: true,
+            }),
+            ..AiSettingsPatch::default()
+        },
+    )
+    .await;
+}
+
+fn cfg_seen(ai: &Ai) -> String {
+    std::fs::read_to_string(format!("{}.cfg", ai.dump.display())).unwrap_or_default()
+}
+
+fn by_state<'a>(
+    st: &'a crate::core::api::AiState,
+    id: &str,
+) -> &'a crate::core::api::AiProviderState {
+    st.providers
+        .iter()
+        .find(|p| p.id.binary_name() == id)
+        .unwrap()
+}
+
+#[tokio::test]
+async fn empresa_aisla_la_sesion_y_personal_usa_la_normal_hasta_que_se_active() {
+    let ai = Ai::new(account_script).await;
+    ai.stage("a.txt", b"uno\n").await;
+    let profiles = ai.env.core.inner.ai.profiles_dir();
+
+    use_claude_in(&ai, "empresa").await;
+    let s = ai.generate().await.unwrap();
+    assert_eq!(s.provider, "claude");
+    let empresa = profiles.join("empresa").join("claude");
+    assert_eq!(cfg_seen(&ai), empresa.to_string_lossy());
+    assert!(empresa.is_dir(), "el directorio aislado se crea al usarlo");
+
+    // Personal conserva el login normal del CLI: ni variable ni directorio nuevo.
+    patch(
+        &ai,
+        AiSettingsPatch {
+            profile: Some("personal".into()),
+            ..AiSettingsPatch::default()
+        },
+    )
+    .await;
+    std::fs::remove_file(format!("{}.cfg", ai.dump.display())).unwrap();
+    ai.generate().await.unwrap();
+    assert_eq!(cfg_seen(&ai), "");
+    assert!(!profiles.join("personal").exists());
+
+    // Activar el aislamiento de Personal le da su propio directorio, distinto del de Empresa.
+    let st = patch(
+        &ai,
+        AiSettingsPatch {
+            isolated: Some(true),
+            ..AiSettingsPatch::default()
+        },
+    )
+    .await;
+    assert!(st.profile.isolated);
+    ai.generate().await.unwrap();
+    let personal = profiles.join("personal").join("claude");
+    assert_eq!(cfg_seen(&ai), personal.to_string_lossy());
+    assert_ne!(personal, empresa);
+
+    // Desactivarlo en Empresa devuelve la sesión normal.
+    use_claude_in(&ai, "empresa").await;
+    patch(
+        &ai,
+        AiSettingsPatch {
+            isolated: Some(false),
+            ..AiSettingsPatch::default()
+        },
+    )
+    .await;
+    ai.generate().await.unwrap();
+    assert_eq!(cfg_seen(&ai), "");
+}
+
+#[tokio::test]
+async fn el_estado_avisa_de_los_proveedores_que_comparten_login() {
+    let ai = Ai::new(ok_script).await;
+    let st = patch(&ai, AiSettingsPatch::default()).await;
+    // Personal: sin aislamiento por defecto.
+    assert!(!st.profile.isolated);
+    assert!(!by_state(&st, "claude").isolated && !by_state(&st, "claude").shares_login);
+    assert!(by_state(&st, "copilot").shares_login);
+    let st = patch(
+        &ai,
+        AiSettingsPatch {
+            profile: Some("empresa".into()),
+            ..AiSettingsPatch::default()
+        },
+    )
+    .await;
+    assert!(st.profile.isolated);
+    assert!(by_state(&st, "codex").isolated && !by_state(&st, "codex").isolation_verified);
+    assert!(by_state(&st, "claude").isolation_verified);
+    // Copilot nunca se marca aislado aunque el perfil lo esté: comparte login.
+    assert!(by_state(&st, "copilot").shares_login && !by_state(&st, "copilot").isolated);
+}
+
+#[tokio::test]
+async fn la_cuenta_sale_del_cli_con_el_directorio_de_cada_perfil() {
+    let ai = Ai::new(account_script).await;
+    use_claude_in(&ai, "empresa").await;
+    let empresa = ai
+        .env
+        .core
+        .ai_accounts(AiAccountsRequest {
+            profile: Some("empresa".into()),
+            ..AiAccountsRequest::default()
+        })
+        .await
+        .unwrap();
+    let c = &empresa.accounts[0];
+    assert_eq!(c.email.as_deref(), Some("ana@empresa.com"));
+    assert_eq!(c.organization.as_deref(), Some("Empresa SL"));
+    let dir = ai
+        .env
+        .core
+        .inner
+        .ai
+        .profiles_dir()
+        .join("empresa")
+        .join("claude");
+    assert_eq!(
+        c.config_dir.as_deref(),
+        Some(dir.to_string_lossy().as_ref())
+    );
+    assert!(empresa.profile.isolated);
+    // Codex y Copilot: «no disponible» y sin lanzar nada.
+    assert_eq!(empresa.accounts.len(), 3);
+    for a in &empresa.accounts[1..] {
+        assert_eq!(a.state, ariadna_ai::AccountState::Unavailable);
+    }
+
+    let personal = ai
+        .env
+        .core
+        .ai_accounts(AiAccountsRequest {
+            profile: Some("personal".into()),
+            ..AiAccountsRequest::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        personal.accounts[0].config_dir, None,
+        "usa la sesión normal"
+    );
+
+    // Por pestaña, el perfil sale de la regla repo → perfil (aquí ninguna: el activo).
+    let by_tab = ai
+        .env
+        .core
+        .ai_accounts(AiAccountsRequest {
+            tab_id: Some(ai.tab.clone()),
+            ..AiAccountsRequest::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(by_tab.profile.name, "Empresa");
+    assert!(ai
+        .env
+        .core
+        .ai_accounts(AiAccountsRequest {
+            profile: Some("otro".into()),
+            ..AiAccountsRequest::default()
+        })
+        .await
+        .is_err());
+}
+
+fn login_req(profile: &str, provider: &str, launch: bool) -> AiLoginRequest {
+    AiLoginRequest {
+        tab_id: None,
+        profile: Some(profile.into()),
+        provider: provider.into(),
+        launch,
+    }
+}
+
+#[tokio::test]
+async fn el_login_usa_el_entorno_aislado_y_nunca_pide_credenciales() {
+    let ai = Ai::new(ok_script).await;
+    let term = Arc::new(RecordingTerminal::default());
+    ai.env.core.inner.ai.set_launcher(term.clone());
+    use_claude_in(&ai, "empresa").await;
+
+    // Solo mostrar el comando: no se abre nada.
+    let shown = ai
+        .env
+        .core
+        .ai_login(login_req("empresa", "claude", false))
+        .await
+        .unwrap();
+    assert!(!shown.launched && term.opened.lock().unwrap().is_empty());
+    let dir = ai
+        .env
+        .core
+        .inner
+        .ai
+        .profiles_dir()
+        .join("empresa")
+        .join("claude");
+    assert_eq!(
+        shown.config_dir.as_deref(),
+        Some(dir.to_string_lossy().as_ref())
+    );
+    assert_eq!(
+        shown.command.as_deref(),
+        Some(format!("CLAUDE_CONFIG_DIR='{}' claude auth login", dir.display()).as_str())
+    );
+    assert!(shown.isolated && !shown.shares_login && shown.verified);
+
+    // Abrir la terminal: el script fija el directorio, limpia claves ajenas y no lleva datos del repo.
+    let opened = ai
+        .env
+        .core
+        .ai_login(login_req("empresa", "claude", true))
+        .await
+        .unwrap();
+    assert!(opened.launched, "{:?}", opened.note);
+    let (path, text) = term.opened.lock().unwrap()[0].clone();
+    assert!(path.starts_with(ai.env.core.inner.ai.profiles_dir().join("empresa")));
+    assert!(text.contains(&format!("export CLAUDE_CONFIG_DIR='{}'", dir.display())));
+    assert!(text.contains("unset ANTHROPIC_API_KEY"));
+    assert!(text.contains(&format!(
+        "{}' auth login",
+        ai.bin_dir.join("claude").display()
+    )));
+    assert!(!text.contains(&ai.repo.to_string_lossy().into_owned()));
+
+    // Personal (sin aislar): comando simple, sin variable ni directorio.
+    let p = ai
+        .env
+        .core
+        .ai_login(login_req("personal", "claude", false))
+        .await
+        .unwrap();
+    assert_eq!(p.command.as_deref(), Some("claude auth login"));
+    assert!(p.config_dir.is_none() && !p.isolated);
+    assert!(p.note.unwrap().contains("sesión normal"));
+}
+
+#[tokio::test]
+async fn copilot_comparte_login_y_el_login_avisa() {
+    let ai = Ai::new(ok_script).await;
+    let bin = fake_claude(&ai.env.root.join("cp"), "exit 0");
+    patch(
+        &ai,
+        AiSettingsPatch {
+            binary_path: Some(BinaryPathPatch {
+                id: "copilot".into(),
+                path: Some(bin.to_string_lossy().into_owned()),
+            }),
+            ..AiSettingsPatch::default()
+        },
+    )
+    .await;
+    let term = Arc::new(RecordingTerminal::default());
+    ai.env.core.inner.ai.set_launcher(term.clone());
+    let info = ai
+        .env
+        .core
+        .ai_login(login_req("empresa", "copilot", true))
+        .await
+        .unwrap();
+    assert!(info.shares_login && !info.isolated && info.config_dir.is_none());
+    assert!(!info.verified);
+    assert!(
+        info.note.as_deref().unwrap().contains("comparten"),
+        "{info:?}"
+    );
+    assert_eq!(info.command.as_deref(), Some("copilot login"));
+    let text = term.opened.lock().unwrap()[0].1.clone();
+    assert!(!text.contains("export CLAUDE_CONFIG_DIR") && !text.contains("export CODEX_HOME"));
+}
+
+#[tokio::test]
+async fn login_con_errores_claros() {
+    let ai = Ai::new(ok_script).await;
+    let term = Arc::new(RecordingTerminal::default());
+    ai.env.core.inner.ai.set_launcher(term.clone());
+    // Codex no está instalado.
+    let e = ai
+        .env
+        .core
+        .ai_login(login_req("personal", "codex", true))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "AI_NOT_INSTALLED");
+    // Claude está desactivado en Empresa.
+    let e = ai
+        .env
+        .core
+        .ai_login(login_req("empresa", "claude", true))
+        .await
+        .unwrap_err();
+    assert!(e.code.starts_with("AI_"), "{e:?}");
+    // Proveedor o perfil desconocidos.
+    for (profile, provider) in [("personal", "gemini"), ("jefe", "claude")] {
+        let e = ai
+            .env
+            .core
+            .ai_login(login_req(profile, provider, false))
+            .await
+            .unwrap_err();
+        assert_eq!(e.code, "PARSE");
+    }
+    assert!(term.opened.lock().unwrap().is_empty());
+}
+
+// ---------------------------------------------------------------- título y descripción de PR
+
+const PR_REPLY: &str = r#"{"type":"result","subtype":"success","is_error":false,"result":"Añade el módulo de acceso\n\n## Resumen\n\nNuevo módulo.\n\n- Crea acceso.txt"}"#;
+
+fn pr_script(dump: &Path) -> String {
+    format!(
+        "cat > '{d}'\nprintf '%s\\n' \"$@\" > '{d}.args'\ncat <<'EOF'\n{PR_REPLY}\nEOF",
+        d = dump.display()
+    )
+}
+
+impl Ai {
+    /// Rama `feature` con dos commits sobre `main`; `main` avanza después con otro archivo.
+    fn branch_with_commits(&self) {
+        let (e, r) = (&self.env, &self.repo);
+        e.git(r, &["checkout", "-q", "-b", "feature"]);
+        e.write(r, "acceso.txt", b"login con usuario\n");
+        e.git(r, &["add", "-A"]);
+        e.git(
+            r,
+            &[
+                "commit",
+                "-q",
+                "-m",
+                "Añade el módulo de acceso",
+                "-m",
+                "Detalle del acceso.",
+            ],
+        );
+        e.write(r, "tokens.rs", b"let k = \"AKIAABCDEFGHIJKLMNOP\";\n");
+        e.write(r, ".env", b"SECRETO_ENV=1\n");
+        e.git(r, &["add", "-f", "-A"]);
+        e.git(r, &["commit", "-q", "-m", "Corrige la configuración"]);
+        e.git(r, &["checkout", "-q", "main"]);
+        e.write(r, "solo-main.txt", b"cambio ajeno\n");
+        e.git(r, &["add", "-A"]);
+        e.git(r, &["commit", "-q", "-m", "avanza main"]);
+        e.git(r, &["checkout", "-q", "feature"]);
+    }
+
+    async fn pr(
+        &self,
+        base: Option<&str>,
+    ) -> Result<crate::core::api::AiPullRequestSuggestion, ApiError> {
+        self.env
+            .core
+            .ai_generate_pull_request(
+                &self.tab,
+                AiPullRequestOptions {
+                    base: base.map(String::from),
+                    ..AiPullRequestOptions::default()
+                },
+            )
+            .await
+    }
+}
+
+#[tokio::test]
+async fn propone_titulo_y_descripcion_de_pr_sin_tocar_el_repo() {
+    let ai = Ai::new(pr_script).await;
+    ai.branch_with_commits();
+    ai.env.core.refresh(&ai.tab).await.unwrap();
+    let head = ai.head();
+    let status = ai.env.git(&ai.repo, &["status", "--porcelain"]);
+
+    let s = ai.pr(None).await.unwrap();
+    assert_eq!(s.title, "Añade el módulo de acceso");
+    assert!(s.body.contains("## Resumen") && s.body.contains("- Crea acceso.txt"));
+    assert_eq!(
+        (s.provider.as_str(), s.base.as_str(), s.head.as_str()),
+        ("claude", "main", "feature")
+    );
+    assert_eq!(s.commit_count, 2);
+
+    // Solo propone: ni commits ni cambios.
+    assert_eq!(ai.head(), head);
+    assert_eq!(ai.env.git(&ai.repo, &["status", "--porcelain"]), status);
+
+    let stdin = ai.stdin();
+    // Commits (asunto y cuerpo) y diff contra el ancestro común…
+    assert!(stdin.contains("Añade el módulo de acceso") && stdin.contains("Detalle del acceso."));
+    assert!(stdin.contains("login con usuario"));
+    assert!(stdin.contains("feature") && stdin.contains("BASE BRANCH"));
+    // …sin lo que main añadió después, sin .env y con los secretos redactados.
+    assert!(!stdin.contains("cambio ajeno"), "{stdin}");
+    assert!(!stdin.contains("SECRETO_ENV"));
+    assert!(!stdin.contains("AKIAABCDEFGHIJKLMNOP"));
+    assert!(stdin.contains("[REDACTED]"));
+    // Por stdin, nunca por argv.
+    let args = std::fs::read_to_string(format!("{}.args", ai.dump.display())).unwrap();
+    assert!(!args.contains("acceso") && !args.contains("feature"));
+    // El consentimiento nombra la PR.
+    let asked = ai.env.prompter.last();
+    assert!(asked.message.contains("pull request"), "{}", asked.message);
+}
+
+#[tokio::test]
+async fn pr_respeta_el_consentimiento_y_la_desactivacion() {
+    let ai = Ai::new(pr_script).await;
+    ai.branch_with_commits();
+    ai.env.core.refresh(&ai.tab).await.unwrap();
+    ai.env.prompter.reject_all();
+    let e = ai.pr(Some("main")).await.unwrap_err();
+    assert_eq!(e.code, "AI_CONSENT_REQUIRED");
+    assert_eq!(ai.stdin(), "", "no se lanzó el CLI");
+
+    patch(
+        &ai,
+        AiSettingsPatch {
+            enabled: Some(false),
+            ..AiSettingsPatch::default()
+        },
+    )
+    .await;
+    assert_eq!(ai.pr(Some("main")).await.unwrap_err().code, "AI_DISABLED");
+}
+
+#[tokio::test]
+async fn pr_errores_de_base_y_ramas_sin_cambios() {
+    let ai = Ai::new(pr_script).await;
+    // En `main` no hay base distinta de la propia rama.
+    assert_eq!(ai.pr(None).await.unwrap_err().code, "AI_BASE_NOT_FOUND");
+    ai.env.git(&ai.repo, &["checkout", "-q", "-b", "vacia"]);
+    ai.env.core.refresh(&ai.tab).await.unwrap();
+    // Una rama sin commits propios no tiene nada que describir.
+    assert_eq!(
+        ai.pr(Some("main")).await.unwrap_err().code,
+        "AI_NO_BRANCH_CHANGES"
+    );
+    // Base inexistente o con forma sospechosa: nunca llega a git.
+    assert_eq!(
+        ai.pr(Some("no-existe")).await.unwrap_err().code,
+        "AI_BASE_NOT_FOUND"
+    );
+    for bad in ["--upload-pack=x", "a..b", "-p", "main;ls", "a b"] {
+        assert_eq!(ai.pr(Some(bad)).await.unwrap_err().code, "PARSE", "{bad}");
+    }
+    assert_eq!(ai.stdin(), "");
+    assert_eq!(ai.env.prompter.count(), 0);
+}
+
+#[tokio::test]
+async fn pr_solo_con_archivos_sensibles_no_envia_nada() {
+    let ai = Ai::new(pr_script).await;
+    let (e, r) = (&ai.env, &ai.repo);
+    e.git(r, &["checkout", "-q", "-b", "solo-env"]);
+    e.write(r, ".env", b"CLAVE=1\n");
+    e.git(r, &["add", "-f", ".env"]);
+    e.git(r, &["commit", "-q", "-m", "config"]);
+    ai.env.core.refresh(&ai.tab).await.unwrap();
+    assert_eq!(
+        ai.pr(Some("main")).await.unwrap_err().code,
+        "AI_SENSITIVE_FILE"
+    );
+    assert_eq!(ai.stdin(), "");
+}

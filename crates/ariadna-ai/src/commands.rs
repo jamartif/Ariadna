@@ -70,6 +70,20 @@ pub const COPILOT_EXCLUDED_TOOLS: &str = "--excluded-tools";
 pub const COPILOT_EXCLUDED_TOOLS_LIST: &str =
     "bash,powershell,create,edit,apply_patch,task,write_bash,write_powershell";
 
+// ---------------------------------------------------------------- Sesión y cuenta (RF-IA4/12)
+
+/// `claude auth status --json` (verificado con claude 2.1.319): JSON con `loggedIn`, `email`,
+/// `orgName`, `subscriptionType`, `authMethod` y `configDirectory`; sale con 1 si no hay sesión.
+pub const CLAUDE_AUTH: &str = "auth";
+pub const CLAUDE_AUTH_STATUS: &str = "status";
+pub const CLAUDE_AUTH_LOGIN: &str = "login";
+pub const CLAUDE_JSON: &str = "--json";
+// SPIKE (no verificado): `codex login` abre el flujo oficial. Existe `codex login status`
+// según la documentación, pero no se ha ejecutado aquí y no se sabe si expone la cuenta.
+pub const CODEX_LOGIN: &str = "login";
+// SPIKE (no verificado): `copilot login`. No se conoce un subcomando de estado.
+pub const COPILOT_LOGIN: &str = "login";
+
 /// Argumento para comprobar disponibilidad y versión (RF-IA4).
 pub const VERSION_FLAG: &str = "--version";
 
@@ -117,6 +131,36 @@ pub fn build_args(provider: ProviderId) -> Vec<OsString> {
         ],
     };
     list.into_iter().map(OsString::from).collect()
+}
+
+/// Argumentos para consultar la cuenta activa, solo si el CLI la expone de forma
+/// **verificada**. `None` = «no disponible» (nunca se leen archivos de credenciales).
+pub fn account_args(provider: ProviderId) -> Option<Vec<OsString>> {
+    match provider {
+        ProviderId::Claude => Some(
+            [CLAUDE_AUTH, CLAUDE_AUTH_STATUS, CLAUDE_JSON]
+                .into_iter()
+                .map(OsString::from)
+                .collect(),
+        ),
+        // SPIKE (no verificado): `codex login status` y similares no se han probado.
+        ProviderId::Codex | ProviderId::Copilot => None,
+    }
+}
+
+/// Argumentos del inicio de sesión oficial de cada CLI (lo ejecuta el usuario en una
+/// terminal; Ariadna no ve credenciales). Constantes: no llevan datos del repo.
+pub fn login_args(provider: ProviderId) -> Vec<&'static str> {
+    match provider {
+        ProviderId::Claude => vec![CLAUDE_AUTH, CLAUDE_AUTH_LOGIN],
+        ProviderId::Codex => vec![CODEX_LOGIN],
+        ProviderId::Copilot => vec![COPILOT_LOGIN],
+    }
+}
+
+/// `true` si el comando de login de este proveedor se ha comprobado contra el CLI real.
+pub fn login_verified(provider: ProviderId) -> bool {
+    provider == ProviderId::Claude
 }
 
 /// `true` si el prompt viaja por stdin (siempre, hoy). Ver [`COPILOT_READS_STDIN`].
@@ -282,6 +326,24 @@ mod tests {
         let s = command_summary(ProviderId::Claude, 1234);
         assert!(s.starts_with("claude -p --output-format json"));
         assert!(s.contains("1234 bytes"));
+    }
+
+    #[test]
+    fn solo_claude_expone_la_cuenta_y_el_login_de_claude_esta_verificado() {
+        let a: Vec<String> = account_args(ProviderId::Claude)
+            .unwrap()
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(a, ["auth", "status", "--json"]);
+        assert!(account_args(ProviderId::Codex).is_none());
+        assert!(account_args(ProviderId::Copilot).is_none());
+        assert_eq!(login_args(ProviderId::Claude), ["auth", "login"]);
+        assert_eq!(login_args(ProviderId::Codex), ["login"]);
+        assert!(login_verified(ProviderId::Claude) && !login_verified(ProviderId::Codex));
+        for p in ProviderId::AUTO_ORDER {
+            assert!(!login_args(p).contains(&FORBIDDEN_BARE));
+        }
     }
 
     #[test]

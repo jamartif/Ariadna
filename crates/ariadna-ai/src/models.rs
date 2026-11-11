@@ -44,7 +44,7 @@ impl ProviderId {
     /// Qué debe hacer el usuario para iniciar sesión (lo hace siempre el CLI).
     pub fn login_command(self) -> &'static str {
         match self {
-            ProviderId::Claude => "claude, y dentro escribe /login",
+            ProviderId::Claude => "claude auth login",
             ProviderId::Codex => "codex login",
             ProviderId::Copilot => "copilot login",
         }
@@ -54,7 +54,7 @@ impl ProviderId {
     /// para mostrarlo tal cual en la interfaz.
     pub fn login_invocation(self) -> &'static str {
         match self {
-            ProviderId::Claude => "claude",
+            ProviderId::Claude => "claude auth login",
             ProviderId::Codex => "codex login",
             ProviderId::Copilot => "copilot login",
         }
@@ -126,6 +126,8 @@ pub enum SuggestionKind {
     SummarizeDiff,
     ExplainCommit,
     ConflictResolution,
+    /// Título (en `subject`) y descripción (en `body`) de una pull request.
+    PullRequest,
 }
 
 /// Estado de una propuesta. Cambiarlo NO escribe en el repo.
@@ -237,6 +239,51 @@ impl Availability {
             Availability::Available { .. } => "",
             Availability::Missing { hint } => hint,
             Availability::Failed { detail } => detail,
+        }
+    }
+}
+
+/// Estado de la sesión de un proveedor según el propio CLI (RF-IA12).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AccountState {
+    /// El CLI confirma que hay sesión.
+    LoggedIn,
+    /// El CLI confirma que no hay sesión.
+    LoggedOut,
+    /// No se sabe: el CLI no está, no expone la cuenta o su salida no es reconocible.
+    Unavailable,
+}
+
+/// Cuenta activa de un proveedor, **solo** lo que el CLI cuenta por su subcomando de estado.
+/// Ariadna no lee `.credentials.json`, llaveros ni variables con tokens.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountInfo {
+    pub provider: ProviderId,
+    pub state: AccountState,
+    pub email: Option<String>,
+    pub organization: Option<String>,
+    pub plan: Option<String>,
+    /// Método de inicio de sesión que declara el CLI (`claude.ai`, `console`…).
+    pub auth_method: Option<String>,
+    /// Directorio de configuración que declara el CLI que está usando (prueba de aislamiento).
+    pub config_dir: Option<String>,
+    /// Por qué no hay datos (`state = Unavailable`) o nota para el usuario.
+    pub reason: Option<String>,
+}
+
+impl AccountInfo {
+    pub fn unavailable(provider: ProviderId, reason: impl Into<String>) -> Self {
+        Self {
+            provider,
+            state: AccountState::Unavailable,
+            email: None,
+            organization: None,
+            plan: None,
+            auth_method: None,
+            config_dir: None,
+            reason: Some(reason.into()),
         }
     }
 }
@@ -453,10 +500,10 @@ mod tests {
 
     #[test]
     fn login_command_por_proveedor() {
-        assert!(ProviderId::Claude.login_command().contains("/login"));
+        assert_eq!(ProviderId::Claude.login_command(), "claude auth login");
         assert_eq!(ProviderId::Codex.login_command(), "codex login");
         assert_eq!(ProviderId::Copilot.login_command(), "copilot login");
-        assert_eq!(ProviderId::Claude.login_invocation(), "claude");
+        assert_eq!(ProviderId::Claude.login_invocation(), "claude auth login");
         assert_eq!(ProviderId::Codex.login_invocation(), "codex login");
         assert_eq!(ProviderId::Copilot.login_invocation(), "copilot login");
         assert!(ProviderId::Codex.is_experimental());

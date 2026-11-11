@@ -63,6 +63,26 @@ fn main() {
         return;
     }
 
+    // `claude auth status --json`: informa de la sesión y del directorio de configuración
+    // que recibió, igual que el CLI real (sale con 1 si no hay sesión).
+    if mode == "claude" && args == ["auth", "status", "--json"] {
+        dump(&args, "");
+        let dir =
+            std::env::var("CLAUDE_CONFIG_DIR").unwrap_or_else(|_| "/home/usuario/.claude".into());
+        let logged = behavior != "login";
+        let body = if logged {
+            serde_json::json!({
+                "loggedIn": true, "authMethod": "claude.ai", "configDirectory": dir,
+                "email": std::env::var("FAKE_EMAIL").unwrap_or_else(|_| "ana@empresa.com".into()),
+                "orgId": "org-interno", "orgName": "Empresa SL", "subscriptionType": "team"
+            })
+        } else {
+            serde_json::json!({"loggedIn": false, "authMethod": "none", "configDirectory": dir})
+        };
+        println!("{body}");
+        std::process::exit(if logged { 0 } else { 1 });
+    }
+
     let mut stdin = String::new();
     let _ = std::io::stdin().read_to_string(&mut stdin);
     dump(&args, &stdin);

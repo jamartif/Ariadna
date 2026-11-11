@@ -22,7 +22,11 @@ import { demoConflictDefs, toConflictFile, toSummary, type MockConflictDef } fro
 import { hasMarkers } from '$lib/util/conflictMarkers';
 import {
   ApiError,
+  type AiAccount,
+  type AiAccounts,
   type AiCommitSuggestion,
+  type AiLoginInfo,
+  type AiPullRequestSuggestion,
   type AiState,
   type AmendDraft,
   type ApiErrorCode,
@@ -52,6 +56,7 @@ import {
   type StatusEntry,
   type TabInfo
 } from './types';
+import { createMockPullRequests } from './mockPr';
 import { pathText } from '../util/gitpath';
 import { matchRule, normalizePattern } from '../util/profileRules';
 import { parseRemote, remoteBranchUrl, repoWebUrl } from '../util/remote';
@@ -430,6 +435,8 @@ export type MockApi = Api & {
   __lastPullRebase: () => boolean | null;
   /** Enlaces que habría abierto `openRemoteUrl`, en orden. */
   __openedUrls: () => string[];
+  /** Solo pruebas: inicios de sesión de IA pedidos, en orden. */
+  __aiLogins: () => AiLoginInfo[];
   /** Simula un elemento del menú nativo (`menu-action`). */
   __menuAction: (id: string) => void;
 };
@@ -453,13 +460,21 @@ export function createMockApi(options: MockOptions = {}): MockApi {
   // ---- IA simulada (ipc.md «Comandos de IA») ----
   let ai: AiState = {
     enabled: scenario !== 'ai-disabled',
-    profile: { name: 'Personal', kind: 'personal' },
+    profile: { name: 'Personal', kind: 'personal', isolated: false },
     choice: 'auto',
     providers: [
-      { id: 'claude', displayName: 'Claude', availability: scenario === 'ai-not-installed' ? 'missing' : 'available', version: scenario === 'ai-not-installed' ? null : '2.1.319', hint: scenario === 'ai-not-logged' ? 'Sin sesión iniciada' : null, enabled: true, consented: false, loginCommand: 'claude' },
-      { id: 'codex', displayName: 'Codex', availability: 'missing', version: null, hint: 'No se encontró el comando «codex»', enabled: true, consented: false, loginCommand: 'codex login' },
-      { id: 'copilot', displayName: 'Copilot', availability: 'failed', version: '1.0.4', hint: 'Sin sesión iniciada', enabled: true, consented: false, loginCommand: 'copilot login' }
+      { id: 'claude', displayName: 'Claude', availability: scenario === 'ai-not-installed' ? 'missing' : 'available', version: scenario === 'ai-not-installed' ? null : '2.1.319', hint: scenario === 'ai-not-logged' ? 'Sin sesión iniciada' : null, enabled: true, consented: false, loginCommand: 'claude auth login', sharesLogin: false, isolated: false, isolationVerified: true },
+      { id: 'codex', displayName: 'Codex', availability: 'missing', version: null, hint: 'No se encontró el comando «codex»', enabled: true, consented: false, loginCommand: 'codex login', sharesLogin: false, isolated: false, isolationVerified: false },
+      { id: 'copilot', displayName: 'Copilot', availability: 'failed', version: '1.0.4', hint: 'Sin sesión iniciada', enabled: true, consented: false, loginCommand: 'copilot login', sharesLogin: true, isolated: false, isolationVerified: false }
     ]
+  };
+  /** Aislamiento de sesión por perfil: Personal conserva el login normal, Empresa usa el suyo. */
+  const isolationPref: Record<'personal' | 'empresa', boolean> = { personal: false, empresa: true };
+  /** Inicios de sesión pedidos (solo pruebas). */
+  const aiLogins: AiLoginInfo[] = [];
+  const withIsolation = (st: AiState): AiState => {
+    const on = isolationPref[st.profile.kind];
+    return { ...st, profile: { ...st.profile, isolated: on }, providers: st.providers.map((p) => ({ ...p, isolated: on && !p.sharesLogin })) };
   };
   // ---- Ajustes simulados (ipc.md «Ajustes») ----
   let settingsData: AppSettings = {
@@ -641,10 +656,23 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     const url = r?.remotes.find((x) => x.name === 'origin')?.fetchUrl ?? r?.remotes[0]?.fetchUrl;
     const m = url ? matchRule(settingsData.profileRules, url) : null;
     if (m) {
-      out.profile = { name: m.profile === 'empresa' ? 'Empresa' : 'Personal', kind: m.profile, rule: m.pattern };
+      out.profile = { name: m.profile === 'empresa' ? 'Empresa' : 'Personal', kind: m.profile, isolated: false, rule: m.pattern };
       out.providers = out.providers.map((p) => (p.id === 'claude' ? { ...p, enabled: m.profile !== 'empresa' } : p));
     }
-    return out;
+    return withIsolation(out);
+  }
+
+  /** Perfil de una petición de cuenta/login: el pedido, si no el de la regla de la pestaña, si no el activo. */
+  function profileOf(tabId: string | undefined, profile: 'personal' | 'empresa' | undefined): { kind: 'personal' | 'empresa'; rule?: string } {
+    if (profile) return { kind: profile };
+    const st = withRule(tabId);
+    return { kind: st.profile.kind, rule: st.profile.rule };
+  }
+
+  function mockConfigDir(kind: 'personal' | 'empresa', provider: string): string | null {
+    const p = ai.providers.find((x) => x.id === provider);
+    if (!p || p.sharesLogin || !isolationPref[kind]) return null;
+    return `/home/javier/.local/share/ariadna/ai-profiles/${kind}/${provider}`;
   }
 
   function badSetting(field: string, why: string): ApiError {
@@ -1380,7 +1408,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       if (patch.enabled !== undefined) ai.enabled = patch.enabled;
       if (patch.choice !== undefined) ai.choice = patch.choice as AiState['choice'];
       if (patch.profile !== undefined) {
-        ai.profile = { name: patch.profile === 'empresa' ? 'Empresa' : 'Personal', kind: patch.profile };
+        ai.profile = { name: patch.profile === 'empresa' ? 'Empresa' : 'Personal', kind: patch.profile, isolated: isolationPref[patch.profile] };
         // Perfil Empresa: Claude desactivado por defecto (spec §5.1.1).
         ai.providers = ai.providers.map((p) => (p.id === 'claude' ? { ...p, enabled: patch.profile !== 'empresa' } : p));
       }
@@ -1388,6 +1416,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         const { id, enabled } = patch.providerEnabled;
         ai.providers = ai.providers.map((p) => (p.id === id ? { ...p, enabled } : p));
       }
+      if (patch.isolated !== undefined) isolationPref[ai.profile.kind] = patch.isolated;
       return withRule(patch.tabId);
     },
     // Ajustes
@@ -1538,6 +1567,101 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       stop();
       return true;
     },
+    async aiAccounts(request): Promise<AiAccounts> {
+      await delay(Math.min(latency, 80));
+      const { kind, rule } = profileOf(request?.tabId, request?.profile);
+      const empresa = kind === 'empresa';
+      const claude = ai.providers.find((p) => p.id === 'claude');
+      const unavailable = (provider: string, reason: string): AiAccount => ({ provider, state: 'unavailable', email: null, organization: null, plan: null, authMethod: null, configDir: null, reason });
+      const accounts: AiAccount[] = [
+        claude?.availability === 'missing'
+          ? unavailable('claude', 'No se encontró el comando «claude» en el equipo.')
+          : scenario === 'ai-not-logged'
+            ? { provider: 'claude', state: 'loggedOut', email: null, organization: null, plan: null, authMethod: null, configDir: mockConfigDir(kind, 'claude') ?? '/home/javier/.claude', reason: null }
+            : {
+                provider: 'claude',
+                state: 'loggedIn',
+                email: empresa ? 'javier@miempresa.com' : 'javier@example.com',
+                organization: empresa ? 'Mi Empresa SL' : null,
+                plan: empresa ? 'team' : 'pro',
+                authMethod: 'claude.ai',
+                configDir: mockConfigDir(kind, 'claude') ?? '/home/javier/.claude',
+                reason: null
+              },
+        unavailable('codex', 'El CLI no expone la cuenta activa de forma verificada.'),
+        unavailable('copilot', 'El CLI no expone la cuenta activa de forma verificada.')
+      ];
+      return { profile: { name: empresa ? 'Empresa' : 'Personal', kind, isolated: isolationPref[kind], ...(rule ? { rule } : {}) }, accounts };
+    },
+    async aiLogin(request): Promise<AiLoginInfo> {
+      await delay(Math.min(latency, 80));
+      const { kind } = profileOf(request.tabId, request.profile);
+      const p = ai.providers.find((x) => x.id === request.provider);
+      if (!p) throw err('PARSE', 'Valor no válido para «id» en los ajustes de IA.', request.provider);
+      const claudeOff = kind === 'empresa' && p.id === 'claude' && !ai.providers.find((x) => x.id === 'claude')?.enabled;
+      if (!p.enabled || claudeOff) throw err('AI_DISABLED', `${p.displayName} está desactivado en este perfil.`);
+      if (p.availability === 'missing') throw err('AI_NOT_INSTALLED', `No se encontró el comando «${p.id}» en el equipo.`, p.loginCommand);
+      const dir = mockConfigDir(kind, p.id);
+      const varName = p.id === 'claude' ? 'CLAUDE_CONFIG_DIR' : p.id === 'codex' ? 'CODEX_HOME' : null;
+      const notes: string[] = [];
+      if (p.sharesLogin) notes.push(`${p.displayName} no permite aislar la sesión por perfil: Personal y Empresa comparten el mismo login.`);
+      else if (!isolationPref[kind]) notes.push(`El perfil ${kind === 'empresa' ? 'Empresa' : 'Personal'} usa la sesión normal de ${p.displayName} (aislamiento desactivado).`);
+      else if (!p.isolationVerified) notes.push(`El aislamiento de ${p.displayName} sigue la documentación del CLI y no se ha verificado.`);
+      const launched = !!request.launch && scenario !== 'ai-no-terminal';
+      if (request.launch && !launched) notes.push('No se pudo abrir la terminal: abrir una terminal no está soportado en este sistema.');
+      const info: AiLoginInfo = {
+        provider: p.id,
+        profile: kind,
+        command: `${dir && varName ? `${varName}='${dir}' ` : ''}${p.loginCommand}`,
+        shell: 'posix',
+        configDir: dir,
+        isolated: !!dir,
+        sharesLogin: p.sharesLogin,
+        launched,
+        verified: p.id === 'claude',
+        note: notes.length ? notes.join(' ') : null
+      };
+      aiLogins.push(info);
+      return info;
+    },
+    async aiGeneratePullRequest(tabId, options): Promise<AiPullRequestSuggestion> {
+      const r = repoOf(tabId);
+      if (!ai.enabled) throw err('AI_DISABLED', 'La IA está desactivada en los ajustes de Ariadna.');
+      const wanted = ai.choice === 'auto' ? (ai.providers.find((p) => p.enabled && p.availability !== 'missing') ?? ai.providers[0]) : ai.providers.find((p) => p.id === ai.choice);
+      const provider = wanted as AiState['providers'][number];
+      if (provider.availability === 'missing') throw err('AI_NOT_INSTALLED', `No se encontró el comando «${provider.id}» en el equipo.`, provider.loginCommand);
+      const base = options?.base?.trim() || 'main';
+      if (base === 'no-existe') throw err('AI_BASE_NOT_FOUND', 'No encuentro la rama base para comparar.', base);
+      if (r.branch === base || r.commits.length === 0) throw err('AI_NO_BRANCH_CHANGES', `La rama ${r.branch ?? 'HEAD'} no tiene cambios respecto a ${base}.`);
+      if (!provider.consented) {
+        const ok = scenario === 'ai-consent-denied' ? false : confirmFn(`¿Permites que Ariadna envíe a ${provider.displayName} los commits y el diff de la rama de ${r.name}?`);
+        if (!ok) throw err('AI_CONSENT_REQUIRED', 'Sin tu permiso Ariadna no envía nada a la IA.');
+        ai.providers = ai.providers.map((p) => (p.id === provider.id ? { ...p, consented: true } : p));
+      }
+      await delay(Math.max(latency * 4, latency === 0 ? 0 : 400));
+      const commits = r.commits.slice(0, 3);
+      return {
+        title: `Mejora ${r.name}: ${commits[0]?.subject ?? 'cambios de la rama'}`.slice(0, 72),
+        body: `## Resumen\n\nReúne los cambios de la rama ${r.branch ?? 'HEAD'} frente a ${base}.\n\n${commits.map((c) => `- ${c.subject}`).join('\n')}`,
+        provider: provider.id,
+        commandSummary: `${provider.id} -p --output-format json (stdin)`,
+        repoRevision: r.revision,
+        base,
+        head: r.branch ?? 'HEAD',
+        commitCount: r.commits.length
+      };
+    },
+    /** Solo pruebas: inicios de sesión pedidos, en orden. */
+    __aiLogins: () => [...aiLogins],
+
+    // Pull requests (M8): datos de ejemplo en memoria, mismos comandos y errores que Rust.
+    ...createMockPullRequests({
+      scenario,
+      remotesOf: (tabId) => repoOf(tabId).remotes.map((r) => ({ name: r.name, fetchUrl: r.fetchUrl })),
+      delay: () => delay(Math.min(latency, 60)),
+      confirm: (m) => confirmFn(m),
+      now
+    }),
 
     async listen<K extends keyof ApiEvents>(event: K, handler: (payload: ApiEvents[K]) => void): Promise<Unlisten> {
       let set = listeners.get(event);

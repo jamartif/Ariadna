@@ -7,6 +7,7 @@ mod destructive;
 mod errors;
 mod fixtures;
 mod merge;
+mod pull_requests;
 mod remotes;
 mod session;
 mod settings;

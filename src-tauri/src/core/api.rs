@@ -300,6 +300,10 @@ pub trait EventSink: Send + Sync {
 pub struct AiProfileInfo {
     pub name: String,
     pub kind: ProfileKind,
+    /// `true` si este perfil usa un directorio de configuración propio por proveedor (sesiones
+    /// separadas del resto de perfiles) para los CLI que lo permiten.
+    #[serde(default)]
+    pub isolated: bool,
     /// Patrón de la regla repo → perfil que ha decidido este perfil (`dev.azure.com`); `None`
     /// si es el perfil elegido en Ajustes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -320,6 +324,15 @@ pub struct AiProviderState {
     pub consented: bool,
     /// Comando que hay que ejecutar para iniciar sesión (`claude`, `codex login`…).
     pub login_command: String,
+    /// `true` si el CLI no permite aislar su login por perfil: Personal y Empresa comparten
+    /// sesión y Ariadna solo controla si se permite el proveedor, no con qué cuenta.
+    pub shares_login: bool,
+    /// `true` si en el perfil de este estado el proveedor usa un directorio de configuración
+    /// propio (la sesión de este perfil no es la de los demás).
+    pub isolated: bool,
+    /// `true` si el mecanismo de aislamiento se ha comprobado con el CLI real (Claude); `false`
+    /// = según la documentación, no verificado (Codex).
+    pub isolation_verified: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -356,6 +369,8 @@ pub struct AiSettingsPatch {
     pub profile: Option<String>,
     pub provider_enabled: Option<ProviderEnabledPatch>,
     pub binary_path: Option<BinaryPathPatch>,
+    /// Aislar (o no) el login del perfil activo por proveedor.
+    pub isolated: Option<bool>,
 }
 
 /// Opciones de `ai_generate_commit_message`.
@@ -413,4 +428,83 @@ pub struct AiCommitSuggestion {
     /// Resumen del comando lanzado; nunca incluye el prompt.
     pub command_summary: String,
     pub repo_revision: u64,
+}
+
+/// Petición de `ai_accounts`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AiAccountsRequest {
+    /// Pestaña cuya regla repo → perfil decide el perfil.
+    pub tab_id: Option<String>,
+    /// Perfil explícito (`personal` | `empresa`); manda sobre la pestaña.
+    pub profile: Option<String>,
+}
+
+/// Cuenta activa de cada proveedor para un perfil (RF-IA12).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAccounts {
+    pub profile: AiProfileInfo,
+    pub accounts: Vec<ariadna_ai::AccountInfo>,
+}
+
+/// Petición de `ai_login`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiLoginRequest {
+    pub tab_id: Option<String>,
+    pub profile: Option<String>,
+    pub provider: String,
+    /// `true` = abrir una terminal; `false` = solo devolver el comando.
+    #[serde(default)]
+    pub launch: bool,
+}
+
+/// Cómo iniciar sesión en un proveedor con el entorno del perfil.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiLoginInfo {
+    pub provider: ProviderId,
+    pub profile: ProfileKind,
+    /// Línea que el usuario puede pegar en su terminal; `None` si no se puede construir de
+    /// forma segura (p. ej. una ruta con `%` en `cmd.exe`).
+    pub command: Option<String>,
+    /// Intérprete del comando: `posix` | `cmd`.
+    pub shell: String,
+    /// Directorio de configuración aislado que usa el login (ausente si comparte sesión).
+    pub config_dir: Option<String>,
+    pub isolated: bool,
+    pub shares_login: bool,
+    /// `true` si se ha abierto una terminal.
+    pub launched: bool,
+    /// `true` si el comando de login se ha comprobado con el CLI real.
+    pub verified: bool,
+    /// Aviso o motivo por el que no se abrió la terminal.
+    pub note: Option<String>,
+}
+
+/// Opciones de `ai_generate_pull_request`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AiPullRequestOptions {
+    /// Rama base. Vacío = `origin/HEAD`, `origin/main`, `origin/master`, `main`, `master`.
+    pub base: Option<String>,
+    /// Plantilla de descripción (texto) si el repo la tiene.
+    pub template: Option<String>,
+    pub language: CommitLanguage,
+}
+
+/// Título y descripción propuestos para una pull request. No se crea nada en el remoto.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiPullRequestSuggestion {
+    pub title: String,
+    pub body: String,
+    pub provider: String,
+    pub command_summary: String,
+    pub repo_revision: u64,
+    pub base: String,
+    pub head: String,
+    /// Commits de la rama desde el ancestro común (aunque solo se envíen los últimos 50).
+    pub commit_count: usize,
 }

@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { toasts } from '$lib/stores/toasts.svelte';
 import { settingsUi } from '$lib/stores/settingsPanel.svelte';
 import { loadedTab, mockApi, resetGlobals } from '../../test/helpers';
 import SettingsDialog from './SettingsDialog.svelte';
@@ -239,5 +240,91 @@ describe('Barra lateral', () => {
     await userEvent.click(screen.getByRole('button', { name: new RegExp(name) }));
     expect(tab.panel).toBe('branches');
     expect(branchesOf(tab).selected).toBe(name);
+  });
+});
+
+describe('Ajustes: IA con perfiles aislados, cuenta e inicio de sesión (alpha.2)', () => {
+  const claudeBox = () => screen.getByText('Claude').closest('.provwrap') as HTMLElement;
+  const open = async (opts = {}) => {
+    const s = await setup(opts, null);
+    await userEvent.click(tab('Inteligencia artificial'));
+    await screen.findByText('Codex');
+    return s;
+  };
+
+  it('Personal usa la sesión normal y muestra la cuenta que informa el CLI', async () => {
+    await open();
+    const claude = claudeBox();
+    expect(within(claude).getByText('Sesión normal del CLI')).toBeInTheDocument();
+    await waitFor(() => expect(within(claude).getByText('Sesión iniciada como javier@example.com')).toBeInTheDocument());
+    // Lo que el CLI no expone es «no disponible», no una cuenta inventada.
+    const codex = screen.getByText('Codex').closest('.provwrap') as HTMLElement;
+    expect(within(codex).getByText('Cuenta no disponible')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Sesión propia para este perfil/ })).not.toBeChecked();
+  });
+
+  it('Empresa aísla la sesión de cada CLI que lo permite y avisa de Copilot, que comparte login', async () => {
+    const { api } = await open();
+    await userEvent.click(screen.getByLabelText('Empresa', { selector: 'input[type=radio]' }));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: /Sesión propia para este perfil/ })).toBeChecked());
+    const codex = screen.getByText('Codex').closest('.provwrap') as HTMLElement;
+    await waitFor(() => expect(within(codex).getByText('Sesión propia')).toBeInTheDocument());
+    // Codex: aislamiento según la documentación, aún no verificado con el CLI real.
+    expect(within(codex).getByText(/no verificado/)).toBeInTheDocument();
+    const copilot = screen.getByText('Copilot').closest('.provwrap') as HTMLElement;
+    expect(within(copilot).getByText('Comparte sesión')).toBeInTheDocument();
+    expect(within(copilot).getByRole('note')).toHaveTextContent('no permite aislar su inicio de sesión: Personal y Empresa usan la misma cuenta');
+    expect((await api.aiUpdateSettings({})).profile.isolated).toBe(true);
+  });
+
+  it('se puede apagar y encender el aislamiento del perfil', async () => {
+    const { api } = await open();
+    await userEvent.click(screen.getByRole('checkbox', { name: /Sesión propia para este perfil/ }));
+    await waitFor(async () => expect((await api.aiUpdateSettings({})).profile.isolated).toBe(true));
+    await waitFor(() => expect(within(claudeBox()).getByText('Sesión propia')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('checkbox', { name: /Sesión propia para este perfil/ }));
+    await waitFor(async () => expect((await api.aiUpdateSettings({})).profile.isolated).toBe(false));
+  });
+
+  it('«Iniciar sesión» muestra el comando del entorno del perfil y «Abrir terminal» lanza el login oficial', async () => {
+    const { api } = await open();
+    await userEvent.click(within(claudeBox()).getByRole('button', { name: 'Iniciar sesión' }));
+    const group = await screen.findByRole('group', { name: 'Inicia sesión en Claude' });
+    await waitFor(() => expect(within(group).getByText('claude auth login')).toBeInTheDocument());
+    expect(group).toHaveTextContent('Ariadna no ve ni guarda tus credenciales');
+    expect(api.__aiLogins().every((l) => !l.launched)).toBe(true);
+
+    await userEvent.click(within(group).getByRole('button', { name: 'Abrir terminal' }));
+    await waitFor(() => expect(api.__aiLogins().at(-1)).toMatchObject({ provider: 'claude', launched: true }));
+    await waitFor(() => expect(toasts.items.at(-1)?.title).toMatch(/Se ha abierto una terminal con el inicio de sesión oficial/));
+  });
+
+  it('si el CLI no está instalado el login explica por qué y no abre terminal', async () => {
+    const { api } = await open();
+    const codex = screen.getByText('Codex').closest('.provwrap') as HTMLElement;
+    await userEvent.click(within(codex).getByRole('button', { name: 'Iniciar sesión' }));
+    const group = await screen.findByRole('group', { name: 'Inicia sesión en Codex' });
+    expect(await within(group).findByRole('alert')).toHaveTextContent('No se encontró el comando «codex»');
+    expect(within(group).getByText('codex login')).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Abrir terminal' })).toBeDisabled();
+    expect(api.__aiLogins()).toHaveLength(0);
+  });
+
+  it('el comando de login de Copilot avisa de que comparte sesión y de que no está verificado', async () => {
+    await open();
+    const copilot = screen.getByText('Copilot').closest('.provwrap') as HTMLElement;
+    await userEvent.click(within(copilot).getByRole('button', { name: 'Iniciar sesión' }));
+    const group = await screen.findByRole('group', { name: 'Inicia sesión en Copilot' });
+    await waitFor(() => expect(group).toHaveTextContent('comparten el mismo login'));
+    expect(group).toHaveTextContent('no está verificado con el CLI real');
+  });
+
+  it('si no se puede abrir la terminal queda el comando para copiarlo', async () => {
+    await open({ scenario: 'ai-no-terminal' });
+    await userEvent.click(within(claudeBox()).getByRole('button', { name: 'Iniciar sesión' }));
+    const group = await screen.findByRole('group', { name: 'Inicia sesión en Claude' });
+    await userEvent.click(await within(group).findByRole('button', { name: 'Abrir terminal' }));
+    await waitFor(() => expect(group).toHaveTextContent('No se pudo abrir la terminal'));
+    expect(within(group).getByText('claude auth login')).toBeInTheDocument();
   });
 });

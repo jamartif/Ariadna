@@ -104,7 +104,7 @@
 
 ## M6 — IA (→ alpha.2)
 
-> Estado: la capa `crates/ariadna-ai` está implementada con un CLI falso. **Codex y Copilot siguen sin verificar** (flags como constantes `SPIKE` en `commands.rs`); los fixtures de salida de los tres son reconstruidos, no capturados. Falta la UI (hoja de propuesta, Ajustes, botón «Iniciar sesión») y el humo manual con CLI reales.
+> Estado: la capa `crates/ariadna-ai` está implementada con un CLI falso y la UI de IA (hoja de propuesta, Ajustes con perfiles aislados, cuenta activa y botón «Iniciar sesión») está hecha sobre el backend simulado y sobre el CLI falso de Rust. **Codex y Copilot siguen sin verificar** (flags y `codex login`/`copilot login` como constantes `SPIKE` en `commands.rs`; `CODEX_HOME` según la documentación; Copilot sin mecanismo de aislamiento); los fixtures de salida de los tres son reconstruidos, no capturados. **Claude sí está verificado** con `claude 2.1.319`: `claude auth status --json` (cuenta) y `CLAUDE_CONFIG_DIR` (aislamiento). Falta el humo manual con CLI reales: [checklist-humo-ia.md](checklist-humo-ia.md).
 - [x] Trait `AiProvider`, `AiSuggestion` con `revision` y estado obsoleto
 - [ ] Consentimiento por proveedor, vista previa, exclusión de sensibles, redactor de secretos, marcado de contenido no fiable (§5.1)
 - [x] `ClaudeCli` (RF-IA1/3/5/6/7)
@@ -114,31 +114,35 @@
 - [x] Detección de disponibilidad, versión y sesión ejecutando el CLI (RF-IA4)
 - [x] Cola de IA: 2 simultáneas, límite por minuto, cancelación al cerrar pestaña (RF-IA8)
 - [x] Modo Auto con reglas de RF-IA9
-- [ ] Perfiles Personal/Empresa: modelo hecho en `ariadna-ai`; falta asociación repo→perfil con reglas por remoto, confirmación al cambiar, perfil visible en pestaña y hoja (D16)
-- [ ] Directorio de configuración aislado por perfil y botón «Iniciar sesión» del CLI; aviso si el proveedor comparte login
+- [ ] Perfiles Personal/Empresa: modelo, reglas repo → perfil por remoto (Ajustes), consentimiento por perfil, aislamiento de sesión y perfil visible en la hoja de propuesta hechos; falta confirmación al cambiar el perfil de un repo y el perfil visible en la pestaña (D16)
+- [x] Directorio de configuración aislado por perfil y proveedor (`ai-profiles/<perfil>/<proveedor>` con `CLAUDE_CONFIG_DIR` / `CODEX_HOME`; Empresa aísla por defecto, Personal usa la sesión normal y puede aislar) y botón «Iniciar sesión» (`ai_login`: abre terminal en Windows/macOS o muestra el comando; nunca ve credenciales). Aviso cuando el proveedor comparte login (Copilot). **Verificado solo con Claude**; Codex según documentación, Copilot sin aislamiento
 - [x] Consentimiento por perfil y proveedor; Claude desactivado por defecto en Empresa
-- [ ] Mostrar cuenta activa por proveedor cuando el CLI la exponga (RF-IA12)
+- [x] Mostrar cuenta activa por proveedor cuando el CLI la exponga (RF-IA12): `ai_accounts` con `claude auth status --json` (verificado); Codex y Copilot «no disponible» sin ejecutar nada ni leer credenciales
 - [x] Acciones: mensaje de commit, resumen, explicar commit, propuesta de conflicto
 - [x] Rechazo de propuestas de conflicto que salen de los hunks
-- [ ] Hoja de propuesta: copiar, usar, regenerar, descartar
+- [x] Hoja de propuesta reutilizable (`ProposalSheet`): copiar, usar, regenerar, descartar; integrada en `CommitBar` («Ver propuesta») sin cambiar el flujo de relleno + «Deshacer»
+- [x] `ai_generate_pull_request` (backend, sin pantalla de PR todavía): título y descripción a partir de rama, commits y diff contra el ancestro común; solo propone; mismos filtros, redacción y consentimiento que el commit
 - [x] CLI falso en CI: entorno, argv, stdin, secreto de prueba · AITests
-- [ ] Humo manual con CLI reales en macOS y Windows, con cuentas de organización (checklist)
+- [ ] Humo manual con CLI reales en macOS y Windows, con cuentas de organización: checklist escrito en [checklist-humo-ia.md](checklist-humo-ia.md); falta ejecutarlo
 - [ ] Publicar `0.1.0-alpha.2`
 
 ## M8 — Pull requests (→ alpha.3)
-- [ ] Spike con PAT real: endpoints y permisos mínimos de Azure DevOps REST y GitHub REST para listar, crear, hilos, voto y completar (PR-02…PR-08); documentar versiones de API
-- [ ] Crate `ariadna-hosting`: `RemoteInfo`, `trait PullRequestProvider`, `AuthMethod`, cliente `reqwest` con `rustls`, límites de seguridad de red (§4.4)
-- [ ] Obtención del secreto con `git credential fill` no interactivo, `zeroize`, sin registro ni eco (D22)
-- [ ] Azure DevOps: listar, detalle (revisores, políticas, work items), crear, abandonar/reabrir
-- [ ] Azure DevOps: diff de la PR, hilos (ver, crear, responder, resolver), voto, completar con estrategia y *auto-complete*
-- [ ] GitHub: listar, detalle, crear, reviews, comentarios en línea, merge/squash/rebase, cerrar/reabrir
-- [ ] Bajar la rama de una PR (incluido `refs/pull/N/head` de forks)
-- [ ] Plantillas de PR del repo (`pull_request_template.md`) y push previo si la rama no está publicada
-- [ ] Errores tipados `AUTH` (con el permiso que falta), `NOT_FOUND`, `POLICY`, `RATE_LIMITED`, `NETWORK`
-- [ ] Comandos IPC de PR (ipc.md) y confirmaciones nativas para completar, abandonar y votar con rechazo
+> Estado del backend (`crates/ariadna-hosting` + `core/pr_ops.rs`): implementado y probado **solo contra un servidor simulado** (`wiremock`, JSON reconstruido de la documentación). **Nada está verificado con un servidor real**: ver `spike-pr.md` (todo marcado «NO VERIFICADO» y checklist para el spike con PAT reales).
+- [ ] Spike con PAT real: endpoints y permisos mínimos de Azure DevOps REST y GitHub REST para listar, crear, hilos, voto y completar (PR-02…PR-08); documentar versiones de API — *documentado desde la documentación pública en `spike-pr.md`; falta el humo con PAT reales (checklist al final del documento)*
+- [x] Crate `ariadna-hosting`: `RemoteInfo`, `trait PullRequestProvider`, `AuthMethod`, cliente `reqwest` con `rustls` (proveedor `ring`), límites de seguridad de red (§4.4)
+- [x] Obtención del secreto con `git credential fill` no interactivo, `zeroize`, sin registro ni eco (D22) — probado con un `git` falso; GCM real sin verificar
+- [x] Azure DevOps: listar, detalle (revisores, políticas, work items), crear, abandonar/reabrir *(simulado)*
+- [x] Azure DevOps: diff de la PR, hilos (ver, crear, responder, resolver), voto, completar con estrategia y *auto-complete* *(simulado)*
+- [x] GitHub: listar, detalle, crear, reviews, comentarios en línea, merge/squash/rebase, cerrar/reabrir *(simulado; incluye GHE por host)*
+- [ ] Bajar la rama de una PR (incluido `refs/pull/N/head` de forks) — `checkoutRef` ya viaja en el detalle; falta el comando
+- [x] Plantillas de PR del repo (`pull_request_template.md`) — `pull_request_template`
+- [ ] Push previo si la rama no está publicada
+- [x] Errores tipados `AUTH` (con el permiso que falta), `NOT_FOUND`, `POLICY`, `CONFLICT`, `RATE_LIMITED`, `NETWORK`
+- [x] Comandos IPC de PR (ipc.md) y confirmaciones nativas para completar, abandonar y votar con rechazo; contrato, tipos TS y backend simulado de la UI
 - [ ] UI: panel de PR (lista con filtros, detalle con Markdown sin `{@html}`, pestaña de archivos con comentarios en línea, votar, completar, crear)
 - [ ] «Generar título y descripción con IA» (propuesta) enlazado a M6
-- [ ] Pruebas contra servidor simulado (`wiremock`) con 401/403/404/409/429 y humo manual con cuentas reales (checklist)
+- [x] Pruebas contra servidor simulado (`wiremock`) con 401/403/404/409/429
+- [ ] Humo manual con cuentas reales (checklist de `spike-pr.md`)
 - [ ] Publicar `0.1.0-alpha.3`
 
 ## M7 — Release

@@ -212,12 +212,15 @@ export const providerState = obj({
   hint: nullable(str),
   enabled: bool,
   consented: bool,
-  loginCommand: str
+  loginCommand: str,
+  sharesLogin: bool,
+  isolated: bool,
+  isolationVerified: bool
 });
 
 export const aiState = obj({
   enabled: bool,
-  profile: obj({ name: str, kind: oneOf('personal', 'empresa') }, { rule: str }),
+  profile: obj({ name: str, kind: oneOf('personal', 'empresa'), isolated: bool }, { rule: str }),
   choice: oneOf('auto', 'claude', 'codex', 'copilot'),
   providers: arr(providerState)
 });
@@ -238,6 +241,46 @@ export const aiCommitSuggestion = obj({
   provider: str,
   commandSummary: str,
   repoRevision: int
+});
+
+export const aiAccount = obj({
+  provider: str,
+  state: oneOf('loggedIn', 'loggedOut', 'unavailable'),
+  email: nullable(str),
+  organization: nullable(str),
+  plan: nullable(str),
+  authMethod: nullable(str),
+  configDir: nullable(str),
+  reason: nullable(str)
+});
+
+export const aiAccounts = obj({
+  profile: obj({ name: str, kind: oneOf('personal', 'empresa'), isolated: bool }, { rule: str }),
+  accounts: arr(aiAccount)
+});
+
+export const aiLoginInfo = obj({
+  provider: str,
+  profile: oneOf('personal', 'empresa'),
+  command: nullable(str),
+  shell: oneOf('posix', 'cmd'),
+  configDir: nullable(str),
+  isolated: bool,
+  sharesLogin: bool,
+  launched: bool,
+  verified: bool,
+  note: nullable(str)
+});
+
+export const aiPullRequestSuggestion = obj({
+  title: str,
+  body: str,
+  provider: str,
+  commandSummary: str,
+  repoRevision: int,
+  base: str,
+  head: str,
+  commitCount: int
 });
 
 // ---- Ajustes (ipc.md «Ajustes») ---------------------------------------------------------
@@ -351,6 +394,9 @@ export function detect(value: unknown): { name: string; validator: V } | null {
   if (has('indexStatus', 'workTreeStatus')) return { name: list ? 'StatusEntry[]' : 'StatusEntry', validator: list ? arr(statusEntry) : statusEntry };
   if (has('fetchUrl', 'pushUrl')) return { name: list ? 'Remote[]' : 'Remote', validator: list ? arr(remote) : remote };
   if (has('isHead', 'oid')) return { name: list ? 'Branch[]' : 'Branch', validator: list ? arr(branch) : branch };
+  if (!list && has('title', 'body', 'provider', 'commitCount')) return { name: 'AiPullRequestSuggestion', validator: aiPullRequestSuggestion };
+  if (!list && has('accounts', 'profile')) return { name: 'AiAccounts', validator: aiAccounts };
+  if (!list && has('launched', 'shell')) return { name: 'AiLoginInfo', validator: aiLoginInfo };
   if (!list && has('subject', 'body', 'provider', 'repoRevision')) return { name: 'AiCommitSuggestion', validator: aiCommitSuggestion };
   if (!list && has('enabled', 'profile', 'providers')) return { name: 'AiState', validator: aiState };
   if (!list && has('maxBytes', 'redactions')) return { name: 'ContextPreview', validator: contextPreview };

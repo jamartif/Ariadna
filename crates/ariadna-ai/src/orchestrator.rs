@@ -22,7 +22,7 @@ use crate::models::{
     AiError, AiSuggestion, Availability, CommitOptions, ProviderChoice, ProviderId,
     SuggestionStatus, SummaryStyle, DEFAULT_MAX_CONTEXT_BYTES,
 };
-use crate::prompt::ConflictInput;
+use crate::prompt::{ConflictInput, PullRequestInput};
 use crate::provider::{AiProvider, CallContext};
 
 /// Tipo de perfil (D16).
@@ -31,6 +31,22 @@ use crate::provider::{AiProvider, CallContext};
 pub enum ProfileKind {
     Personal,
     Empresa,
+}
+
+impl ProfileKind {
+    /// Nombre de carpeta estable para el directorio de configuración aislado.
+    pub fn dir_name(self) -> &'static str {
+        match self {
+            ProfileKind::Personal => "personal",
+            ProfileKind::Empresa => "empresa",
+        }
+    }
+
+    /// Aislamiento por defecto: Personal conserva la sesión normal del CLI (nadie pierde su
+    /// login al actualizar); Empresa usa su propio directorio y no comparte sesión.
+    pub fn isolated_by_default(self) -> bool {
+        matches!(self, ProfileKind::Empresa)
+    }
 }
 
 /// Perfil de IA: separa el código personal del de la empresa.
@@ -45,6 +61,10 @@ pub struct Profile {
     pub max_context_bytes: usize,
     /// Directorio de configuración aislado por proveedor (si el proveedor lo permite).
     pub config_dirs: BTreeMap<ProviderId, PathBuf>,
+    /// `Some(true)`: cada proveedor que lo permita usa su propio directorio de configuración
+    /// para este perfil. `None` = el valor por defecto del tipo de perfil.
+    #[serde(default)]
+    pub isolated: Option<bool>,
 }
 
 impl Profile {
@@ -64,7 +84,14 @@ impl Profile {
             consent: BTreeSet::new(),
             max_context_bytes: DEFAULT_MAX_CONTEXT_BYTES,
             config_dirs: BTreeMap::new(),
+            isolated: None,
         }
+    }
+
+    /// ¿Este perfil usa directorios de configuración propios?
+    pub fn is_isolated(&self) -> bool {
+        self.isolated
+            .unwrap_or_else(|| self.kind.isolated_by_default())
     }
 
     pub fn is_enabled(&self, p: ProviderId) -> bool {
@@ -222,6 +249,7 @@ enum Action<'a> {
         subject: &'a str,
     },
     Conflict(&'a ConflictInput),
+    PullRequest(&'a PullRequestInput),
 }
 
 async fn dispatch(
@@ -240,6 +268,7 @@ async fn dispatch(
             subject,
         } => p.explain_commit(ctx, sha, patch, subject).await,
         Action::Conflict(c) => p.propose_conflict_resolution(ctx, c).await,
+        Action::PullRequest(i) => p.suggest_pull_request(ctx, i).await,
     }
 }
 
@@ -310,6 +339,18 @@ impl Orchestrator {
         opts: &CommitOptions,
     ) -> Result<AiSuggestion, AiError> {
         self.perform(profile, choice, ctx, &Action::CommitMessage { diff, opts })
+            .await
+    }
+
+    /// Título y descripción de una pull request. Solo propone: no crea nada en el remoto.
+    pub async fn suggest_pull_request(
+        &self,
+        profile: &Profile,
+        choice: ProviderChoice,
+        ctx: &CallContext,
+        input: &PullRequestInput,
+    ) -> Result<AiSuggestion, AiError> {
+        self.perform(profile, choice, ctx, &Action::PullRequest(input))
             .await
     }
 

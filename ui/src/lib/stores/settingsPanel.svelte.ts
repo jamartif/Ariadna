@@ -3,6 +3,9 @@ import {
   DIFF_FONT_MAX,
   DIFF_FONT_MIN,
   toApiError,
+  type AiAccount,
+  type AiAccounts,
+  type AiLoginInfo,
   type AiProfileKind,
   type AiSettingsPatch,
   type AiState,
@@ -71,6 +74,11 @@ export class SettingsPanel {
   cli = $state.raw<CliStatus[] | null>(null);
   cliLoading = $state(false);
   aiBusy = $state(false);
+  /** Cuenta activa de cada proveedor en el perfil elegido (la informa el propio CLI; RF-IA12). */
+  accounts = $state.raw<AiAccounts | null>(null);
+  accountsLoading = $state(false);
+  /** Último inicio de sesión preparado por proveedor: el comando con el entorno del perfil, o el error. */
+  logins = $state.raw<Record<string, { info: AiLoginInfo | null; error: ApiError | null }>>({});
 
   private original: { theme: ThemePref; diffFontSize: number } | null = null;
   private disposed = false;
@@ -98,6 +106,7 @@ export class SettingsPanel {
     void this.loadIdentity();
     void this.loadAi();
     void this.loadCli();
+    void this.loadAccounts();
   }
 
   private async loadIdentity(): Promise<void> {
@@ -139,6 +148,47 @@ export class SettingsPanel {
       /* se queda sin estado: la sección lo muestra */
     } finally {
       this.cliLoading = false;
+    }
+  }
+
+  /** Cuentas del perfil elegido en Ajustes (no ejecuta nada si la IA está apagada). */
+  async loadAccounts(): Promise<void> {
+    this.accountsLoading = true;
+    try {
+      const kind = this.ai?.profile.kind;
+      const a = await this.api.aiAccounts(kind ? { profile: kind } : this.tabId ? { tabId: this.tabId } : undefined);
+      if (!this.disposed) this.accounts = a;
+    } catch {
+      if (!this.disposed) this.accounts = null;
+    } finally {
+      this.accountsLoading = false;
+    }
+  }
+
+  accountOf(provider: string): AiAccount | null {
+    return this.accounts?.accounts.find((a) => a.provider === provider) ?? null;
+  }
+
+  /** Prepara el inicio de sesión (sin abrir nada) para mostrar el comando con el entorno del perfil. */
+  async prepareLogin(provider: string): Promise<void> {
+    await this.runLogin(provider, false);
+  }
+
+  /** «Abrir terminal»: lanza el login oficial del CLI en el entorno aislado del perfil. */
+  async openLogin(provider: string): Promise<AiLoginInfo | null> {
+    return this.runLogin(provider, true);
+  }
+
+  private async runLogin(provider: string, launch: boolean): Promise<AiLoginInfo | null> {
+    const profile = this.ai?.profile.kind;
+    try {
+      const info = await this.api.aiLogin({ provider, launch, ...(profile ? { profile } : {}) });
+      if (this.disposed) return info;
+      this.logins = { ...this.logins, [provider]: { info, error: null } };
+      return info;
+    } catch (e) {
+      if (!this.disposed) this.logins = { ...this.logins, [provider]: { info: null, error: toApiError(e) } };
+      return null;
     }
   }
 
@@ -278,6 +328,11 @@ export class SettingsPanel {
     try {
       this.ai = await this.api.aiUpdateSettings({ ...patch });
       void this.loadEffective();
+      // Otro perfil o otro aislamiento = otra sesión: las cuentas y los comandos de login cambian.
+      if (patch.profile !== undefined || patch.isolated !== undefined) {
+        this.logins = {};
+        void this.loadAccounts();
+      }
       return true;
     } catch (e) {
       toasts.error(t('ai.settingsFailed'), e);

@@ -1,0 +1,29 @@
+{
+  "capabilities": {
+    "autoComplete": true,
+    "draft": true,
+    "provider": "azureDevOps",
+    "resolveThreads": true,
+    "strategies": [
+      "merge",
+      "squash",
+      "rebase",
+      "rebaseMerge"
+    ],
+    "votes": [
+      "approve",
+      "approveWithSuggestions",
+      "noVote",
+      "waitForAuthor",
+      "reject"
+    ],
+    "workItems": true
+  },
+  "host": "dev.azure.com",
+  "provider": "azureDevOps",
+  "providerLabel": "Azure DevOps",
+  "reason": null,
+  "remote": "origin",
+  "repoLabel": "dev.azure.com/org/proj/app",
+  "supported": true
+}

@@ -106,6 +106,8 @@ pub(crate) struct Inner {
     pub tabs: Mutex<TabsState>,
     pub open_lock: tokio::sync::Mutex<()>,
     pub(crate) ai: AiService,
+    /// Pull requests (M8): solo la fábrica de proveedores; no hay caché de datos ni de tokens.
+    pub(crate) pr: super::pr_ops::PrService,
     next_tab: AtomicU64,
     /// ¿Ventana con el foco? El sondeo de respaldo solo corre enfocado.
     focused: Arc<AtomicBool>,
@@ -281,6 +283,7 @@ impl AppCore {
                 tabs: Mutex::new(TabsState::default()),
                 open_lock: tokio::sync::Mutex::new(()),
                 ai: AiService::new(&config.data_dir),
+                pr: super::pr_ops::PrService::new(),
                 next_tab: AtomicU64::new(1),
                 focused: Arc::new(AtomicBool::new(true)),
                 watch_notice_sent: Arc::new(AtomicBool::new(false)),

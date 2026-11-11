@@ -1,6 +1,12 @@
 import type {
+  AiAccounts,
+  AiAccountsRequest,
   AiCommitSuggestion,
   AiGenerateOptions,
+  AiLoginInfo,
+  AiLoginRequest,
+  AiPullRequestOptions,
+  AiPullRequestSuggestion,
   AiSettingsPatch,
   AiState,
   AmendDraft,
@@ -36,6 +42,8 @@ import type {
   Snapshot
 } from './types';
 
+import type { PullRequestApi } from './prApi';
+
 export type Unlisten = () => void;
 
 /**
@@ -43,7 +51,7 @@ export type Unlisten = () => void;
  * y `mockApi` (en memoria). Un método por comando de `specs/rust/ipc.md`.
  * Todos rechazan con `ApiError`.
  */
-export interface Api {
+export interface Api extends PullRequestApi {
   // Aplicación
   appState(): Promise<AppState>;
   pickFolder(): Promise<string | null>;
@@ -137,6 +145,12 @@ export interface Api {
   aiPreviewContext(tabId: string): Promise<ContextPreview>;
   aiGenerateCommitMessage(tabId: string, options: AiGenerateOptions): Promise<AiCommitSuggestion>;
   aiCancel(tabId: string): Promise<boolean>;
+  /** Cuenta activa de cada proveedor según su CLI, con el entorno del perfil (RF-IA12). */
+  aiAccounts(request?: AiAccountsRequest): Promise<AiAccounts>;
+  /** Inicio de sesión oficial del CLI en el entorno aislado del perfil (abre terminal o devuelve el comando). */
+  aiLogin(request: AiLoginRequest): Promise<AiLoginInfo>;
+  /** Título y descripción de PR a partir de la rama, sus commits y el diff contra la base. Solo propone. */
+  aiGeneratePullRequest(tabId: string, options?: AiPullRequestOptions): Promise<AiPullRequestSuggestion>;
 
   // Eventos Rust → UI
   listen<K extends keyof ApiEvents>(event: K, handler: (payload: ApiEvents[K]) => void): Promise<Unlisten>;

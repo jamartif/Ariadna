@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 use regex::Regex;
 use serde_json::Value;
 
-use crate::models::{AiError, ProviderId};
+use crate::models::{AccountInfo, AccountState, AiError, ProviderId};
 
 /// Mensaje fijo de [`AiError::BadOutput`] cuando el formato no es el esperado.
 pub const UNRECOGNIZED: &str = "formato no reconocido";
@@ -425,6 +425,47 @@ pub fn parse_conflict_proposal(raw: &str) -> (String, Option<String>) {
     }
 }
 
+/// Campo de texto del estado de cuenta: sin caracteres de control y acotado.
+fn account_field(v: &Value, key: &str) -> Option<String> {
+    let s: String = v
+        .get(key)?
+        .as_str()?
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(200)
+        .collect();
+    let s = s.trim().to_string();
+    (!s.is_empty()).then_some(s)
+}
+
+/// Interpreta `claude auth status --json`. El CLI sale con 1 si no hay sesión, pero imprime
+/// igualmente el JSON: se lee `stdout` sea cual sea el código. Formato desconocido →
+/// `Unavailable` (nunca texto crudo).
+pub fn parse_claude_auth_status(stdout: &str) -> AccountInfo {
+    let provider = ProviderId::Claude;
+    let Ok(v) = serde_json::from_str::<Value>(stdout.trim()) else {
+        return AccountInfo::unavailable(provider, UNRECOGNIZED);
+    };
+    let Some(logged_in) = v.get("loggedIn").and_then(Value::as_bool) else {
+        return AccountInfo::unavailable(provider, UNRECOGNIZED);
+    };
+    let method = account_field(&v, "authMethod").filter(|m| m != "none");
+    AccountInfo {
+        provider,
+        state: if logged_in {
+            AccountState::LoggedIn
+        } else {
+            AccountState::LoggedOut
+        },
+        email: account_field(&v, "email"),
+        organization: account_field(&v, "orgName"),
+        plan: account_field(&v, "subscriptionType").or_else(|| account_field(&v, "planTier")),
+        auth_method: method,
+        config_dir: account_field(&v, "configDirectory"),
+        reason: None,
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -465,7 +506,7 @@ mod tests {
                 login_command,
             }) => {
                 assert_eq!(provider, ProviderId::Claude);
-                assert!(login_command.contains("/login"));
+                assert!(login_command.contains("claude auth login"));
             }
             other => panic!("{other:?}"),
         }
@@ -736,5 +777,44 @@ mod tests {
         assert_eq!(r.as_deref(), Some("Porque sí."));
         let (c, r) = parse_conflict_proposal("solo texto");
         assert_eq!((c.as_str(), r), ("solo texto\n", None));
+    }
+
+    #[test]
+    fn auth_status_de_claude_con_sesion() {
+        let raw = r#"{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","configDirectory":"/c/.claude","email":"yo@empresa.com","orgId":"abc","orgName":"Empresa SL","subscriptionType":"team","token":"sk-secreto"}"#;
+        let a = parse_claude_auth_status(raw);
+        assert_eq!(a.state, AccountState::LoggedIn);
+        assert_eq!(a.email.as_deref(), Some("yo@empresa.com"));
+        assert_eq!(a.organization.as_deref(), Some("Empresa SL"));
+        assert_eq!(a.plan.as_deref(), Some("team"));
+        assert_eq!(a.auth_method.as_deref(), Some("claude.ai"));
+        assert_eq!(a.config_dir.as_deref(), Some("/c/.claude"));
+        // Nada de lo demás (ni ids ni tokens) se propaga.
+        assert!(!format!("{a:?}").contains("sk-secreto"));
+        assert!(!format!("{a:?}").contains("abc"));
+    }
+
+    #[test]
+    fn auth_status_de_claude_sin_sesion_y_formatos_raros() {
+        let out = parse_claude_auth_status(
+            r#"{"loggedIn":false,"authMethod":"none","configDirectory":"/tmp/x"}"#,
+        );
+        assert_eq!(out.state, AccountState::LoggedOut);
+        assert_eq!(out.auth_method, None);
+        assert_eq!(out.config_dir.as_deref(), Some("/tmp/x"));
+        for raw in ["", "hola", "[]", r#"{"loggedIn":"si"}"#, "{}"] {
+            let a = parse_claude_auth_status(raw);
+            assert_eq!(a.state, AccountState::Unavailable, "{raw}");
+            assert_eq!(a.reason.as_deref(), Some(UNRECOGNIZED));
+        }
+    }
+
+    #[test]
+    fn auth_status_limpia_controles_y_acota() {
+        let long = "a".repeat(500);
+        let raw = format!(r#"{{"loggedIn":true,"email":"x\u001b[31m@y.com","orgName":"{long}"}}"#);
+        let a = parse_claude_auth_status(&raw);
+        assert!(!a.email.unwrap().contains('\u{1b}'));
+        assert_eq!(a.organization.unwrap().chars().count(), 200);
     }
 }

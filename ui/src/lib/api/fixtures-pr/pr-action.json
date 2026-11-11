@@ -1,0 +1,75 @@
+{
+  "detail": {
+    "author": {
+      "displayName": "ANA",
+      "id": "id-ana",
+      "login": "ana"
+    },
+    "autoComplete": false,
+    "checkoutRef": "refs/pull/1/head",
+    "checks": {
+      "failing": 0,
+      "passing": 1,
+      "pending": 1
+    },
+    "commits": [
+      {
+        "author": "Ana",
+        "date": null,
+        "sha": "abc",
+        "subject": "feat"
+      }
+    ],
+    "createdAt": "2026-11-01T10:00:00Z",
+    "description": "Descripción **md** <script>alert(1)</script>",
+    "files": [
+      {
+        "additions": 1,
+        "binary": false,
+        "deletions": 1,
+        "oldPath": null,
+        "path": "src/a.rs",
+        "status": "modified"
+      }
+    ],
+    "id": 5,
+    "isDraft": false,
+    "isFork": false,
+    "mergeDetail": "clean",
+    "mergeStatus": "clean",
+    "policies": [
+      {
+        "blocking": true,
+        "name": "Build",
+        "status": "pending",
+        "url": null
+      }
+    ],
+    "reviewers": [
+      {
+        "required": true,
+        "user": {
+          "displayName": "BETO",
+          "id": "id-beto",
+          "login": "beto"
+        },
+        "vote": "approve"
+      }
+    ],
+    "sourceBranch": "feature/x",
+    "sourceCommit": "abc",
+    "state": "active",
+    "targetBranch": "main",
+    "targetCommit": null,
+    "title": "Título 5",
+    "updatedAt": "2026-11-02T10:00:00Z",
+    "webUrl": "https://example.test/pr/5",
+    "workItems": [
+      {
+        "id": 7,
+        "url": "https://example.test/wi/7"
+      }
+    ]
+  },
+  "done": true
+}

@@ -7,6 +7,7 @@
 //! Módulos:
 //! - [`models`]: tipos de dominio, errores y ajustes.
 //! - [`env`]: listas blancas de entorno por proveedor (RF-IA3).
+//! - [`login`]: inicio de sesión oficial en el entorno aislado del perfil.
 //! - [`commands`]: argumentos de cada CLI, aislados en un único módulo (RF-IA1).
 //! - [`resolve`]: localización del binario y shims de Windows (RF-IA2).
 //! - [`parse`]: parsers de salida y detección de login/cuota (RF-IA7).
@@ -16,6 +17,7 @@
 
 pub mod commands;
 pub mod env;
+pub mod login;
 pub mod models;
 pub mod orchestrator;
 pub mod parse;
@@ -24,9 +26,9 @@ pub mod provider;
 pub mod resolve;
 
 pub use models::{
-    AiContextPolicy, AiError, AiSettings, AiSuggestion, Availability, CommitLanguage,
-    CommitOptions, CommitStyle, ProviderChoice, ProviderId, SuggestionKind, SuggestionStatus,
-    SummaryStyle,
+    AccountInfo, AccountState, AiContextPolicy, AiError, AiSettings, AiSuggestion, Availability,
+    CommitLanguage, CommitOptions, CommitStyle, ProviderChoice, ProviderId, SuggestionKind,
+    SuggestionStatus, SummaryStyle,
 };
 pub use orchestrator::{Limiter, Orchestrator, Profile, ProfileKind};
 pub use provider::{AiProvider, CallContext, CliProvider, CliProviderConfig};

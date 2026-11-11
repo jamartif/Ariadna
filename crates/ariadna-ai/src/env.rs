@@ -61,6 +61,31 @@ pub fn config_dir_var(provider: ProviderId) -> Option<&'static str> {
     }
 }
 
+/// Candidata para Copilot que **no** se usa: `COPILOT_HOME` (y `--config-dir`) aparecen en
+/// referencias del CLI, pero no se han podido comprobar (no hay `copilot` instalado). Mientras
+/// no se verifique, Copilot comparte login entre perfiles y la interfaz lo avisa.
+pub const COPILOT_HOME_CANDIDATE_UNVERIFIED: &str = "COPILOT_HOME";
+
+/// Cómo se aísla el login de un proveedor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Isolation {
+    /// Variable que fija el directorio de configuración; `None` = no se puede aislar.
+    pub var: Option<&'static str>,
+    /// `true` si se ha comprobado ejecutando el CLI real en esta máquina.
+    pub verified: bool,
+}
+
+/// Aislamiento disponible. Claude: **verificado** (`CLAUDE_CONFIG_DIR` cambia `configDirectory`
+/// y deja `loggedIn: false` en un directorio vacío, claude 2.1.319). Codex: `CODEX_HOME` según
+/// la documentación de OpenAI, **no verificado** (CLI no instalado). Copilot: sin mecanismo
+/// confirmado.
+pub fn isolation(provider: ProviderId) -> Isolation {
+    Isolation {
+        var: config_dir_var(provider),
+        verified: provider == ProviderId::Claude,
+    }
+}
+
 /// `true` si el proveedor no permite aislar el login por perfil.
 pub fn shares_login_between_profiles(provider: ProviderId) -> bool {
     config_dir_var(provider).is_none()
@@ -226,6 +251,30 @@ mod tests {
         assert!(p.extra.is_empty());
         assert!(shares_login_between_profiles(ProviderId::Copilot));
         assert!(!shares_login_between_profiles(ProviderId::Claude));
+    }
+
+    #[test]
+    fn aislamiento_verificado_solo_en_claude() {
+        assert_eq!(
+            isolation(ProviderId::Claude),
+            Isolation {
+                var: Some("CLAUDE_CONFIG_DIR"),
+                verified: true
+            }
+        );
+        assert_eq!(isolation(ProviderId::Codex).var, Some("CODEX_HOME"));
+        assert!(!isolation(ProviderId::Codex).verified);
+        assert_eq!(isolation(ProviderId::Copilot).var, None);
+        // La candidata de Copilot no se aplica nunca mientras no se verifique.
+        let opts = EnvOptions {
+            config_dir: Some(PathBuf::from("/x")),
+            ..EnvOptions::default()
+        };
+        let pe = provider_env(ProviderId::Copilot, &opts);
+        assert!(pe
+            .extra
+            .iter()
+            .all(|(k, _)| k != COPILOT_HOME_CANDIDATE_UNVERIFIED));
     }
 
     #[test]

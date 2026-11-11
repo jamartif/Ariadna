@@ -1,0 +1,72 @@
+{
+  "hasMore": true,
+  "items": [
+    {
+      "author": {
+        "displayName": "ANA",
+        "id": "id-ana",
+        "login": "ana"
+      },
+      "checks": {
+        "failing": 0,
+        "passing": 1,
+        "pending": 1
+      },
+      "createdAt": "2026-11-01T10:00:00Z",
+      "id": 1,
+      "isDraft": false,
+      "mergeStatus": "clean",
+      "reviewers": [
+        {
+          "required": true,
+          "user": {
+            "displayName": "BETO",
+            "id": "id-beto",
+            "login": "beto"
+          },
+          "vote": "approve"
+        }
+      ],
+      "sourceBranch": "feature/x",
+      "state": "active",
+      "targetBranch": "main",
+      "title": "Título 1",
+      "updatedAt": "2026-11-02T10:00:00Z",
+      "webUrl": "https://example.test/pr/1"
+    },
+    {
+      "author": {
+        "displayName": "ANA",
+        "id": "id-ana",
+        "login": "ana"
+      },
+      "checks": {
+        "failing": 0,
+        "passing": 1,
+        "pending": 1
+      },
+      "createdAt": "2026-11-01T10:00:00Z",
+      "id": 2,
+      "isDraft": false,
+      "mergeStatus": "clean",
+      "reviewers": [
+        {
+          "required": true,
+          "user": {
+            "displayName": "BETO",
+            "id": "id-beto",
+            "login": "beto"
+          },
+          "vote": "approve"
+        }
+      ],
+      "sourceBranch": "feature/x",
+      "state": "active",
+      "targetBranch": "main",
+      "title": "Título 2",
+      "updatedAt": "2026-11-02T10:00:00Z",
+      "webUrl": "https://example.test/pr/2"
+    }
+  ],
+  "page": 1
+}

@@ -6,6 +6,7 @@
   import { toasts } from '$lib/stores/toasts.svelte';
   import AiConsentDialog from './AiConsentDialog.svelte';
   import Icon from './Icon.svelte';
+  import ProposalSheet from './ProposalSheet.svelte';
 
   let { tab }: { tab: TabState } = $props();
 
@@ -207,6 +208,7 @@
     <div class="strip ok" role="status">
       <Icon name="sparkles" size={14} />
       <span class="msg">{t('ai.proposedBy', { provider: ai.providerName(notice.provider) })}</span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick={() => ai.openSheet()}>{t('ai.viewProposal')}</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick={() => ai.undo()}>{t('ai.undo')}</button>
       <button type="button" class="btn btn-ghost btn-icon btn-sm" aria-label={t('ai.dismiss')} onclick={() => ai.dismissNotice()}>
         <Icon name="x" size={12} />
@@ -304,6 +306,26 @@
 
 {#if aiDialog}
   <AiConsentDialog {ai} onclose={() => (aiDialog = false)} />
+{/if}
+
+{#if ai.sheet && notice}
+  <ProposalSheet
+    kind="commit"
+    title={notice.subject}
+    body={notice.body}
+    providerName={ai.providerName(notice.provider)}
+    profileName={ai.state?.profile.name ?? null}
+    account={ai.accountLabel(notice.provider)}
+    commandSummary={notice.commandSummary}
+    stale={ai.stale}
+    inUse={ai.inUse}
+    regenerating={ai.regenerating}
+    error={ai.sheetError}
+    onuse={(v) => ai.useProposal(v)}
+    onregenerate={() => void ai.regenerate()}
+    ondiscard={() => ai.discard()}
+    onclose={() => ai.closeSheet()}
+  />
 {/if}
 
 <style>

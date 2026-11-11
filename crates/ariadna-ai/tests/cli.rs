@@ -285,7 +285,7 @@ async fn el_error_de_login_es_accionable() {
             }) => {
                 assert_eq!(provider, id);
                 assert!(login_command.contains(match id {
-                    ProviderId::Claude => "/login",
+                    ProviderId::Claude => "claude auth login",
                     ProviderId::Codex => "codex login",
                     ProviderId::Copilot => "copilot login",
                 }));
@@ -585,4 +585,135 @@ async fn las_opciones_de_commit_llegan_al_hijo_por_stdin() {
     assert!(stdin.contains("RECENT COMMIT SUBJECTS:\n- fix: arregla la puerta-unica"));
     assert!(stdin.contains("Conventional Commits"));
     assert!(stdin.contains("rama-secreta.rs"));
+}
+
+// ---------------------------------------------------------------- cuenta y aislamiento (M6, alpha.2)
+
+#[tokio::test]
+async fn la_cuenta_de_claude_sale_del_cli_y_lleva_el_directorio_aislado() {
+    let (p, fx) = provider(ProviderId::Claude, "ok");
+    let a = p
+        .account(Some(std::path::Path::new("/perfiles/empresa/claude")))
+        .await;
+    assert_eq!(a.state, ariadna_ai::AccountState::LoggedIn);
+    assert_eq!(a.email.as_deref(), Some("ana@empresa.com"));
+    assert_eq!(a.organization.as_deref(), Some("Empresa SL"));
+    assert_eq!(a.plan.as_deref(), Some("team"));
+    // El CLI declara qué directorio usa: prueba de que el aislamiento llegó al hijo.
+    assert_eq!(a.config_dir.as_deref(), Some("/perfiles/empresa/claude"));
+    let d = dumps(&fx);
+    let call = d.last().unwrap();
+    assert_eq!(
+        call["argv"],
+        serde_json::json!(["auth", "status", "--json"])
+    );
+    assert_eq!(call["env"]["CLAUDE_CONFIG_DIR"], "/perfiles/empresa/claude");
+    // Mismo entorno por lista blanca que el resto: ni claves ni el secreto del padre.
+    assert!(!serde_json::to_string(&call["env"])
+        .unwrap()
+        .contains(SECRET));
+}
+
+#[tokio::test]
+async fn dos_perfiles_ven_cada_uno_su_directorio_y_su_sesion() {
+    let (p, _fx) = provider(ProviderId::Claude, "ok");
+    let personal = p
+        .account(Some(std::path::Path::new("/p/personal/claude")))
+        .await;
+    let empresa = p
+        .account(Some(std::path::Path::new("/p/empresa/claude")))
+        .await;
+    assert_ne!(personal.config_dir, empresa.config_dir);
+
+    let (out, _fx) = provider(ProviderId::Claude, "login");
+    let a = out.account(None).await;
+    assert_eq!(a.state, ariadna_ai::AccountState::LoggedOut);
+    assert_eq!(a.email, None);
+}
+
+#[tokio::test]
+async fn codex_y_copilot_no_exponen_cuenta_y_no_se_lanza_nada() {
+    for id in [ProviderId::Codex, ProviderId::Copilot] {
+        let (p, fx) = provider(id, "ok");
+        let a = p.account(None).await;
+        assert_eq!(a.state, ariadna_ai::AccountState::Unavailable, "{id:?}");
+        assert!(a.reason.is_some() && a.email.is_none());
+        assert!(dumps(&fx).is_empty(), "{id:?}: no debe lanzar el CLI");
+    }
+}
+
+#[tokio::test]
+async fn cuenta_con_cli_ausente_es_no_disponible() {
+    let (mut cfg, _fx) = config(ProviderId::Claude, "ok", None);
+    cfg.configured_binary = Some(PathBuf::from("/no/existe/claude"));
+    let a = CliProvider::new(cfg).account(None).await;
+    assert_eq!(a.state, ariadna_ai::AccountState::Unavailable);
+}
+
+// ---------------------------------------------------------------- pull request
+
+fn pr_input() -> ariadna_ai::prompt::PullRequestInput {
+    ariadna_ai::prompt::PullRequestInput {
+        base: "main".into(),
+        head: "feature/login".into(),
+        commits: vec![
+            "Añade el formulario\n\nCon validación.".into(),
+            format!("Corrige la clave AKIA{}", "ABCDEFGHIJKLMNOP"),
+        ],
+        diff: "diff --git a/a.rs b/a.rs\n+let x = 1;\n".into(),
+        template: None,
+        language: ariadna_ai::CommitLanguage::Auto,
+    }
+}
+
+#[tokio::test]
+async fn pull_request_propone_titulo_y_descripcion_por_stdin_y_redactada() {
+    let reply =
+        "Añade el formulario de acceso\n\n## Resumen\n\nNuevo formulario.\n\n- Valida campos";
+    let (cfg, fx) = config(ProviderId::Codex, "ok", Some(reply));
+    let p = CliProvider::new(cfg);
+    let s = p.suggest_pull_request(&ctx(), &pr_input()).await.unwrap();
+    assert_eq!(s.kind, ariadna_ai::SuggestionKind::PullRequest);
+    assert_eq!(s.subject.as_deref(), Some("Añade el formulario de acceso"));
+    assert!(s.body.contains("## Resumen") && s.body.contains("- Valida campos"));
+    assert_eq!(s.status, SuggestionStatus::Pending);
+
+    let d = dumps(&fx);
+    let call = d.last().unwrap();
+    let stdin = call["stdin"].as_str().unwrap();
+    assert!(stdin.contains("feature/login") && stdin.contains("Añade el formulario"));
+    assert!(stdin.contains("let x = 1;"));
+    // Redacción de secretos también en los mensajes de commit.
+    assert!(!stdin.contains(&format!("AKIA{}", "ABCDEFGHIJKLMNOP")));
+    assert!(stdin.contains("[REDACTED]"));
+    // El prompt viaja por stdin: nunca por argv.
+    let argv = serde_json::to_string(&call["argv"]).unwrap();
+    assert!(!argv.contains("feature/login") && !argv.contains("let x"));
+}
+
+#[tokio::test]
+async fn pull_request_pasa_por_el_perfil_y_su_consentimiento() {
+    let (o, fxs) = orchestrator(true);
+    // Empresa: Claude desactivado; sin consentimiento no se lanza nada.
+    let mut empresa = Profile::new("Empresa", ProfileKind::Empresa);
+    let r = o
+        .suggest_pull_request(&empresa, ProviderChoice::Auto, &ctx(), &pr_input())
+        .await;
+    assert!(matches!(r, Err(AiError::ConsentRequired { .. })), "{r:?}");
+    assert!(fxs.iter().all(|f| dumps(f).is_empty()));
+    let r = o
+        .suggest_pull_request(&empresa, ProviderChoice::Claude, &ctx(), &pr_input())
+        .await;
+    assert!(matches!(r, Err(AiError::ProviderDisabled { .. })), "{r:?}");
+
+    empresa.grant_consent(ProviderId::Codex);
+    let s = o
+        .suggest_pull_request(&empresa, ProviderChoice::Auto, &ctx(), &pr_input())
+        .await
+        .unwrap();
+    assert_eq!(s.provider, ProviderId::Codex);
+    assert!(
+        dumps(&fxs[0]).is_empty(),
+        "Claude no se debe llamar en Empresa"
+    );
 }

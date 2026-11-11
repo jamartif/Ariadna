@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Api } from './api';
+import { createTauriPullRequests } from './tauriPr';
 import { toApiError } from './types';
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -85,6 +86,11 @@ export function createTauriApi(): Api {
     aiPreviewContext: (tabId) => call('ai_preview_context', { tabId }),
     aiGenerateCommitMessage: (tabId, options) => call('ai_generate_commit_message', { tabId, options }),
     aiCancel: (tabId) => call('ai_cancel', { tabId }),
+    aiAccounts: (request) => call('ai_accounts', { request: request ?? null }),
+    aiLogin: (request) => call('ai_login', { request }),
+    aiGeneratePullRequest: (tabId, options) => call('ai_generate_pull_request', { tabId, options: options ?? null }),
+
+    ...createTauriPullRequests(),
 
     async listen(event, handler) {
       const un = await listen<never>(event, (e) => handler(e.payload as never));

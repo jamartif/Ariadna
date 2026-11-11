@@ -372,7 +372,7 @@ async fn cli_status_no_encontrado_sin_cli_y_con_comando_de_login() {
         assert!(c.hint.is_some());
     }
     let login: Vec<_> = list.iter().map(|c| c.login_command.as_str()).collect();
-    assert_eq!(login, ["claude", "codex login", "copilot login"]);
+    assert_eq!(login, ["claude auth login", "codex login", "copilot login"]);
 }
 
 fn claves(v: &serde_json::Value) -> Vec<String> {
@@ -444,12 +444,52 @@ async fn formas_json_del_contrato_con_la_ui() {
     let repo = env.repo("forma");
     let tab = env.open(&repo).await;
     let st = serde_json::to_value(env.core.ai_state(&tab).await.unwrap()).unwrap();
-    assert_eq!(claves(&st["profile"]), ["kind", "name"]);
+    assert_eq!(claves(&st["profile"]), ["isolated", "kind", "name"]);
+    assert_eq!(
+        claves(&st["providers"][0]),
+        [
+            "availability",
+            "consented",
+            "displayName",
+            "enabled",
+            "hint",
+            "id",
+            "isolated",
+            "isolationVerified",
+            "loginCommand",
+            "sharesLogin",
+            "version"
+        ]
+    );
     env.git(
         &repo,
         &["remote", "add", "origin", "https://github.com/a/b.git"],
     );
     env.core.refresh(&tab).await.unwrap();
     let st = serde_json::to_value(env.core.ai_state(&tab).await.unwrap()).unwrap();
-    assert_eq!(claves(&st["profile"]), ["kind", "name", "rule"]);
+    assert_eq!(claves(&st["profile"]), ["isolated", "kind", "name", "rule"]);
+
+    // Formas de `ai_accounts` y `ai_login`.
+    let a = serde_json::to_value(
+        env.core
+            .ai_accounts(crate::core::api::AiAccountsRequest::default())
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(claves(&a), ["accounts", "profile"]);
+    assert_eq!(
+        claves(&a["accounts"][0]),
+        [
+            "authMethod",
+            "configDir",
+            "email",
+            "organization",
+            "plan",
+            "provider",
+            "reason",
+            "state"
+        ]
+    );
+    assert_eq!(a["accounts"][0]["state"], "unavailable");
 }

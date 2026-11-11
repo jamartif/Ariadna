@@ -113,7 +113,7 @@ fn los_codigos_cubren_exactamente_el_contrato() {
     let mapped: BTreeSet<&str> = every_git_error().iter().map(|(_, c)| *c).collect();
     assert_eq!(mapped.len(), 21, "21 variantes, 21 códigos distintos");
     let mut expected: BTreeSet<&str> = ALL_CODES.iter().copied().collect();
-    // No vienen de git: REPO_MISSING (pestaña ausente), los AI_* y POLICY/RATE_LIMITED.
+    // No vienen de git: REPO_MISSING (pestaña ausente), los AI_* y POLICY/RATE_LIMITED y los de PR.
     assert!(expected.remove("REPO_MISSING"));
     // `merge_clean` lo produce el núcleo al abortar un merge con conflictos.
     assert!(expected.remove("MERGE_CONFLICTS"));
@@ -126,11 +126,15 @@ fn los_codigos_cubren_exactamente_el_contrato() {
     ] {
         assert!(expected.remove(c), "{c}");
     }
-    for c in AI_CODES.iter().chain(["POLICY", "RATE_LIMITED"].iter()) {
+    // Los de pull requests los produce `ariadna-hosting` (ver `pr_ops`).
+    for c in AI_CODES
+        .iter()
+        .chain(["POLICY", "RATE_LIMITED", "NOT_FOUND", "NETWORK", "CONFLICT"].iter())
+    {
         assert!(expected.remove(c), "{c}");
     }
     assert_eq!(mapped, expected);
-    assert_eq!(ALL_CODES.len(), 39);
+    assert_eq!(ALL_CODES.len(), 42);
 }
 
 #[test]

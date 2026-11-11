@@ -13,22 +13,27 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
+use ariadna_ai::env::{isolation, shares_login_between_profiles};
+use ariadna_ai::login::{write_script, LoginPlan, OsTerminal, Shell, TerminalLauncher};
 use ariadna_ai::orchestrator::{Limiter, Orchestrator, Profile, ProfileKind};
-use ariadna_ai::prompt::{is_sensitive_path, redact_secrets, PromptBuilder, PromptPreview};
+use ariadna_ai::prompt::{
+    is_sensitive_path, redact_secrets, PromptBuilder, PromptPreview, PullRequestInput,
+};
 use ariadna_ai::provider::DEFAULT_TIMEOUT;
 use ariadna_ai::resolve::{resolve_binary, SearchEnv};
 use ariadna_ai::{
     AiContextPolicy, AiError, AiProvider, AiSettings, Availability, CallContext, CliProvider,
     CliProviderConfig, CommitLanguage, CommitOptions, ProviderChoice, ProviderId,
 };
-use ariadna_git::{DiffScope, FileDiff, GitPath};
+use ariadna_git::{CommandKind, DiffScope, FileDiff, GitPath};
 use ariadna_process::CancellationToken;
 use serde::{Deserialize, Serialize};
 
 use super::api::{
-    AiCommitOptions, AiCommitSuggestion, AiContextPreview, AiExcludeReason, AiExcludedFile,
-    AiPreviewFile, AiProfileInfo, AiProviderState, AiSettingsPatch, AiState, ApiSessionEvent,
-    ApiSessionEventKind, AppEvent,
+    AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitSuggestion, AiContextPreview,
+    AiExcludeReason, AiExcludedFile, AiLoginInfo, AiLoginRequest, AiPreviewFile, AiProfileInfo,
+    AiProviderState, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState,
+    ApiSessionEvent, ApiSessionEventKind, AppEvent,
 };
 use super::app::AppCore;
 use super::error::{ApiError, ApiResult};
@@ -72,6 +77,13 @@ impl Default for StoredAi {
 impl StoredAi {
     pub fn profile(&self) -> &Profile {
         match self.active_profile {
+            ProfileKind::Personal => &self.personal,
+            ProfileKind::Empresa => &self.empresa,
+        }
+    }
+
+    fn profile_of(&self, kind: ProfileKind) -> &Profile {
+        match kind {
             ProfileKind::Personal => &self.personal,
             ProfileKind::Empresa => &self.empresa,
         }
@@ -220,6 +232,9 @@ pub(crate) struct AiShared {
     state: Mutex<StoredAi>,
     limiter: Arc<Limiter>,
     sandbox: PathBuf,
+    /// `…/ai-profiles/<perfil>/<proveedor>`: un directorio de configuración por perfil y CLI.
+    profiles_dir: PathBuf,
+    launcher: Mutex<Arc<dyn TerminalLauncher>>,
     search: Mutex<SearchEnv>,
     timeout: Mutex<Duration>,
     running: Mutex<HashMap<String, Running>>,
@@ -250,6 +265,8 @@ impl AiService {
                 state: Mutex::new(state),
                 limiter: Arc::new(Limiter::default()),
                 sandbox: data_dir.join("ai-sandbox"),
+                profiles_dir: data_dir.join("ai-profiles"),
+                launcher: Mutex::new(Arc::new(OsTerminal)),
                 search: Mutex::new(SearchEnv::from_process()),
                 timeout: Mutex::new(DEFAULT_TIMEOUT),
                 running: Mutex::new(HashMap::new()),
@@ -277,6 +294,17 @@ impl AiService {
     #[cfg(test)]
     pub fn set_search_env(&self, env: SearchEnv) {
         *lock(&self.shared.search) = env;
+    }
+
+    /// Quién abre la terminal del login (los tests ponen uno que no abre nada).
+    #[cfg(test)]
+    pub fn set_launcher(&self, l: Arc<dyn TerminalLauncher>) {
+        *lock(&self.shared.launcher) = l;
+    }
+
+    #[cfg(test)]
+    pub fn profiles_dir(&self) -> PathBuf {
+        self.shared.profiles_dir.clone()
     }
 
     #[cfg(test)]
@@ -310,6 +338,9 @@ impl AiService {
         if let Some(pe) = &patch.provider_enabled {
             let id = parse_provider(&pe.id)?;
             next.profile_mut().set_enabled(id, pe.enabled);
+        }
+        if let Some(iso) = patch.isolated {
+            next.profile_mut().isolated = Some(iso);
         }
         if let Some(b) = &patch.binary_path {
             let id = parse_provider(&b.id)?;
@@ -414,6 +445,54 @@ impl AiService {
         }
     }
 
+    /// Directorio de configuración aislado de `kind` para `id`, si el perfil aísla y el CLI lo
+    /// permite. No lo crea. Copilot nunca tiene (no hay mecanismo verificado): comparte login.
+    pub(crate) fn config_dir(
+        &self,
+        st: &StoredAi,
+        kind: ProfileKind,
+        id: ProviderId,
+    ) -> Option<PathBuf> {
+        if !st.profile_of(kind).is_isolated() || isolation(id).var.is_none() {
+            return None;
+        }
+        Some(
+            self.shared
+                .profiles_dir
+                .join(kind.dir_name())
+                .join(id.binary_name()),
+        )
+    }
+
+    /// Como [`config_dir`](Self::config_dir) pero crea el directorio.
+    fn ensure_config_dir(
+        &self,
+        st: &StoredAi,
+        kind: ProfileKind,
+        id: ProviderId,
+    ) -> Option<PathBuf> {
+        let dir = self.config_dir(st, kind, id)?;
+        match fs::create_dir_all(&dir) {
+            Ok(()) => Some(dir),
+            Err(e) => {
+                eprintln!("no se pudo crear el directorio de IA del perfil: {e}");
+                None
+            }
+        }
+    }
+
+    /// Perfil de las llamadas: tope de contexto global y directorios aislados por proveedor.
+    fn call_profile(&self, st: &StoredAi) -> Profile {
+        let mut p = st.call_profile();
+        p.config_dirs.clear();
+        for id in ProviderId::AUTO_ORDER {
+            if let Some(dir) = self.ensure_config_dir(st, p.kind, id) {
+                p.config_dirs.insert(id, dir);
+            }
+        }
+        p
+    }
+
     fn provider(&self, id: ProviderId, st: &StoredAi) -> CliProvider {
         let mut cfg = CliProviderConfig::new(id, &self.shared.sandbox);
         cfg.configured_binary = st.binary(id);
@@ -510,6 +589,110 @@ enum Plan {
     NeedConsent(ProviderId),
 }
 
+/// Para qué se pide el consentimiento (cambia el texto del diálogo nativo).
+#[derive(Clone, Copy)]
+enum Purpose {
+    Commit,
+    PullRequest,
+}
+
+/// Datos de una rama frente a su base, tal como los leyó git.
+enum PrRaw {
+    /// No hay rama base utilizable (no existe, es la propia rama o no hay ancestro común).
+    NoBase,
+    Found {
+        base: String,
+        head: String,
+        commits: Vec<String>,
+        commit_count: usize,
+        diffs: Vec<FileDiff>,
+    },
+}
+
+/// Commits que se envían como máximo (los más recientes de la rama).
+const PR_MAX_COMMITS: usize = 50;
+
+/// Nombre de rama o referencia aceptable como base. Lo que no pase no llega a git.
+fn valid_base_ref(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 200
+        && !s.starts_with('-')
+        && !s.starts_with('/')
+        && !s.ends_with('/')
+        && !s.ends_with('.')
+        && !s.contains("..")
+        && s.chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '/' | '.' | '_' | '-' | '@' | '+'))
+}
+
+async fn git_text(runner: &ariadna_git::GitRunner, cwd: &Path, args: &[&str]) -> Option<String> {
+    let args: Vec<std::ffi::OsString> = args.iter().map(std::ffi::OsString::from).collect();
+    let out = runner
+        .run(cwd, CommandKind::Read, &args, None)
+        .await
+        .ok()
+        .filter(|o| o.success())?;
+    let text = out.stdout_lossy().trim().to_owned();
+    (!text.is_empty()).then_some(text)
+}
+
+/// Rama base: la pedida o, si no, la que sugiere `origin/HEAD` y las habituales. Devuelve
+/// el nombre y su SHA (los comandos siguientes usan solo SHAs).
+async fn resolve_base(
+    runner: &ariadna_git::GitRunner,
+    cwd: &Path,
+    explicit: Option<&str>,
+    head_branch: Option<&str>,
+) -> Option<(String, String)> {
+    let mut candidates: Vec<String> = Vec::new();
+    match explicit {
+        Some(b) => candidates.push(b.to_owned()),
+        None => {
+            if let Some(o) = git_text(
+                runner,
+                cwd,
+                &["symbolic-ref", "--short", "-q", "refs/remotes/origin/HEAD"],
+            )
+            .await
+            {
+                candidates.push(o);
+            }
+            candidates.extend(["origin/main", "origin/master", "main", "master"].map(String::from));
+        }
+    }
+    for c in candidates {
+        if Some(c.as_str()) == head_branch || !valid_base_ref(&c) {
+            continue;
+        }
+        let spec = format!("{c}^{{commit}}");
+        if let Some(sha) = git_text(
+            runner,
+            cwd,
+            &["rev-parse", "--verify", "-q", "--end-of-options", &spec],
+        )
+        .await
+        {
+            return Some((c, sha));
+        }
+    }
+    None
+}
+
+/// Separa la salida de `git log --format=%s%x1f%b%x1e` en «asunto\n\ncuerpo».
+fn parse_pr_commits(raw: &str) -> Vec<String> {
+    raw.split('\u{1e}')
+        .filter_map(|rec| {
+            let (subject, body) = rec.split_once('\u{1f}').unwrap_or((rec, ""));
+            let (subject, body) = (subject.trim(), body.trim());
+            match (subject.is_empty(), body.is_empty()) {
+                (true, _) => None,
+                (false, true) => Some(subject.to_owned()),
+                (false, false) => Some(format!("{subject}\n\n{body}")),
+            }
+        })
+        .collect()
+}
+
 fn not_installed(p: ProviderId) -> AiError {
     AiError::NotInstalled {
         provider: p,
@@ -583,6 +766,9 @@ pub(crate) fn compose_state(st: &StoredAi, avail: &[(ProviderId, Availability)])
                 enabled: profile.is_enabled(*id),
                 consented: profile.has_consent(*id),
                 login_command: id.login_invocation().to_owned(),
+                shares_login: shares_login_between_profiles(*id),
+                isolated: profile.is_isolated() && !shares_login_between_profiles(*id),
+                isolation_verified: isolation(*id).verified,
             }
         })
         .collect();
@@ -591,6 +777,7 @@ pub(crate) fn compose_state(st: &StoredAi, avail: &[(ProviderId, Availability)])
         profile: AiProfileInfo {
             name: profile.name.clone(),
             kind: profile.kind,
+            isolated: profile.is_isolated(),
             rule: None,
         },
         choice: st.settings.provider,
@@ -694,11 +881,16 @@ impl Gathered {
                 None,
             ));
         }
+        self.excluded_error()
+    }
+
+    /// Todo lo que había se excluyó (sensible, binario o demasiado grande).
+    fn excluded_error(&self) -> Option<ApiError> {
         let has = |r: AiExcludeReason| self.excluded.iter().any(|e| e.reason == r);
         Some(if has(AiExcludeReason::Sensitive) {
             ApiError::new(
                 "AI_SENSITIVE_FILE",
-                "Lo preparado son archivos sensibles (.env, claves, certificados…) o binarios, y no se envían a la IA.",
+                "Los cambios son archivos sensibles (.env, claves, certificados…) o binarios, y no se envían a la IA.",
                 self.excluded.first().map(|e| e.path.to_string_lossy().into_owned()),
             )
         } else if has(AiExcludeReason::TooLarge) {
@@ -952,7 +1144,7 @@ impl AppCore {
             .map_err(ApiError::from)?;
 
         if let Plan::NeedConsent(provider) = svc.plan(&st)? {
-            self.ai_ask_consent(provider, st.active_profile, &gathered, run)
+            self.ai_ask_consent(provider, st.active_profile, &gathered, run, Purpose::Commit)
                 .await?;
             st = svc.snapshot_with(rule.as_ref());
         }
@@ -968,7 +1160,7 @@ impl AppCore {
         let call = CallContext::new(gathered.revision.to_string()).with_cancel(run.token.clone());
         let suggestion = orchestrator
             .suggest_commit_message_with(
-                &st.call_profile(),
+                &svc.call_profile(&st),
                 st.settings.provider,
                 &call,
                 &gathered.diff,
@@ -986,6 +1178,381 @@ impl AppCore {
         })
     }
 
+    // --- cuenta e inicio de sesión (RF-IA12, D16) ---------------------------------------------
+
+    /// Perfil para cuenta/login: el pedido, si no el de la regla de la pestaña, si no el activo.
+    fn ai_profile_kind(
+        &self,
+        st: &StoredAi,
+        tab_id: Option<&str>,
+        profile: Option<&str>,
+    ) -> ApiResult<(ProfileKind, Option<String>)> {
+        if let Some(p) = profile {
+            return Ok((parse_profile(p)?, None));
+        }
+        if let Some(r) = tab_id.and_then(|t| self.rule_for_tab(t)) {
+            return Ok((r.kind, Some(r.pattern)));
+        }
+        Ok((st.active_profile, None))
+    }
+
+    /// `ai_accounts`: la cuenta de cada proveedor **según el propio CLI** y con el directorio
+    /// del perfil (sin leer archivos de credenciales). Lo que el CLI no expone es «no
+    /// disponible».
+    pub async fn ai_accounts(&self, req: AiAccountsRequest) -> ApiResult<AiAccounts> {
+        let svc = self.ai();
+        let st = svc.snapshot();
+        if let Some(t) = req.tab_id.as_deref() {
+            self.live(t)?;
+        }
+        let (kind, rule) =
+            self.ai_profile_kind(&st, req.tab_id.as_deref(), req.profile.as_deref())?;
+        let profile = st.profile_of(kind);
+        let providers: Vec<CliProvider> = ProviderId::AUTO_ORDER
+            .into_iter()
+            .map(|id| svc.provider(id, &st))
+            .collect();
+        let dirs: Vec<Option<PathBuf>> = ProviderId::AUTO_ORDER
+            .into_iter()
+            .map(|id| svc.ensure_config_dir(&st, kind, id))
+            .collect();
+        let (a, b, c) = tokio::join!(
+            providers[0].account(dirs[0].as_deref()),
+            providers[1].account(dirs[1].as_deref()),
+            providers[2].account(dirs[2].as_deref())
+        );
+        Ok(AiAccounts {
+            profile: AiProfileInfo {
+                name: profile.name.clone(),
+                kind,
+                isolated: profile.is_isolated(),
+                rule,
+            },
+            accounts: vec![a, b, c],
+        })
+    }
+
+    /// `ai_login`: prepara (y, si `launch`, abre) el inicio de sesión oficial del CLI con el
+    /// directorio del perfil. Ariadna no ve credenciales; solo lanza una terminal o muestra el
+    /// comando.
+    pub async fn ai_login(&self, req: AiLoginRequest) -> ApiResult<AiLoginInfo> {
+        let svc = self.ai();
+        let st = svc.snapshot();
+        if let Some(t) = req.tab_id.as_deref() {
+            self.live(t)?;
+        }
+        let id = parse_provider(&req.provider)?;
+        let (kind, _) = self.ai_profile_kind(&st, req.tab_id.as_deref(), req.profile.as_deref())?;
+        let profile = st.profile_of(kind);
+        if !profile.is_enabled(id) {
+            return Err(AiError::ProviderDisabled { provider: id }.into());
+        }
+        let Some(resolved) = resolve_binary(id, st.binary(id).as_deref(), &svc.search()) else {
+            return Err(not_installed(id).into());
+        };
+        let dir = svc.ensure_config_dir(&st, kind, id);
+        let plan = LoginPlan::new(id, Some(resolved.display_path()), dir.as_deref());
+        let shell = Shell::native();
+        let mut notes: Vec<String> = Vec::new();
+        let shares = shares_login_between_profiles(id);
+        if shares {
+            notes.push(format!(
+                "{} no permite aislar la sesión por perfil: Personal y Empresa comparten el mismo login.",
+                id.display_name()
+            ));
+        } else if !profile.is_isolated() {
+            notes.push(format!(
+                "El perfil {} usa la sesión normal de {} (aislamiento desactivado).",
+                profile.name,
+                id.display_name()
+            ));
+        } else if !isolation(id).verified {
+            notes.push(format!(
+                "El aislamiento de {} sigue la documentación del CLI y no se ha verificado.",
+                id.display_name()
+            ));
+        }
+        let command = match plan.command_line(shell) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                notes.push(e.to_string());
+                None
+            }
+        };
+        let mut launched = false;
+        if req.launch {
+            let title = format!("Ariadna - {} ({})", id.display_name(), profile.name);
+            let script_dir = svc.shared.profiles_dir.join(kind.dir_name());
+            match write_script(&script_dir, &plan, shell, &title) {
+                Ok(script) => {
+                    let launcher = Arc::clone(&lock(&svc.shared.launcher));
+                    // Abrir una terminal puede bloquear un instante: fuera del hilo asíncrono.
+                    let res = tokio::task::spawn_blocking(move || launcher.open(&script)).await;
+                    match res {
+                        Ok(Ok(())) => launched = true,
+                        Ok(Err(e)) => notes.push(format!("No se pudo abrir la terminal: {e}")),
+                        Err(_) => notes.push("No se pudo abrir la terminal.".to_owned()),
+                    }
+                }
+                Err(e) => notes.push(format!("No se pudo preparar el inicio de sesión: {e}")),
+            }
+        }
+        Ok(AiLoginInfo {
+            provider: id,
+            profile: kind,
+            command,
+            shell: match shell {
+                Shell::Posix => "posix",
+                Shell::Cmd => "cmd",
+            }
+            .to_owned(),
+            config_dir: dir.map(|d| d.to_string_lossy().into_owned()),
+            isolated: profile.is_isolated() && !shares,
+            shares_login: shares,
+            launched,
+            verified: ariadna_ai::commands::login_verified(id),
+            note: (!notes.is_empty()).then(|| notes.join(" ")),
+        })
+    }
+
+    // --- título y descripción de pull request -------------------------------------------------
+
+    /// Lee commits y diff de la rama actual contra su base (ancestro común), de solo lectura.
+    async fn ai_read_pr(&self, tab_id: &str, base: Option<String>) -> ApiResult<PrRaw> {
+        let Some(runner) = self.git_runner() else {
+            return Err(ApiError::new(
+                "GIT_NOT_FOUND",
+                "No hay un git utilizable para leer la rama.",
+                None,
+            ));
+        };
+        self.read_op(tab_id, "rama frente a la base para IA", move |e, r| {
+            Box::pin(async move {
+                let cwd = r.path.clone();
+                let head_branch =
+                    git_text(&runner, &cwd, &["symbolic-ref", "--short", "-q", "HEAD"]).await;
+                let Some((base_name, base_sha)) =
+                    resolve_base(&runner, &cwd, base.as_deref(), head_branch.as_deref()).await
+                else {
+                    return Ok(PrRaw::NoBase);
+                };
+                let Some(mb) = git_text(&runner, &cwd, &["merge-base", &base_sha, "HEAD"]).await
+                else {
+                    return Ok(PrRaw::NoBase);
+                };
+                let range = format!("{mb}..HEAD");
+                let max = format!("--max-count={PR_MAX_COMMITS}");
+                let raw = git_text(
+                    &runner,
+                    &cwd,
+                    &[
+                        "log",
+                        "--no-color",
+                        "--no-show-signature",
+                        "--reverse",
+                        &max,
+                        "--format=%s%x1f%b%x1e",
+                        &range,
+                    ],
+                )
+                .await
+                .unwrap_or_default();
+                let commits = parse_pr_commits(&raw);
+                let commit_count = git_text(&runner, &cwd, &["rev-list", "--count", &range])
+                    .await
+                    .and_then(|n| n.parse().ok())
+                    .unwrap_or(commits.len());
+                let none: Vec<GitPath> = Vec::new();
+                let diffs = e
+                    .diff(
+                        &r,
+                        &DiffScope::Between {
+                            base: mb,
+                            head: "HEAD".into(),
+                        },
+                        &none,
+                    )
+                    .await?;
+                Ok(PrRaw::Found {
+                    base: base_name,
+                    head: head_branch.unwrap_or_else(|| "HEAD".into()),
+                    commits,
+                    commit_count,
+                    diffs,
+                })
+            })
+        })
+        .await
+    }
+
+    /// `ai_generate_pull_request`: propone título y descripción de PR a partir de la rama
+    /// actual, sus commits y el diff contra la base. **Solo propone**: no crea la PR ni toca el
+    /// repo. Mismas garantías que el mensaje de commit: exclusión de sensibles, redacción de
+    /// secretos, tope de contexto, consentimiento por perfil y proveedor, cola y cancelación.
+    pub async fn ai_generate_pull_request(
+        &self,
+        tab_id: &str,
+        options: AiPullRequestOptions,
+    ) -> ApiResult<AiPullRequestSuggestion> {
+        let st = self.ai().snapshot();
+        if !st.settings.enabled {
+            return Err(ApiError::from(AiError::AiDisabled));
+        }
+        self.live(tab_id)?;
+        let base = options
+            .base
+            .as_deref()
+            .map(str::trim)
+            .filter(|b| !b.is_empty())
+            .map(str::to_owned);
+        if let Some(b) = &base {
+            if !valid_base_ref(b) {
+                return Err(invalid("base", b));
+            }
+        }
+
+        let run = self.ai().begin(tab_id);
+        let label = "IA: descripción de PR".to_owned();
+        self.ai_event(
+            tab_id,
+            ApiSessionEventKind::OperationStarted {
+                operation_id: run.op_id,
+                label: label.clone(),
+            },
+        );
+        let result = self.ai_pr_inner(tab_id, &options, base, &run).await;
+        self.ai_event(
+            tab_id,
+            ApiSessionEventKind::OperationFinished {
+                operation_id: run.op_id,
+                label,
+                ok: result.is_ok(),
+                error: result.as_ref().err().cloned(),
+            },
+        );
+        drop(run);
+        result
+    }
+
+    async fn ai_pr_inner(
+        &self,
+        tab_id: &str,
+        options: &AiPullRequestOptions,
+        base: Option<String>,
+        run: &Run,
+    ) -> ApiResult<AiPullRequestSuggestion> {
+        let svc = self.ai();
+        let rule = self.rule_for_tab(tab_id);
+        let mut st = svc.snapshot_with(rule.as_ref());
+        let max_bytes = st.settings.max_context_bytes;
+
+        let (session, _) = self.live(tab_id)?;
+        let revision = Self::fresh_snapshot(&session).await.revision;
+        let raw = self.ai_read_pr(tab_id, base.clone()).await?;
+        if run.token.is_cancelled() {
+            return Err(AiError::Cancelled.into());
+        }
+        let PrRaw::Found {
+            base: base_name,
+            head,
+            commits,
+            commit_count,
+            diffs,
+        } = raw
+        else {
+            return Err(ApiError::new(
+                "AI_BASE_NOT_FOUND",
+                "No encuentro la rama base para comparar. Indica una rama base que exista en este repositorio y que comparta historia con la rama actual.",
+                base,
+            ));
+        };
+        if diffs.is_empty() && commits.is_empty() {
+            return Err(ApiError::new(
+                "AI_NO_BRANCH_CHANGES",
+                format!("La rama {head} no tiene cambios respecto a {base_name}."),
+                None,
+            ));
+        }
+
+        let classified = classify(&diffs, max_bytes);
+        let diff: String = classified
+            .included
+            .iter()
+            .map(|(_, t)| t.as_str())
+            .collect();
+        let files: Vec<AiPreviewFile> = classified
+            .included
+            .iter()
+            .map(|(i, text)| AiPreviewFile {
+                path: diffs[*i].path.clone(),
+                bytes: redact_secrets(text).0.len(),
+            })
+            .collect();
+        let input = PullRequestInput {
+            base: base_name.clone(),
+            head: head.clone(),
+            commits,
+            diff: diff.clone(),
+            template: options.template.clone(),
+            language: options.language,
+        };
+        let prompt = PromptBuilder::pull_request(&input);
+        let gathered = Gathered {
+            diff,
+            files,
+            excluded: classified.excluded,
+            opts: CommitOptions::default(),
+            prompt,
+            revision,
+            max_bytes,
+            largest_too_large: classified.largest_too_large,
+            nothing_staged: false,
+        };
+        if let Some(e) = gathered.empty_error() {
+            return Err(e);
+        }
+        AiContextPolicy::new(gathered.max_bytes)
+            .validate_len(gathered.prompt.context_bytes)
+            .map_err(ApiError::from)?;
+
+        if let Plan::NeedConsent(provider) = svc.plan(&st)? {
+            self.ai_ask_consent(
+                provider,
+                st.active_profile,
+                &gathered,
+                run,
+                Purpose::PullRequest,
+            )
+            .await?;
+            st = svc.snapshot_with(rule.as_ref());
+        }
+        if run.token.is_cancelled() {
+            return Err(AiError::Cancelled.into());
+        }
+
+        let providers: Vec<Arc<dyn AiProvider>> = ProviderId::AUTO_ORDER
+            .into_iter()
+            .map(|id| Arc::new(svc.provider(id, &st)) as Arc<dyn AiProvider>)
+            .collect();
+        let orchestrator = Orchestrator::new(providers, Arc::clone(&svc.shared.limiter));
+        let call = CallContext::new(revision.to_string()).with_cancel(run.token.clone());
+        let suggestion = orchestrator
+            .suggest_pull_request(&svc.call_profile(&st), st.settings.provider, &call, &input)
+            .await
+            .map_err(ApiError::from)?;
+
+        Ok(AiPullRequestSuggestion {
+            title: suggestion.subject.clone().unwrap_or_default(),
+            body: suggestion.body.clone(),
+            provider: suggestion.provider.binary_name().to_owned(),
+            command_summary: suggestion.command_summary.clone(),
+            repo_revision: revision,
+            base: base_name,
+            head,
+            commit_count,
+        })
+    }
+
     /// Diálogo nativo de primer uso: qué se envía y a quién. Se guarda lo que decida.
     async fn ai_ask_consent(
         &self,
@@ -993,6 +1560,7 @@ impl AppCore {
         kind: ProfileKind,
         g: &Gathered,
         run: &Run,
+        purpose: Purpose,
     ) -> ApiResult<()> {
         let svc = self.ai();
         // Dos pestañas que piden consentimiento a la vez no abren dos diálogos.
@@ -1019,12 +1587,22 @@ impl AppCore {
                 g.excluded.len()
             ));
         }
+        let (what, goal) = match purpose {
+            Purpose::Commit => (
+                "el diff PREPARADO de este repositorio",
+                "proponer un mensaje de commit",
+            ),
+            Purpose::PullRequest => (
+                "los commits y el diff de la rama actual contra la rama base",
+                "proponer el título y la descripción de una pull request",
+            ),
+        };
         let message = format!(
-            "Ariadna enviará a {name} el diff PREPARADO de este repositorio para proponer un mensaje de commit.\n\n\
+            "Ariadna enviará a {name} {what} para {goal}.\n\n\
              • {} archivo(s), {} (contexto total: {}).\n\
              • El contenido sale de tu equipo hacia {name}, mediante su CLI y tu sesión (perfil {}).\n\
              • Se excluyen .env, claves, certificados y binarios, y se ocultan los secretos detectados.\n\
-             • La IA solo propone: nunca hace commit ni toca el repositorio.\n\n\
+             • La IA solo propone: nunca hace commit, no crea la pull request ni toca el repositorio.\n\n\
              Se te pregunta una vez por perfil y proveedor.",
             g.files.len(),
             human_size(total),

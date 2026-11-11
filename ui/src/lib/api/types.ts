@@ -322,12 +322,18 @@ export interface ProviderState {
   enabled: boolean;
   consented: boolean;
   loginCommand: string;
+  /** El CLI no permite aislar su login: Personal y Empresa comparten sesión (Copilot). */
+  sharesLogin: boolean;
+  /** En el perfil de este estado el proveedor usa un directorio de configuración propio. */
+  isolated: boolean;
+  /** `true` = mecanismo de aislamiento comprobado con el CLI real; `false` = según su documentación. */
+  isolationVerified: boolean;
 }
 
 export interface AiState {
   enabled: boolean;
   /** `rule`: patrón de la regla repo → perfil que decidió el perfil (ausente si es el elegido en Ajustes). */
-  profile: { name: string; kind: AiProfileKind; rule?: string };
+  profile: { name: string; kind: AiProfileKind; isolated: boolean; rule?: string };
   choice: AiChoice;
   providers: ProviderState[];
 }
@@ -340,6 +346,8 @@ export interface AiSettingsPatch {
   profile?: AiProfileKind;
   providerEnabled?: { id: string; enabled: boolean };
   binaryPath?: { id: string; path: string | null };
+  /** Aislar (o no) la sesión del perfil activo por proveedor. */
+  isolated?: boolean;
 }
 
 export type ExcludedReason = 'sensitive' | 'binary' | 'too-large';
@@ -366,6 +374,73 @@ export interface AiCommitSuggestion {
   provider: string;
   commandSummary: string;
   repoRevision: number;
+}
+
+/** Cuenta activa de un proveedor según su propio CLI (RF-IA12); nunca de archivos de credenciales. */
+export type AiAccountState = 'loggedIn' | 'loggedOut' | 'unavailable';
+
+export interface AiAccount {
+  provider: AiProviderId | string;
+  state: AiAccountState;
+  email: string | null;
+  organization: string | null;
+  plan: string | null;
+  authMethod: string | null;
+  /** Directorio de configuración que el CLI declara usar (prueba de que el aislamiento llegó). */
+  configDir: string | null;
+  /** Por qué no hay datos (`unavailable`). */
+  reason: string | null;
+}
+
+export interface AiAccountsRequest {
+  tabId?: string;
+  profile?: AiProfileKind;
+}
+
+export interface AiAccounts {
+  profile: { name: string; kind: AiProfileKind; isolated: boolean; rule?: string };
+  accounts: AiAccount[];
+}
+
+export interface AiLoginRequest {
+  tabId?: string;
+  profile?: AiProfileKind;
+  provider: string;
+  /** `true` = abrir una terminal; `false` = solo devolver el comando. */
+  launch?: boolean;
+}
+
+export interface AiLoginInfo {
+  provider: AiProviderId | string;
+  profile: AiProfileKind;
+  /** Línea para pegar en la terminal; `null` si no se puede construir con seguridad. */
+  command: string | null;
+  shell: 'posix' | 'cmd';
+  configDir: string | null;
+  isolated: boolean;
+  sharesLogin: boolean;
+  launched: boolean;
+  /** El comando de login se ha comprobado con el CLI real. */
+  verified: boolean;
+  note: string | null;
+}
+
+export interface AiPullRequestOptions {
+  /** Rama base; vacío/omitido = detectar (`origin/HEAD`, `origin/main`, `main`…). */
+  base?: string | null;
+  template?: string | null;
+  language?: AiLanguage;
+}
+
+export interface AiPullRequestSuggestion {
+  title: string;
+  body: string;
+  provider: string;
+  commandSummary: string;
+  repoRevision: number;
+  base: string;
+  head: string;
+  commitCount: number;
 }
 
 // ---- Ajustes (ipc.md, «Ajustes») ------------------------------------------------------
@@ -469,10 +544,13 @@ export const API_ERROR_CODES = [
   'AI_CONSENT_REQUIRED',
   'AI_NO_STAGED_CHANGES',
   'AI_SENSITIVE_FILE',
+  'AI_NO_BRANCH_CHANGES',
+  'AI_BASE_NOT_FOUND',
   'NOT_FOUND',
   'POLICY',
   'RATE_LIMITED',
-  'NETWORK'
+  'NETWORK',
+  'CONFLICT'
 ] as const;
 
 /**
@@ -481,6 +559,8 @@ export const API_ERROR_CODES = [
  * ausentes en el fixture, pero no al revés.
  */
 export const CODES_ADDED_IN_WAVE_2: readonly ApiErrorCode[] = [
+  'AI_NO_BRANCH_CHANGES',
+  'AI_BASE_NOT_FOUND',
   'MERGE_CONFLICTS',
   'CONFLICTS_PENDING',
   'CONFLICT_MARKERS_REMAIN',
@@ -499,7 +579,8 @@ export const CODES_ADDED_IN_WAVE_2: readonly ApiErrorCode[] = [
   'NOT_FOUND',
   'POLICY',
   'RATE_LIMITED',
-  'NETWORK'
+  'NETWORK',
+  'CONFLICT'
 ];
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];

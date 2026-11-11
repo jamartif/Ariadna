@@ -44,6 +44,22 @@ pub struct ConflictInput {
     pub working_tree: Option<String>,
 }
 
+/// Pull request que se quiere describir. Todo es dato del repo (no fiable).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PullRequestInput {
+    /// Rama base (a la que se quiere fusionar).
+    pub base: String,
+    /// Rama de origen.
+    pub head: String,
+    /// Commits de la rama desde el ancestro común, más antiguo primero: asunto y cuerpo.
+    pub commits: Vec<String>,
+    /// Diff del ancestro común contra la rama (ya sin archivos sensibles o binarios).
+    pub diff: String,
+    /// Plantilla de descripción del repositorio, si la hay.
+    pub template: Option<String>,
+    pub language: CommitLanguage,
+}
+
 /// Lo que se enviará al CLI, para mostrarlo antes de enviarlo (§5.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptPreview {
@@ -300,6 +316,54 @@ changed and why, each at most 100 characters. Never return the subject alone, ev
             d.section("RECENT COMMIT SUBJECTS", &list, false);
         }
         d.section("STAGED DIFF", diff, true);
+        assemble(&task, d)
+    }
+
+    /// Título y descripción de una pull request a partir de ramas, commits y diff.
+    ///
+    /// Igual que el resto: todo el dato del repo (también los nombres de rama y los mensajes
+    /// de commit) va redactado, neutralizado y dentro del bloque no fiable.
+    pub fn pull_request(input: &PullRequestInput) -> PromptPreview {
+        let language = match input.language {
+            CommitLanguage::Es => "Write the title and description in Spanish.",
+            CommitLanguage::En => "Write the title and description in English.",
+            CommitLanguage::Auto if !input.commits.is_empty() => {
+                "Write in the same language as the COMMITS section."
+            }
+            CommitLanguage::Auto => "Write the title and description in English.",
+        };
+        let task = format!(
+            "\
+Write a pull request title and description for merging the branch HEAD BRANCH into BASE BRANCH, \
+using the commits and the diff in the untrusted data below.
+Rules:
+- Output ONLY the pull request text. No markdown fences around it, no quotes and no preamble or \
+labels such as \"Title:\".
+- First line: the title, imperative mood, at most 72 characters, no trailing period.
+- Then one blank line and the description in Markdown: a short summary paragraph and a bullet list \
+of the main changes (\"- ...\"). Add a \"## Notes\" section only if something needs a reviewer's \
+attention (risks, migrations, follow-ups).
+- Describe only what the commits and diff show. Do NOT invent issue numbers, test results, \
+screenshots or links.
+- {language}
+- If a TEMPLATE section is present, follow its structure when it fits."
+        );
+        let mut d = Data::default();
+        d.section("BASE BRANCH", &input.base, false);
+        d.section("HEAD BRANCH", &input.head, false);
+        if let Some(t) = input.template.as_deref().filter(|t| !t.trim().is_empty()) {
+            d.section("TEMPLATE", t, false);
+        }
+        if !input.commits.is_empty() {
+            let list = input
+                .commits
+                .iter()
+                .map(|c| format!("- {}", c.trim().replace('\n', "\n  ")))
+                .collect::<Vec<_>>()
+                .join("\n");
+            d.section("COMMITS", &list, false);
+        }
+        d.section("DIFF", &input.diff, true);
         assemble(&task, d)
     }
 

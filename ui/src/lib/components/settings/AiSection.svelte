@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import type { MessageKey } from '$lib/i18n';
-  import type { AiChoice, AiProfileKind, CliStatus } from '$lib/api/types';
+  import type { AiAccount, AiChoice, AiProfileKind, CliStatus } from '$lib/api/types';
   import type { RuleProblem, SettingsPanel } from '$lib/stores/settingsPanel.svelte';
   import { toasts } from '$lib/stores/toasts.svelte';
   import Icon from '../Icon.svelte';
@@ -22,6 +22,17 @@
   function cliText(c: CliStatus | undefined): string {
     if (!c) return t('settings.ai.checking');
     return c.availability === 'available' ? t('settings.ai.installed') : c.availability === 'failed' ? t('settings.ai.failed') : t('settings.ai.notFound');
+  }
+
+  function accountWho(a: AiAccount): string {
+    const who = a.email ?? a.organization ?? '—';
+    return a.organization && a.email ? `${who} · ${a.organization}` : who;
+  }
+
+  async function launch(id: string) {
+    const info = await panel.openLogin(id);
+    if (info?.launched) toasts.success(t('settings.ai.terminalOpened'));
+    else if (!info) toasts.error(t('settings.ai.loginFailed'), panel.logins[id]?.error ?? undefined);
   }
 
   async function copy(cmd: string) {
@@ -63,6 +74,13 @@
           {/each}
         </div>
         <p class="hint">{t('settings.ai.profileHint')}</p>
+        <label class="check iso">
+          <input type="checkbox" checked={ai.profile.isolated} disabled={panel.aiBusy} onchange={(e) => void panel.patchAi({ isolated: e.currentTarget.checked })} aria-describedby="set-ai-iso-hint" />
+          <span>
+            <span class="main">{t('settings.ai.isolate')}</span>
+            <span class="hint" id="set-ai-iso-hint">{t('settings.ai.isolateHint')}</span>
+          </span>
+        </label>
         {#if rule}
           <p class="status ok" role="status"><Icon name="info" size={14} /><span>{t('settings.ai.activeRule', { pattern: rule.rule ?? '', profile: rule.name })}</span></p>
         {:else if !panel.tabId}
@@ -80,6 +98,10 @@
           </label>
           {#each ai.providers as p (p.id)}
             {@const c = cliById.get(p.id)}
+            {@const acc = panel.accountOf(p.id)}
+            {@const login = panel.logins[p.id]}
+            {@const loginErr = login?.error ?? null}
+            {@const loginCmd = login?.info?.command ?? p.loginCommand}
             <div class="provwrap" class:off={!p.enabled}>
               <label class="prov" class:on={ai.choice === p.id}>
                 <input type="radio" name="set-ai-provider" value={p.id} checked={ai.choice === p.id} onchange={() => void panel.patchAi({ choice: p.id as AiChoice })} aria-labelledby="set-p-{p.id}" aria-describedby="set-p-{p.id}-m" />
@@ -92,6 +114,31 @@
                   {#if c && !c.installed && c.hint}<span class="path">{c.hint}</span>{/if}
                 </span>
               </label>
+              <div class="sess" data-testid="session-{p.id}">
+                {#if p.sharesLogin}
+                  <span class="badge warn"><Icon name="triangle-alert" size={12} />{t('settings.ai.sharedBadge')}</span>
+                {:else if p.isolated}
+                  <span class="badge">{t('settings.ai.isolatedBadge')}</span>
+                {:else}
+                  <span class="badge">{t('settings.ai.normalSession')}</span>
+                {/if}
+                {#if acc}
+                  {#if acc.state === 'loggedIn'}
+                    <span class="acct">{t('settings.ai.accountIn', { who: accountWho(acc) })}</span>
+                  {:else if acc.state === 'loggedOut'}
+                    <span class="acct">{t('settings.ai.accountOut')}</span>
+                  {:else}
+                    <span class="acct muted" title={acc.reason ?? undefined}>{t('settings.ai.accountNA')}</span>
+                  {/if}
+                {:else if panel.accountsLoading}
+                  <span class="acct muted">{t('settings.ai.accountLoading')}</span>
+                {/if}
+              </div>
+              {#if p.sharesLogin}
+                <p class="hint warnp" role="note">{t('settings.ai.sharedWarn', { name: p.displayName })}</p>
+              {:else if p.isolated && !p.isolationVerified}
+                <p class="hint">{t('settings.ai.unverified')}</p>
+              {/if}
               <div class="prow">
                 <label class="mini">
                   <input type="checkbox" checked={p.enabled} disabled={panel.aiBusy} onchange={(e) => void panel.patchAi({ providerEnabled: { id: p.id, enabled: e.currentTarget.checked } })} />
@@ -102,7 +149,10 @@
                   class="btn btn-sm"
                   aria-expanded={loginFor === p.id}
                   aria-controls="set-login-{p.id}"
-                  onclick={() => (loginFor = loginFor === p.id ? null : p.id)}
+                  onclick={() => {
+                    loginFor = loginFor === p.id ? null : p.id;
+                    if (loginFor === p.id) void panel.prepareLogin(p.id);
+                  }}
                 >
                   <Icon name="terminal" size={13} />{loginFor === p.id ? t('settings.ai.hideLogin') : t('settings.ai.login')}
                 </button>
@@ -110,12 +160,19 @@
               {#if loginFor === p.id}
                 <div class="login" id="set-login-{p.id}" role="group" aria-label={t('settings.ai.loginTitle', { name: p.displayName })}>
                   <p>{t('settings.ai.loginBody')}</p>
+                  {#if loginErr}<p class="hint bad" role="alert">{loginErr.message}</p>{/if}
                   <div class="cmdrow">
-                    <code class="cmd mono">{p.loginCommand}</code>
-                    <button type="button" class="btn btn-sm" onclick={() => void copy(p.loginCommand)} aria-label={`${t('settings.ai.copy')}: ${p.loginCommand}`}>
+                    <code class="cmd mono">{loginCmd}</code>
+                    <button type="button" class="btn btn-sm" onclick={() => void copy(loginCmd)} aria-label={`${t('settings.ai.copy')}: ${loginCmd}`}>
                       <Icon name="copy" size={13} />{t('settings.ai.copy')}
                     </button>
+                    <button type="button" class="btn btn-sm btn-primary" disabled={!!loginErr} onclick={() => void launch(p.id)}>
+                      <Icon name="terminal" size={13} />{t('settings.ai.openTerminal')}
+                    </button>
                   </div>
+                  {#if login && login.info?.command === null}<p class="hint warnp">{t('settings.ai.loginUnsafe')}</p>{/if}
+                  {#if login?.info && !login.info.verified}<p class="hint">{t('settings.ai.loginUnverified')}</p>{/if}
+                  {#if login?.info?.note}<p class="hint" role="status">{login.info.note}</p>{/if}
                 </div>
               {/if}
             </div>
@@ -124,6 +181,9 @@
         <div class="row">
           <button type="button" class="btn btn-sm btn-ghost" onclick={() => void panel.loadCli()} disabled={panel.cliLoading}>
             <Icon name="refresh-cw" size={13} spin={panel.cliLoading} />{panel.cliLoading ? t('settings.ai.checking') : t('settings.ai.refresh')}
+          </button>
+          <button type="button" class="btn btn-sm btn-ghost" onclick={() => void panel.loadAccounts()} disabled={panel.accountsLoading}>
+            <Icon name="refresh-cw" size={13} spin={panel.accountsLoading} />{t('settings.ai.accountRefresh')}
           </button>
         </div>
       </fieldset>
@@ -334,5 +394,39 @@
   .hint.bad {
     min-height: 1.2em;
     color: var(--danger);
+  }
+  .iso {
+    margin-top: var(--space-2);
+  }
+  .sess {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding-left: 2px;
+    font-size: var(--text-xs);
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--text-muted);
+  }
+  .badge.warn {
+    border-color: color-mix(in srgb, var(--warning) 50%, transparent);
+    color: var(--warning);
+  }
+  .acct {
+    color: var(--text);
+  }
+  .acct.muted {
+    color: var(--text-subtle);
+  }
+  .warnp {
+    color: var(--warning);
   }
 </style>

@@ -183,7 +183,7 @@ Estado: `cubierto` = hay test Swift para el caso principal; `parcial` = hay test
 | RF-IA9 modo Auto | testOrchestratorAutoFallsBackAndExplicitChoiceDoesNot | M6.9 | parcial: la semántica cambia (ver D4); **crear** consentimiento y «sin fallback por error de contenido» |
 | RF-IA10 términos de uso | Ninguno | M0.5 | **sin test heredado: crear** (es documental/cumplimiento, no test automático) |
 | RF-IA11 política administrable (post-v0.1) | Ninguno | «Después de v0.1» | **sin test heredado: crear** (fuera de v0.1) |
-| RF-IA12 cuentas de organización | Ninguno | M6.13, M0.7 | **sin test heredado: crear** (humo manual con cuentas de organización) |
+| RF-IA12 cuentas de organización | Ninguno | M6.13, M0.7 | **tests nuevos hechos** con CLI falso (`ariadna-ai/tests/cli.rs`: cuenta con directorio aislado, Codex/Copilot «no disponible»; `core/tests/ai.rs`: `ai_accounts`, `ai_login`, aislamiento por perfil, descripción de PR); humo manual con cuentas de organización pendiente: [checklist-humo-ia.md](checklist-humo-ia.md) |
 
 Además, sin ID pero requeridos en §5: tope de contexto → testContextLimitBlocksTheProcess (M6.2, cubierto); la IA solo propone / `AiSuggestion` → testCopilotCommitMessage…, testCodexParses…, testOrchestratorAuto… (M6.1, parcial: falta estado obsoleto por `revision`); consentimiento, vista previa, redactor de secretos, marcado de contenido no fiable, rechazo de propuestas fuera de hunks (M6.2, M6.15) → **sin test heredado: crear**.
 
