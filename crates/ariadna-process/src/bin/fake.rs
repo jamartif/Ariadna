@@ -55,7 +55,9 @@ fn main() {
             for i in 0..n {
                 let _ = write!(e, "paso-{i}\r");
                 let _ = e.flush();
-                std::thread::sleep(std::time::Duration::from_millis(40));
+                // Pausa holgada: con la suite entera en paralelo el lector puede tardar en despertar
+                // y unir escrituras cercanas en un solo trozo.
+                std::thread::sleep(std::time::Duration::from_millis(120));
             }
             let _ = writeln!(e, "fin");
         }
