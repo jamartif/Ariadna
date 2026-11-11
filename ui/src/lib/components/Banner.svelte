@@ -39,6 +39,7 @@
 <style>
   .banner {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
@@ -74,7 +75,8 @@
     color: var(--info);
   }
   .body {
-    flex: 1;
+    /* Base mínima: en columnas estrechas las acciones bajan en vez de aplastar el mensaje. */
+    flex: 1 1 14rem;
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -112,6 +114,7 @@
     flex-wrap: wrap;
     gap: var(--space-2);
     align-self: center;
+    min-width: 0;
   }
   @media (forced-colors: active) {
     .banner {

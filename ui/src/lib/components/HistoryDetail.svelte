@@ -98,7 +98,7 @@
       <ul class="files" role="listbox" aria-label={t('history.fileList')}>
         {#each h.files as f, i (pathKey(f.path) + ':' + i)}
           {@const s = diffStats(f)}
-          <li>
+          <li role="none">
             <button
               type="button"
               id="hfile-{i}"

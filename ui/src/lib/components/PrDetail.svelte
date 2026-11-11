@@ -28,6 +28,30 @@
   const github = $derived(provider === 'github');
   let panelOpen = $state<'review' | 'complete' | null>(null);
   let writing = $state(false);
+  let formHost = $state<HTMLElement | null>(null);
+  let prevPanel: 'review' | 'complete' | null = null;
+
+  // Teclado y lectores: al abrir un formulario el foco entra en él y, al cerrarlo, vuelve al botón que lo abrió.
+  $effect(() => {
+    const cur = panelOpen;
+    const prev = prevPanel;
+    prevPanel = cur;
+    if (cur) {
+      queueMicrotask(() => formHost?.querySelector<HTMLElement>('input:checked, input:not([disabled]), textarea, select, button:not([disabled])')?.focus());
+    } else if (prev) {
+      queueMicrotask(() => {
+        const a = document.activeElement;
+        if (!a || a === document.body || a.closest('[data-pr-form]')) document.getElementById(`pr-act-${prev}`)?.focus();
+      });
+    }
+  });
+
+  function formKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && panelOpen) {
+      e.stopPropagation();
+      panelOpen = null;
+    }
+  }
 
   const VIEWS: { id: PrDetailView; label: 'pr.tab.overview' | 'pr.tab.files' | 'pr.tab.conversation' }[] = [
     { id: 'overview', label: 'pr.tab.overview' },
@@ -108,11 +132,11 @@
     <div class="actions" role="group" aria-label={t('pr.actions')}>
       {#if active}
         {#if (pr.caps?.votes.length ?? 0) > 0}
-          <button type="button" class="btn" aria-expanded={panelOpen === 'review'} onclick={() => (panelOpen = panelOpen === 'review' ? null : 'review')} disabled={pr.busyAny}>
+          <button type="button" class="btn" id="pr-act-review" aria-expanded={panelOpen === 'review'} onclick={() => (panelOpen = panelOpen === 'review' ? null : 'review')} disabled={pr.busyAny}>
             <Icon name="circle-check" size={14} />{t('pr.review.open')}
           </button>
         {/if}
-        <button type="button" class="btn btn-primary" aria-expanded={panelOpen === 'complete'} onclick={() => (panelOpen = panelOpen === 'complete' ? null : 'complete')} disabled={pr.busyAny}>
+        <button type="button" class="btn btn-primary" id="pr-act-complete" aria-expanded={panelOpen === 'complete'} onclick={() => (panelOpen = panelOpen === 'complete' ? null : 'complete')} disabled={pr.busyAny}>
           <Icon name="git-merge" size={14} />{t('pr.complete.open')}
         </button>
         <button type="button" class="btn btn-danger" onclick={() => void abandon()} disabled={pr.busyAny}>
@@ -133,10 +157,15 @@
       </div>
     {/if}
 
-    {#if panelOpen === 'review' && active}
-      <div class="pad-x"><PrReviewForm {pr} onclose={() => (panelOpen = null)} /></div>
-    {:else if panelOpen === 'complete' && active}
-      <div class="pad-x"><PrCompleteForm {pr} onclose={() => (panelOpen = null)} /></div>
+    {#if (panelOpen === 'review' || panelOpen === 'complete') && active}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="pad-x" data-pr-form bind:this={formHost} onkeydown={formKey}>
+        {#if panelOpen === 'review'}
+          <PrReviewForm {pr} onclose={() => (panelOpen = null)} />
+        {:else}
+          <PrCompleteForm {pr} onclose={() => (panelOpen = null)} />
+        {/if}
+      </div>
     {/if}
 
     <div class="views" role="tablist" aria-label={t('pr.views')}>
@@ -173,7 +202,7 @@
               <h3 id="pr-h-merge">{t('pr.detail.merge')}</h3>
               <p class="line">
                 <Icon name={d.mergeStatus === 'conflicts' ? 'triangle-alert' : d.mergeStatus === 'clean' ? 'circle-check' : 'info'} size={14} />
-                {t(MERGE_LABEL[d.mergeStatus])}{#if d.mergeDetail}<span class="muted mono"> · {d.mergeDetail}</span>{/if}
+                {t(MERGE_LABEL[d.mergeStatus])}{#if d.mergeDetail && d.mergeStatus !== 'clean'}<span class="muted mono">{' · '}{d.mergeDetail}</span>{/if}
               </p>
             </section>
           {/if}
@@ -225,7 +254,7 @@
             {:else}
               <ul class="commits">
                 {#each d.commits as c (c.sha)}
-                  <li><code class="mono sha">{c.sha.slice(0, 7)}</code><span class="subj">{c.subject}</span><span class="muted">{c.author}{#if c.date} · {relativeTime(c.date)}{/if}</span></li>
+                  <li><code class="mono sha">{c.sha.slice(0, 7)}</code><span class="subj">{c.subject}</span><span class="muted">{c.author}{#if c.date}{' · '}{relativeTime(c.date)}{/if}</span></li>
                 {/each}
               </ul>
             {/if}
@@ -296,12 +325,14 @@
   }
   .head {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--space-3);
     padding: var(--space-4) var(--space-4) var(--space-2);
   }
   .titles {
-    flex: 1;
+    /* Panel estrecho: los botones de cabecera bajan en vez de apretar el título. */
+    flex: 1 1 16rem;
     min-width: 0;
   }
   h2 {
@@ -328,7 +359,14 @@
     font-size: var(--text-sm);
     color: var(--text);
   }
+  .branches {
+    flex-wrap: nowrap;
+  }
+  .branches :global(svg) {
+    flex: none;
+  }
   .b {
+    min-width: 0;
     overflow-wrap: anywhere;
   }
   .head-actions {
@@ -489,5 +527,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Colores forzados: la selección no puede depender solo del color de fondo. */
+  @media (forced-colors: active) {
+    .vtab.on {
+      border-bottom-color: Highlight;
+    }
   }
 </style>

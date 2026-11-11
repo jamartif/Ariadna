@@ -331,4 +331,12 @@
     margin: 0;
     font-size: var(--text-sm);
   }
+
+  /* Colores forzados: la selección no puede depender solo del color de fondo. */
+  @media (forced-colors: active) {
+    .cfile.sel {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
 </style>

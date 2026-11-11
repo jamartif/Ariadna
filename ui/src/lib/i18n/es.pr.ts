@@ -14,6 +14,7 @@ export const esPr = {
   'pr.loadingSupport': 'Comprobando el remoto…',
   'pr.loading': 'Cargando pull requests',
   'pr.search': 'Buscar por título, número, autor o rama',
+  'pr.search.placeholder': 'Buscar…',
   'pr.refresh': 'Actualizar',
   'pr.new': 'Nueva pull request',
   'pr.filters': 'Filtrar pull requests',

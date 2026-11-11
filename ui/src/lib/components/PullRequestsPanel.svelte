@@ -87,7 +87,7 @@
     <div class="toolbar">
       <div class="search">
         <Icon name="search" size={14} />
-        <input class="field" type="search" bind:value={pr.query} placeholder={t('pr.search')} aria-label={t('pr.search')} autocomplete="off" spellcheck="false" />
+        <input class="field" type="search" bind:value={pr.query} placeholder={t('pr.search.placeholder')} aria-label={t('pr.search')} autocomplete="off" spellcheck="false" />
       </div>
       <button type="button" class="btn btn-icon" onclick={() => void pr.refresh()} disabled={pr.listLoading} aria-label={t('pr.refresh')} title={t('pr.refresh')}>
         <Icon name="refresh-cw" size={14} spin={pr.listLoading} />
@@ -159,7 +159,7 @@
         <button type="button" class="btn btn-sm" disabled={pr.page <= 1 || pr.listLoading} onclick={() => void pr.prevPage()} aria-label={t('pr.prevPage')}>
           <Icon name="chevron-left" size={12} />{t('pr.prev')}
         </button>
-        <span class="pg" aria-live="polite">{t('pr.page', { n: pr.page })}{#if pr.items.length > 0} · {tn('pr.count', pr.visible.length)}{/if}</span>
+        <span class="pg" aria-live="polite">{t('pr.page', { n: pr.page })}{#if pr.items.length > 0}{' · '}{tn('pr.count', pr.visible.length)}{/if}</span>
         <button type="button" class="btn btn-sm" disabled={!pr.hasMore || pr.listLoading} onclick={() => void pr.nextPage()} aria-label={t('pr.nextPage')}>
           {t('pr.next')}<Icon name="chevron-right" size={12} />
         </button>
@@ -205,12 +205,13 @@
   }
   .toolbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
   }
   .search {
-    flex: 1;
+    flex: 1 1 120px;
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -383,5 +384,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Colores forzados: la selección no puede depender solo del color de fondo. */
+  @media (forced-colors: active) {
+    .row.sel {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+    .fbtn {
+      border: 1px solid ButtonText;
+    }
+    .fbtn.on {
+      background: Highlight;
+      color: HighlightText;
+      border-color: Highlight;
+    }
   }
 </style>

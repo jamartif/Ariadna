@@ -208,4 +208,11 @@
     resize: vertical;
     line-height: 1.45;
   }
+
+  /* Colores forzados: la selección no puede depender solo del color de fondo. */
+  @media (forced-colors: active) {
+    .thread.hl {
+      outline: 2px solid Highlight;
+    }
+  }
 </style>

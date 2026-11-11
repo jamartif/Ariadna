@@ -183,7 +183,8 @@
     display: flex;
     flex-direction: column;
     width: min(820px, 100%);
-    max-height: 88vh;
+    /* Altura estable: el diálogo no «salta» al cambiar entre secciones de distinto largo. */
+    height: min(640px, 88vh);
     border-radius: 16px;
     overflow: hidden;
   }

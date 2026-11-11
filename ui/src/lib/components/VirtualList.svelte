@@ -83,7 +83,7 @@
   class="vl {cls}"
   {role}
   aria-label={label}
-  aria-rowcount={rowCount}
+  aria-rowcount={role === 'grid' || role === 'table' || role === 'treegrid' ? rowCount : undefined}
   aria-multiselectable={multiselectable}
   aria-activedescendant={activeDescendant}
   tabindex={tabindex ?? -1}

@@ -417,6 +417,14 @@ kbd {
     color: HighlightText;
     border-color: Highlight;
   }
+  .btn:disabled,
+  .btn[aria-disabled='true'],
+  .btn-primary:disabled {
+    background: ButtonFace;
+    color: GrayText;
+    border-color: GrayText;
+    opacity: 1;
+  }
   .skeleton {
     background: GrayText;
     opacity: 0.3;

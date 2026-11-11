@@ -147,6 +147,12 @@
 
 ## M7 — Release
 - [ ] Accesibilidad: ARIA, `forced-colors`, zoom 200 %, axe en E2E; revisión NVDA y VoiceOver
+  - [x] axe-core (vitest-axe) en jsdom: una prueba por pantalla principal (PR, conflictos, ajustes, ramas/remotos, historial, paleta, espacio de trabajo) sin violaciones serias/críticas (`ui/src/lib/a11y.test.ts`; jsdom no calcula contraste)
+  - [x] Primera pasada visual en navegador (1440×900 y 1000×700, claro/oscuro, `forced-colors` y `prefers-reduced-motion` emulados): ver `specs/rust/qa-alpha2.md`
+  - [ ] Contraste AA medido en navegador solo de forma aproximada (script propio); falta herramienta de referencia
+  - [ ] Zoom 200 % y reflujo
+  - [ ] axe en E2E contra la app real (`tauri-driver`)
+  - [ ] Revisión manual con NVDA y VoiceOver (no realizada)
 - [ ] Rendimiento contra NF-1…NF-6 con fixtures sintéticos
 - [ ] E2E con `tauri-driver` (macOS y Windows x64)
 - [ ] Regresión visual con baselines por SO

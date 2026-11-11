@@ -437,6 +437,7 @@
   }
   .actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
@@ -444,9 +445,15 @@
     border-top: 1px solid var(--border);
     background: var(--bg-app);
   }
+  .actions .btn {
+    flex: none;
+    white-space: nowrap;
+  }
   .hint {
     display: flex;
     align-items: center;
+    flex: 1 1 14rem;
+    min-width: 0;
     gap: 6px;
     margin: 0;
     font-size: var(--text-xs);
@@ -510,5 +517,13 @@
     background: var(--bg-surface);
     font-size: var(--text-xs);
     white-space: pre;
+  }
+
+  /* Colores forzados: la selección no puede depender solo del color de fondo. */
+  @media (forced-colors: active) {
+    .ln.hl {
+      outline: 1px solid Highlight;
+      outline-offset: -1px;
+    }
   }
 </style>

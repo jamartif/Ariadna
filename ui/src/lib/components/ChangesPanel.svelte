@@ -350,11 +350,11 @@
               role="row"
               id={rowId(i)}
               aria-rowindex={i + 1}
-              aria-expanded={!collapsed[it.section]}
               class:focused={i === clamped}
               style:height="{settings.headerHeight}px"
             >
-              <div role="gridcell" class="cell head-cell">
+              <!-- aria-expanded no es válido en role=row de un grid: va en la celda -->
+              <div role="gridcell" class="cell head-cell" aria-expanded={!collapsed[it.section]}>
                 <button
                   type="button"
                   class="collapse"
@@ -388,7 +388,6 @@
               role="row"
               id={rowId(i)}
               aria-rowindex={i + 1}
-              aria-expanded={it.open}
               class:focused={i === clamped}
               style:height="{settings.rowHeight}px"
               style:--depth={it.depth}
@@ -399,7 +398,7 @@
               onkeydown={() => {}}
               tabindex="-1"
             >
-              <div role="gridcell" class="cell dir-cell">
+              <div role="gridcell" class="cell dir-cell" aria-expanded={it.open}>
                 <Icon name={it.open ? 'chevron-down' : 'chevron-right'} size={12} />
                 <Icon name="folder" size={13} />
                 <span class="dir-name">{it.name}</span>

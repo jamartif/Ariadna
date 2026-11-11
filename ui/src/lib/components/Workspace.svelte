@@ -341,6 +341,17 @@
     overflow-x: auto;
     scrollbar-width: none;
     border-bottom: 1px solid var(--border);
+    container-type: inline-size;
+  }
+  /* Columna estrecha: sin iconos para que las cuatro pestañas quepan sin recortes ocultos. */
+  @container (max-width: 440px) {
+    .ptab {
+      padding: 0 var(--space-1);
+      gap: var(--space-1);
+    }
+    .ptab :global(svg:first-child) {
+      display: none;
+    }
   }
   .ptab {
     display: inline-flex;
@@ -438,6 +449,13 @@
     }
     .right {
       border-top: 1px solid var(--border);
+    }
+  }
+
+  /* Colores forzados: la selección no puede depender solo del color de fondo. */
+  @media (forced-colors: active) {
+    .ptab.on {
+      border-bottom-color: Highlight;
     }
   }
 </style>
