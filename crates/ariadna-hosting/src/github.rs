@@ -1,7 +1,7 @@
 //! GitHub (`github.com`, GitHub Enterprise Server por host y `*.ghe.com`).
 //!
-//! **NO VERIFICADO con servidor real**: los endpoints salen de la documentación de la API REST
-//! y GraphQL de GitHub (`specs/rust/spike-pr.md`). Las pruebas usan un servidor simulado.
+//! Verificado contra GitHub real el 2026-11-11 (`tests/github_real.rs`, ignorado; resultados en
+//! `specs/rust/spike-pr.md`). Las pruebas normales usan un servidor simulado.
 //!
 //! La API REST no puede listar ni resolver los hilos de revisión, así que los hilos en línea
 //! van por GraphQL (`reviewThreads`, `resolveReviewThread`) y los comentarios generales por
@@ -300,8 +300,46 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+/// Mensaje de un error de GitHub. En los 422 el detalle real va en `errors`, que son cadenas
+/// («Review Can not approve your own pull request»), objetos con `message` («A pull request
+/// already exists for …») u objetos `{resource, field, code}`; `message` solo dice
+/// «Validation Failed» o «Unprocessable Entity» (comprobado contra GitHub real).
+fn gh_message(body: &[u8]) -> Option<String> {
+    let head = error_message(body);
+    let v: Value = serde_json::from_slice(body).ok()?;
+    let details: Vec<String> = v
+        .get("errors")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|e| match e {
+                    Value::String(s) => Some(s.clone()),
+                    Value::Object(o) => o
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned)
+                        .or_else(|| {
+                            let field = o.get("field").and_then(Value::as_str)?;
+                            let code = o.get("code").and_then(Value::as_str).unwrap_or("invalid");
+                            Some(format!("{field}: {code}"))
+                        }),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let joined = match (head, details.is_empty()) {
+        (Some(h), true) => h,
+        (Some(h), false) => format!("{h}: {}", details.join("; ")),
+        (None, false) => details.join("; "),
+        (None, true) => return None,
+    };
+    let one_line: String = joined.split_whitespace().collect::<Vec<_>>().join(" ");
+    Some(one_line.chars().take(300).collect())
+}
+
 fn classify(reply: &Reply, scrub: &Scrubber) -> HostingError {
-    let msg = error_message(&reply.body).map(|m| scrub.scrub(&m));
+    let msg = gh_message(&reply.body).map(|m| scrub.scrub(&m));
     let lowered = msg.as_deref().unwrap_or("").to_lowercase();
     let status = reply.status.as_u16();
     let limited = lowered.contains("rate limit")
@@ -773,7 +811,11 @@ impl GitHub {
             checkout_ref: format!("refs/pull/{}/head", pr.number),
             is_fork,
             auto_complete: pr.auto_merge.as_ref().is_some_and(|v| !v.is_null()),
-            merge_detail: pr.mergeable_state.clone(),
+            // `unknown` = GitHub aún no lo ha calculado (o la PR ya está cerrada): no informa.
+            merge_detail: pr
+                .mergeable_state
+                .clone()
+                .filter(|m| !m.is_empty() && m != "unknown"),
         })
     }
 
@@ -895,7 +937,16 @@ impl PullRequestProvider for GitHub {
 
     async fn detail(&self, id: u64) -> HostingResult<PullRequestDetail> {
         let op = self.op().await?;
-        let pr = self.pr(&op, id).await?;
+        let mut pr = self.pr(&op, id).await?;
+        // `mergeable` llega `null` mientras GitHub lo calcula (comprobado: la primera lectura
+        // tras un cambio en la rama de destino). Se reintenta un par de veces.
+        for attempt in 0..2u32 {
+            if pr.mergeable.is_some() || state_of(&pr) != PrState::Active {
+                break;
+            }
+            tokio::time::sleep(self.http.config().backoff_base * (attempt + 2)).await;
+            pr = self.pr(&op, id).await?;
+        }
         self.build_detail(&op, pr).await
     }
 
@@ -938,17 +989,28 @@ impl PullRequestProvider for GitHub {
             )
             .await?
             .json()?;
+        // La PR ya existe: si GitHub rechaza a un revisor (p. ej. la propia autora, 422) no se
+        // devuelve un error —el usuario reintentaría y obtendría «ya existe»—, se anota.
+        let mut note = None;
         if !reviewers.is_empty() {
-            self.call(
-                &op,
-                Method::POST,
-                self.pull_url(pr.number, &["requested_reviewers"], &[])?,
-                Some(&json!({ "reviewers": reviewers })),
-            )
-            .await?;
+            let asked = self
+                .call(
+                    &op,
+                    Method::POST,
+                    self.pull_url(pr.number, &["requested_reviewers"], &[])?,
+                    Some(&json!({ "reviewers": reviewers })),
+                )
+                .await;
+            if let Err(e) = asked {
+                note = Some(format!("PR creada; no se pudo pedir la revisión: {e}"));
+            }
         }
         let fresh = self.pr(&op, pr.number).await?;
-        self.build_detail(&op, fresh).await
+        let mut detail = self.build_detail(&op, fresh).await?;
+        if note.is_some() {
+            detail.merge_detail = note;
+        }
+        Ok(detail)
     }
 
     async fn close(&self, id: u64) -> HostingResult<PullRequestDetail> {

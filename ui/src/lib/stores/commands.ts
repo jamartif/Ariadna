@@ -2,6 +2,7 @@ import { t, tn, type MessageKey } from '$lib/i18n';
 import { SHORTCUTS, formatCombo, isMac, runShortcut } from '$lib/shortcuts/registry';
 import type { AppStore } from './app.svelte';
 import { settings } from './settings.svelte';
+import { prOf } from './pullRequests.svelte';
 import { settingsUi } from './settingsPanel.svelte';
 
 export interface PaletteAction {
@@ -74,6 +75,18 @@ export function buildActions(app: AppStore): PaletteAction[] {
     add({ id: 'commit.focus', label: t('shortcut.focusCommit'), group: g2, shortcut: combo('commit.focus'), run: () => runShortcut('commit.focus') });
     add({ id: 'panel.changes', label: t('palette.showChanges'), group: g2, run: () => (tab.panel = 'changes') });
     add({ id: 'panel.history', label: t('palette.showHistory'), group: g2, run: () => (tab.panel = 'history') });
+    add({ id: 'pr.open', label: t('shortcut.pullRequests'), group: g2, shortcut: combo('pr.open'), run: () => (tab.panel = 'pullRequests') });
+    if (prOf(tab).supported) {
+      add({
+        id: 'pr.new',
+        label: t('palette.newPullRequest'),
+        group: g2,
+        run: () => {
+          tab.panel = 'pullRequests';
+          prOf(tab).startCreate();
+        }
+      });
+    }
     add({
       id: 'changes.toggleIgnored',
       label: tab.showIgnored ? t('palette.hideIgnored') : t('palette.showIgnored'),

@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { t, tn } from '$lib/i18n';
+  import { registerHandlers } from '$lib/shortcuts/registry';
   import type { TabState, Panel } from '$lib/stores/tab.svelte';
   import { conflictsOf } from '$lib/stores/conflicts.svelte';
+  import { prOf } from '$lib/stores/pullRequests.svelte';
   import Banner from './Banner.svelte';
   import BranchDetail from './BranchDetail.svelte';
   import BranchesPanel from './BranchesPanel.svelte';
@@ -14,6 +17,8 @@
   import HistoryDetail from './HistoryDetail.svelte';
   import HistoryPanel from './HistoryPanel.svelte';
   import Icon from './Icon.svelte';
+  import PrDetail from './PrDetail.svelte';
+  import PullRequestsPanel from './PullRequestsPanel.svelte';
   import Sidebar from './Sidebar.svelte';
   import Splitter from './Splitter.svelte';
 
@@ -56,8 +61,8 @@
 
   type PanelDef = {
     id: Panel;
-    label: 'panel.changes' | 'panel.history' | 'panel.branches' | 'panel.conflicts';
-    icon: 'file-diff' | 'history' | 'git-branch' | 'git-merge';
+    label: 'panel.changes' | 'panel.history' | 'panel.branches' | 'panel.conflicts' | 'panel.pullRequests';
+    icon: 'file-diff' | 'history' | 'git-branch' | 'git-merge' | 'git-pull-request';
   };
   const basePanels: PanelDef[] = [
     { id: 'changes', label: 'panel.changes', icon: 'file-diff' },
@@ -66,8 +71,39 @@
   ];
   /** El panel «Conflictos» solo existe mientras hay un merge, rebase o cherry-pick en curso. */
   const integrating = $derived((tab.snapshot?.integration ?? 'none') !== 'none');
-  const panels = $derived<PanelDef[]>(integrating ? [...basePanels, { id: 'conflicts', label: 'panel.conflicts', icon: 'git-merge' }] : basePanels);
+  /**
+   * «Pull requests» solo aparece si el remoto lo admite (`pull_request_support`, sin red). Si se llega
+   * por la paleta o el atajo con un remoto sin soporte, la pestaña se muestra mientras esté activa
+   * para explicar por qué no hay PR dentro de la app.
+   */
+  const prc = $derived(prOf(tab));
+  const prVisible = $derived(prc.supported || tab.panel === 'pullRequests');
+  const panels = $derived<PanelDef[]>([
+    ...basePanels,
+    ...(prVisible ? [{ id: 'pullRequests', label: 'panel.pullRequests', icon: 'git-pull-request' } as PanelDef] : []),
+    ...(integrating ? [{ id: 'conflicts', label: 'panel.conflicts', icon: 'git-merge' } as PanelDef] : [])
+  ]);
   const cc = $derived(conflictsOf(tab));
+
+  // El soporte de PR se pregunta a Rust (local) al abrir la pestaña y cuando cambian los remotos.
+  const remoteSig = $derived((tab.snapshot?.remotes ?? []).map((r) => `${r.name}=${r.fetchUrl}`).join('|'));
+  let lastSig: string | null = null;
+  $effect(() => {
+    const sig = remoteSig;
+    if (tab.hibernated || sig === lastSig) return;
+    if (lastSig !== null) prc.release();
+    lastSig = sig;
+    void prc.loadSupport();
+  });
+
+  onMount(() =>
+    registerHandlers({
+      'pr.open': () => {
+        tab.panel = 'pullRequests';
+        return true;
+      }
+    })
+  );
 
   // Si la integración termina (o se aborta) con el panel abierto, se vuelve a Cambios.
   $effect(() => {
@@ -201,6 +237,8 @@
             <HistoryPanel {tab} />
           {:else if tab.panel === 'conflicts'}
             <ConflictsPanel {tab} />
+          {:else if tab.panel === 'pullRequests'}
+            <PullRequestsPanel {tab} />
           {:else}
             <BranchesPanel {tab} />
           {/if}
@@ -225,6 +263,8 @@
           <BranchDetail {tab} />
         {:else if tab.panel === 'conflicts'}
           <ConflictEditor {tab} />
+        {:else if tab.panel === 'pullRequests'}
+          <PrDetail {tab} />
         {:else}
           <DiffView {tab} />
         {/if}

@@ -115,6 +115,26 @@ async fn git_credential_fill_no_interactivo_y_sin_dejar_rastro() {
         "IO"
     );
 
+    // 6b. Helper explícito (solo spike): `-c` en argv, sin ensanchar el entorno saneado.
+    let git = fake_git(
+        tmp.path(),
+        &format!(
+            "echo \"$@\" > {o}/argv\nenv > {o}/env\ncat > /dev/null\nprintf 'username=u\\npassword={TOKEN}\\n'"
+        ),
+    );
+    std::env::set_var("GIT_CONFIG_COUNT", "1");
+    GitCredentialFill::new(&git)
+        .with_helper_override("!gh.exe auth git-credential")
+        .credentials("https://github.com/o/r")
+        .await
+        .unwrap();
+    assert_eq!(
+        read("argv").trim(),
+        "-c credential.helper= -c credential.helper=!gh.exe auth git-credential credential fill"
+    );
+    assert!(!read("env").contains("GIT_CONFIG_COUNT"));
+    assert!(!read("argv").contains(TOKEN));
+
     // 7. El helper se cuelga: se corta por tiempo y es AUTH.
     let git = fake_git(tmp.path(), "sleep 20");
     let started = Instant::now();

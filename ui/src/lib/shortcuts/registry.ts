@@ -39,6 +39,8 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'changes.stageAll', combo: 'Mod+Shift+A', scope: 'tab', label: 'shortcut.stageAll' },
   { id: 'changes.unstageAll', combo: 'Mod+Shift+U', scope: 'tab', label: 'shortcut.unstageAll' },
   { id: 'commit.focus', combo: 'Mod+L', scope: 'tab', label: 'shortcut.focusCommit' },
+  // Mod+Shift+P (no Mod+P: lo usa imprimir en la WebView).
+  { id: 'pr.open', combo: 'Mod+Shift+P', scope: 'tab', label: 'shortcut.pullRequests' },
   { id: 'commit.submit', combo: 'Mod+Enter', scope: 'editor', label: 'shortcut.commit' },
   // Mod+Shift+G (no Alt: en macOS ⌥G produce «©» y la tecla no coincide).
   { id: 'ai.generate', combo: 'Mod+Shift+G', scope: 'tab', label: 'shortcut.aiGenerate' },

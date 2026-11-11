@@ -5,6 +5,7 @@
  * Un test comprueba que toda clave usada en el código existe aquí.
  */
 import { esConflicts } from './es.conflicts';
+import { esPr } from './es.pr';
 import { esRemotes } from './es.remotes';
 import { esScreens } from './es.screens';
 import { esSettings } from './es.settings';
@@ -14,6 +15,7 @@ export const es = {
   ...esRemotes,
   ...esSettings,
   ...esConflicts,
+  ...esPr,
   // Aplicación
   'app.loading': 'Cargando Ariadna…',
   'app.errorTitle': 'No se pudo iniciar Ariadna',

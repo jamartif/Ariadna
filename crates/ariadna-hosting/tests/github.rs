@@ -1049,3 +1049,148 @@ fn las_capacidades_difieren_por_proveedor() {
     assert_eq!(v["provider"], "github");
     assert_eq!(v["strategies"][0], "merge");
 }
+
+// --- correcciones tras el spike REAL (2026-11-11) -----------------------------------------------
+
+/// GitHub real: en los 422 `message` es solo «Validation Failed»/«Unprocessable Entity»; el
+/// motivo va en `errors` (cadenas u objetos con `message`, o `{resource, field, code}`).
+#[tokio::test]
+async fn los_422_reales_se_clasifican_por_el_detalle_de_errors() {
+    let server = MockServer::start().await;
+    err(
+        &server,
+        "POST",
+        &format!("{PULLS}/5/reviews"),
+        422,
+        json!({"message": "Unprocessable Entity", "errors": ["Review Can not approve your own pull request"]}),
+    )
+    .await;
+    ok(
+        &server,
+        "GET",
+        &format!("{PULLS}/5"),
+        gh_pr(5, "open", false),
+    )
+    .await;
+    err(
+        &server,
+        "POST",
+        PULLS,
+        422,
+        json!({"message": "Validation Failed", "errors": [{"resource": "Issue", "code": "custom",
+            "message": "A pull request already exists for jamartif:spike/feature-a."}]}),
+    )
+    .await;
+    let p = provider(&server, fast()).await;
+    let e = p.vote(5, Vote::Approve, None).await.unwrap_err();
+    assert_eq!(e.code(), "POLICY", "{e}");
+    assert!(e.to_string().contains("approve your own"), "{e}");
+    let mut n = NewPullRequest {
+        title: "t".into(),
+        description: String::new(),
+        source_branch: "feature/x".into(),
+        target_branch: "main".into(),
+        draft: false,
+        reviewers: vec![],
+        work_item_ids: vec![],
+    };
+    assert_eq!(p.create(&n).await.unwrap_err().code(), "CONFLICT");
+
+    // Rama inexistente: `{resource, field, code}` sin `message`.
+    let server = MockServer::start().await;
+    err(
+        &server,
+        "POST",
+        PULLS,
+        422,
+        json!({"message": "Validation Failed", "errors": [{"resource": "PullRequest", "field": "head", "code": "invalid"}]}),
+    )
+    .await;
+    n.source_branch = "no-existe".into();
+    let e = provider(&server, fast())
+        .await
+        .create(&n)
+        .await
+        .unwrap_err();
+    assert_eq!(e.code(), "INVALID_REFERENCE");
+    assert!(e.to_string().contains("head: invalid"), "{e}");
+}
+
+/// GitHub real: pedir como revisora a la propia autora da 422 *después* de crear la PR. No debe
+/// devolverse un error (la PR existe): se anota en `merge_detail`.
+#[tokio::test]
+async fn crear_con_revisor_rechazado_devuelve_la_pr_con_una_nota() {
+    let server = MockServer::start().await;
+    ok(&server, "POST", PULLS, gh_pr(12, "open", false)).await;
+    err(
+        &server,
+        "POST",
+        &format!("{PULLS}/12/requested_reviewers"),
+        422,
+        json!({"message": "Review cannot be requested from pull request author."}),
+    )
+    .await;
+    ok(
+        &server,
+        "GET",
+        &format!("{PULLS}/12"),
+        gh_pr(12, "open", false),
+    )
+    .await;
+    mount_detail_extras(&server, 12).await;
+    let d = provider(&server, fast())
+        .await
+        .create(&NewPullRequest {
+            title: "t".into(),
+            description: String::new(),
+            source_branch: "feature/x".into(),
+            target_branch: "main".into(),
+            draft: false,
+            reviewers: vec!["ana".into()],
+            work_item_ids: vec![],
+        })
+        .await
+        .unwrap();
+    assert_eq!(d.summary.id, 12);
+    let note = d.merge_detail.unwrap();
+    assert!(
+        note.starts_with("PR creada;") && note.contains("author"),
+        "{note}"
+    );
+}
+
+/// GitHub real: `mergeable` es `null` mientras GitHub lo calcula; el detalle reintenta, y un
+/// `mergeable_state` «unknown» no se muestra como detalle de fusión.
+#[tokio::test]
+async fn el_detalle_reintenta_mientras_mergeable_es_null() {
+    let server = MockServer::start().await;
+    let mut calculando = gh_pr(7, "open", false);
+    calculando["mergeable"] = Value::Null;
+    calculando["mergeable_state"] = json!("unknown");
+    Mock::given(method("GET"))
+        .and(path(format!("{PULLS}/7")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(calculando))
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mut dirty = gh_pr(7, "open", false);
+    dirty["mergeable"] = json!(false);
+    dirty["mergeable_state"] = json!("dirty");
+    ok(&server, "GET", &format!("{PULLS}/7"), dirty).await;
+    mount_detail_extras(&server, 7).await;
+    let d = provider(&server, fast()).await.detail(7).await.unwrap();
+    assert_eq!(d.summary.merge_status, MergeStatus::Conflicts);
+    assert_eq!(d.merge_detail.as_deref(), Some("dirty"));
+
+    // Una PR fusionada llega con `mergeable_state: unknown`: sin detalle.
+    let server = MockServer::start().await;
+    let mut merged = gh_pr(8, "closed", true);
+    merged["mergeable"] = Value::Null;
+    merged["mergeable_state"] = json!("unknown");
+    ok(&server, "GET", &format!("{PULLS}/8"), merged).await;
+    mount_detail_extras(&server, 8).await;
+    let d = provider(&server, fast()).await.detail(8).await.unwrap();
+    assert_eq!(d.summary.state, PrState::Completed);
+    assert_eq!(d.merge_detail, None);
+}

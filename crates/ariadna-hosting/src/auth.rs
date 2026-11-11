@@ -208,6 +208,8 @@ impl CredentialSource for StaticCredentials {
 pub struct GitCredentialFill {
     git: PathBuf,
     timeout: Duration,
+    /// Solo pruebas reales (spike): helper de credenciales fijado por `-c` para este proceso.
+    helper: Option<String>,
 }
 
 /// Variables de entorno que se heredan al lanzar `git credential fill`.
@@ -250,7 +252,21 @@ impl GitCredentialFill {
         Self {
             git: git.into(),
             timeout: Duration::from_secs(30),
+            helper: None,
         }
+    }
+
+    /// **Solo pruebas/spike.** Fija el helper de credenciales (`credential.helper`) únicamente
+    /// para este proceso con `git -c credential.helper= -c credential.helper=<helper>`, p. ej.
+    /// `!gh.exe auth git-credential` en WSL, donde no hay configuración de git del equipo.
+    /// El entorno saneado descarta `GIT_CONFIG_COUNT/KEY/VALUE`, de modo que la producción
+    /// no puede cambiar de helper por variables de entorno; esto es una opción explícita del
+    /// constructor que la aplicación no usa. El helper no es un secreto (va en `argv`).
+    /// Además deja pasar `WSL_INTEROP`/`WSL_DISTRO_NAME`, que un helper de Windows necesita.
+    pub fn with_helper_override(mut self, helper: impl Into<String>) -> Self {
+        let h: String = helper.into();
+        self.helper = (!h.trim().is_empty() && !h.chars().any(char::is_control)).then_some(h);
+        self
     }
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
@@ -260,6 +276,10 @@ impl GitCredentialFill {
 
     fn command(&self) -> Command {
         let mut cmd = Command::new(&self.git);
+        if let Some(h) = &self.helper {
+            cmd.args(["-c", "credential.helper=", "-c"])
+                .arg(format!("credential.helper={h}"));
+        }
         cmd.args(["credential", "fill"])
             .env_clear()
             .stdin(Stdio::piped())
@@ -269,6 +289,13 @@ impl GitCredentialFill {
         for key in ENV_ALLOWLIST {
             if let Some(v) = std::env::var_os(key) {
                 cmd.env(key, v);
+            }
+        }
+        if self.helper.is_some() {
+            for key in ["WSL_INTEROP", "WSL_DISTRO_NAME"] {
+                if let Some(v) = std::env::var_os(key) {
+                    cmd.env(key, v);
+                }
             }
         }
         cmd.env("GIT_TERMINAL_PROMPT", "0")

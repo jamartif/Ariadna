@@ -3,6 +3,7 @@
   import type { TabState } from '$lib/stores/tab.svelte';
   import { branchesOf } from '$lib/stores/branches.svelte';
   import { conflictsOf } from '$lib/stores/conflicts.svelte';
+  import { prOf } from '$lib/stores/pullRequests.svelte';
   import { remotesOf } from '$lib/stores/remotes.svelte';
   import { branchNameProblem } from '$lib/util/branchName';
   import EmptyState from './EmptyState.svelte';
@@ -23,6 +24,12 @@
   const web = $derived(br ? remotes.linkFor(br.name, remote) : null);
   const webOk = $derived(web !== null && web.remote.canOpen);
   const prOk = $derived(web !== null && web.remote.canCreatePullRequest);
+  /** Alternativa al navegador: el formulario de PR de Ariadna (solo si el remoto lo admite). */
+  const prc = $derived(prOf(tab));
+  function createHere() {
+    prc.startCreate();
+    tab.panel = 'pullRequests';
+  }
 
   let renaming = $state(false);
   let renameTo = $state('');
@@ -144,6 +151,17 @@
       >
         <Icon name="git-merge" size={14} />{t('branches.createPr')}
       </button>
+      {#if prc.supported}
+        <button
+          type="button"
+          class="btn"
+          disabled={!br.isHead || busy}
+          title={br.isHead ? t('branches.createPrHere.hint') : t('branches.createPrHere.needCurrent')}
+          onclick={createHere}
+        >
+          <Icon name="git-pull-request" size={14} />{t('branches.createPrHere')}
+        </button>
+      {/if}
     </div>
     {#if web && webOk}
       <p class="note"><Icon name="cloud" size={12} />{t('branches.webVia', { remote: web.remote.name, provider: web.remote.providerLabel })}</p>

@@ -1,6 +1,6 @@
 # Spike de pull requests (M8): endpoints, permisos y lo que NO está verificado
 
-> **Estado: NO VERIFICADO con servidor real.** No existe ningún token real en este entorno y no se ha
+> **Estado: GitHub VERIFICADO con servidor real (2026-11-11, ver «Resultado del spike REAL»); Azure DevOps NO VERIFICADO.** No existe ningún token real en este entorno y no se ha
 > contactado con ninguna API real. Todo lo de abajo sale de la **documentación publicada** de Azure
 > DevOps Services REST 7.1 y de la API REST/GraphQL de GitHub, y se ha probado solo contra un
 > servidor simulado (`wiremock`) con JSON reconstruido de esa documentación. Cada fila marcada
@@ -9,6 +9,20 @@
 Código: `crates/ariadna-hosting` (`azure.rs`, `github.rs`, `http.rs`, `auth.rs`). Pruebas:
 `crates/ariadna-hosting/tests/{azure_devops,github,credential_fill}.rs` y
 `src-tauri/src/core/tests/pull_requests.rs`.
+
+## Resultado del spike REAL de GitHub (2026-11-11)
+
+Ejecutado con `crates/ariadna-hosting/tests/github_real.rs` (`#[ignore]`, `ARIADNA_SPIKE_REPO=jamartif/ariadna-spike-pr`) contra un repo privado desechable. Credencial por `git credential fill` (helper `gh.exe auth git-credential`), sin imprimir ni guardar el token. **72 OK, 5 LÍMITE, 0 FALLO.**
+
+**VERIFICADO en GitHub real:** capacidades, crear PR (normal y borrador), duplicada/sin cambios/rama inexistente (422 → CONFLICT / INVALID_REFERENCE), listar (abiertas, mías, revisor, cerradas, borradores), paginación por `Link`, detalle (mergeable, checks, revisores), archivos y parche, hilos en línea (RIGHT/LEFT), comentario general, responder, resolver y reabrir hilo (GraphQL), review COMMENT, cerrar y reabrir, merge/squash/rebase, merge con conflicto (405 → POLICY), merge con sha obsoleto (409), 404 y 401 (AUTH).
+
+**Límites reales de GitHub (no son fallos del cliente):**
+- No se puede aprobar ni pedir cambios en la PR propia (422) ni pedir revisión al autor.
+- No se puede completar un borrador (405/422).
+- No se puede reabrir una PR ya fusionada (422).
+- Borrar el repositorio exige un permiso que el token no tiene; borrar ramas por API sí funciona.
+
+**Sigue NO VERIFICADO:** todo Azure DevOps (no hay cuenta), `*.ghe.com`/GHES, `git credential fill` con GCM real de macOS/Windows, TLS contra servidor real distinto de GitHub, y aprobar/rechazar con una segunda cuenta.
 
 ## Reglas que NO dependen del spike (ya verificadas por pruebas)
 

@@ -7,8 +7,23 @@
   import EmptyState from './EmptyState.svelte';
   import VirtualList from './VirtualList.svelte';
 
-  /** Diff de solo lectura (historial): sin acciones de preparar. */
-  let { file }: { file: FileDiff } = $props();
+  /**
+   * Diff de solo lectura (historial, pull requests): sin acciones de preparar. Con `onlineaction`
+   * cada línea ofrece un botón para comentar (PR) y `marks` indica cuántos hilos hay en cada
+   * línea (`old:N` / `new:N`). Sin esas propiedades el componente es el de siempre.
+   */
+  interface Props {
+    file: FileDiff;
+    onlineaction?: (a: { line: number; side: 'old' | 'new'; threads: number }) => void;
+    marks?: ReadonlyMap<string, number>;
+  }
+  let { file, onlineaction, marks }: Props = $props();
+
+  function anchorOf(line: { kind: string; oldLineNumber: number | null; newLineNumber: number | null }): { line: number; side: 'old' | 'new' } | null {
+    if (line.kind === 'deletion' && line.oldLineNumber !== null) return { line: line.oldLineNumber, side: 'old' };
+    if (line.newLineNumber !== null) return { line: line.newLineNumber, side: 'new' };
+    return null;
+  }
 
   let forceShow = $state(false);
   let expanded = $state<Record<string, boolean>>({});
@@ -61,6 +76,22 @@
             <span class="gut old" aria-hidden="true">{line.oldLineNumber ?? ''}</span>
             <span class="gut new" aria-hidden="true">{line.newLineNumber ?? ''}</span>
             <span class="mark" aria-hidden="true">{marker(line.kind)}</span>
+            {#if onlineaction}
+              {@const anchor = anchorOf(line)}
+              {@const count = anchor ? (marks?.get(`${anchor.side}:${anchor.line}`) ?? 0) : 0}
+              {#if anchor}
+                <button
+                  type="button"
+                  class="cbtn"
+                  class:has={count > 0}
+                  tabindex="-1"
+                  aria-label={count > 0 ? tn('pr.diff.threadsOnLine', count, { line: anchor.line }) : t('pr.diff.commentLine', { line: anchor.line })}
+                  onclick={() => onlineaction({ ...anchor, threads: count })}
+                >{count > 0 ? count : '+'}</button>
+              {:else}
+                <span class="cbtn-gap"></span>
+              {/if}
+            {/if}
             {#if kindName(line.kind)}<span class="sr-only">{kindName(line.kind)}: </span>{/if}
             <span class="text mono">{tr.text}</span>
             {#if tr.truncated}
@@ -155,6 +186,40 @@
   }
   .deletion .mark {
     color: var(--danger);
+  }
+  .cbtn,
+  .cbtn-gap {
+    flex: none;
+    width: 22px;
+    margin: 0 2px;
+  }
+  .cbtn {
+    align-self: center;
+    height: calc(var(--lh) - 4px);
+    min-height: 0;
+    min-width: 0;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--accent);
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+    opacity: 0;
+  }
+  .line:hover .cbtn,
+  .cbtn:focus-visible,
+  .cbtn.has {
+    opacity: 1;
+  }
+  .cbtn.has {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+  .cbtn:hover {
+    background: var(--accent-soft);
   }
   .text {
     flex: none;

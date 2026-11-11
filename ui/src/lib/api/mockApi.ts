@@ -1334,8 +1334,18 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       lastPullRebase = rebase ?? settingsData.pullRebase;
       return 'upToDate';
     },
-    async push() {
+    async push(tabId, remote, refspec, setUpstream) {
+      const r = repoOf(tabId);
       await delay(latency * 3);
+      // Publicar de verdad en el simulado: aparece la rama remota y la local la sigue (la UI de PR lo necesita).
+      const local = r.branches.find((x) => x.name === (refspec ?? r.branch));
+      if (!local) return;
+      const remoteName = `${remote}/${local.name}`;
+      if (!r.remoteBranches.some((x) => x.name === remoteName)) {
+        r.remoteBranches = [...r.remoteBranches, branch(remoteName, r.remoteBranches.length + 80, false, null)];
+      }
+      r.branches = r.branches.map((x) => (x === local ? { ...x, ahead: 0, upstream: setUpstream || !x.upstream ? remoteName : x.upstream } : x));
+      publish(r);
     },
 
     async listRemotes(tabId) {
