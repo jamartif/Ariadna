@@ -260,6 +260,9 @@ impl Counter {
     fn get(&self) -> usize {
         self.0.load(Ordering::SeqCst)
     }
+    fn reset(&self) {
+        self.0.store(0, Ordering::SeqCst);
+    }
     fn trigger(&self) -> Trigger {
         let n = Arc::clone(&self.0);
         Arc::new(move || {
@@ -330,6 +333,13 @@ impl Fake {
             !w.is_polling(),
             "en un tempdir local debe vigilar de forma nativa"
         );
+        // FSEvents (macOS) reentrega eventos de justo antes de arrancar el flujo, es decir, la
+        // creación del propio repo de prueba. Se espera a que se asienten (más que el
+        // debounce de `fast()`) y se parte de cero: solo interesa lo que ocurra después.
+        if cfg!(target_os = "macos") {
+            std::thread::sleep(Duration::from_millis(1500));
+            c.reset();
+        }
         w
     }
 }
