@@ -292,6 +292,12 @@ async fn stays(c: &Counter, expected: usize, quiet: Duration, what: &str) {
     assert_eq!(c.get(), expected, "{what}");
 }
 
+/// Como [`stays`], pero admite hasta `max` disparos (plataformas que informan del directorio).
+async fn stays_at_most(c: &Counter, max: usize, quiet: Duration, what: &str) {
+    tokio::time::sleep(quiet).await;
+    assert!(c.get() <= max, "{what}: {} disparos (máx {max})", c.get());
+}
+
 /// Repo mínimo (sin git instalado): `.git/{HEAD,refs,objects}` más un worktree.
 struct Fake {
     _tmp: tempfile::TempDir,
@@ -380,7 +386,15 @@ async fn el_ruido_no_dispara_y_el_estado_de_git_si() {
     std::fs::write(fx.git.join("refs/heads/main.lock"), b"").unwrap();
     std::fs::write(fx.work.join("node_modules/pkg/index.js"), b"x").unwrap();
     std::fs::write(fx.work.join("src/.main.rs.swp"), b"x").unwrap();
-    stays(&c, 0, ms(700), "ruido").await;
+    if cfg!(target_os = "macos") {
+        // FSEvents informa de la carpeta, no del archivo: un archivo de ruido dentro de `src/`
+        // parece un cambio y provoca un refresco. Es inofensivo (el estado no cambia y no se
+        // publica snapshot), pero aquí no se puede distinguir a nivel de archivo.
+        stays_at_most(&c, 1, ms(700), "ruido (macOS: FSEvents por carpeta)").await;
+        c.reset();
+    } else {
+        stays(&c, 0, ms(700), "ruido").await;
+    }
 
     // Como hace git: escribe `index.lock` y lo renombra a `index`.
     std::fs::rename(fx.git.join("index.lock"), fx.git.join("index")).unwrap();
