@@ -48,6 +48,19 @@ jobs:
       - name: Listar resultado
         shell: bash
         run: find target -path '*release/bundle*' -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.msi' \) -print
+      # ZIP portable para Windows: el ejecutable y sus recursos, sin instalador.
+      - name: Empaquetar ZIP portable
+        if: matrix.name == 'windows-x64'
+        shell: pwsh
+        run: |
+          $app = Get-ChildItem -Path target/release -Filter 'ariadna-app.exe' -Recurse | Select-Object -First 1
+          if (-not $app) { throw 'No encuentro ariadna-app.exe' }
+          $dir = New-Item -ItemType Directory -Force -Path portables/Ariadna
+          Copy-Item $app.FullName "$($dir.FullName)/Ariadna.exe"
+          # Recursos que Tauri deja junto al ejecutable (plugins, iconos, etc.).
+          Get-ChildItem $app.Directory | Where-Object { $_.Name -ne 'ariadna-app.exe' } | Copy-Item -Destination $dir.FullName -Recurse
+          Compress-Archive -Path portables/Ariadna -DestinationPath "Ariadna_0.1.0_x64-portable.zip" -Force
+          Get-Item Ariadna_0.1.0_x64-portable.zip | Select-Object Name,Length
       - uses: actions/upload-artifact@v4
         with:
           name: ariadna-${{ matrix.name }}
@@ -55,3 +68,4 @@ jobs:
           path: |
             target/release/bundle/nsis/*.exe
             target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            Ariadna_*_x64-portable.zip

@@ -216,6 +216,8 @@ cargo test -p ariadna-git --test perf -- --ignored --nocapture
 
 Detalle completo en [`docs/firma-de-codigo.md`](docs/firma-de-codigo.md).
 
+Si Windows bloquea la instalación por **Smart App Control**, hay un ZIP portable y una guía con las vías que sí funcionan (Windows Sandbox, otra máquina): [`docs/windows-sin-instalar.md`](docs/windows-sin-instalar.md).
+
 ## Licencia
 
 [MIT](LICENSE). Úsalo, modifícalo y redistribúyelo; si publicas una versión modificada,
