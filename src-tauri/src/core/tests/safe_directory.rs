@@ -42,7 +42,10 @@ async fn al_aceptar_se_anade_solo_esa_carpeta_y_nunca_asterisco() {
     let text = config(&cfg);
     assert!(text.contains("[safe]"), "{text}");
     assert!(text.contains("directory ="), "{text}");
-    assert!(text.contains(&Env::s(&repo)), "{text}");
+    // git escribe la ruta con el separador del sistema (`\` en Windows) y el test la compara
+    // con `/`: se normalizan ambos lados.
+    let norm = |s: &str| s.replace('\\', "/");
+    assert!(norm(&text).contains(&norm(&Env::s(&repo))), "{text}");
     assert!(!text.contains('*'), "{text}");
     // Idempotente: aceptar otra vez no rompe nada.
     assert!(
