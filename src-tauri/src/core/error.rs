@@ -18,7 +18,7 @@ pub struct ApiError {
 pub type ApiResult<T> = Result<T, ApiError>;
 
 /// Todos los códigos del contrato (para tests y documentación).
-pub const ALL_CODES: [&str; 42] = [
+pub const ALL_CODES: [&str; 48] = [
     "MERGE_CONFLICTS",
     "CONFLICTS_PENDING",
     "CONFLICT_MARKERS_REMAIN",
@@ -35,6 +35,12 @@ pub const ALL_CODES: [&str; 42] = [
     "DIVERGED_LOCAL_BRANCH",
     "INVALID_REFERENCE",
     "HUNK_NOT_FOUND",
+    "PATCH_REJECTED",
+    "STASH_NOT_FOUND",
+    "NOTHING_TO_STASH",
+    "INVALID_TAG_NAME",
+    "TAG_EXISTS",
+    "TAG_NOT_FOUND",
     "NO_INTEGRATION",
     "CONFIRMATION_REQUIRED",
     "PATH_ESCAPES_REPOSITORY",
@@ -141,6 +147,12 @@ impl From<GitError> for ApiError {
             }
             GitError::InvalidReference(r) => ("INVALID_REFERENCE", non_empty(r)),
             GitError::HunkNotFound { path } => ("HUNK_NOT_FOUND", non_empty(path)),
+            GitError::PatchRejected { reason, .. } => ("PATCH_REJECTED", non_empty(reason)),
+            GitError::StashNotFound { oid } => ("STASH_NOT_FOUND", non_empty(oid)),
+            GitError::NothingToStash => ("NOTHING_TO_STASH", None),
+            GitError::InvalidTagName { name, .. } => ("INVALID_TAG_NAME", non_empty(name)),
+            GitError::TagExists { name } => ("TAG_EXISTS", non_empty(name)),
+            GitError::TagNotFound { name } => ("TAG_NOT_FOUND", non_empty(name)),
             GitError::NoIntegrationInProgress => ("NO_INTEGRATION", None),
             GitError::ConfirmationRequired { action } => {
                 ("CONFIRMATION_REQUIRED", non_empty(action))

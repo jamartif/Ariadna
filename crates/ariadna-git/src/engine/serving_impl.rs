@@ -13,6 +13,8 @@ use crate::models::{
     IntegrationState, MergeFastForward, MergeResult, Remote, Repository,
 };
 use crate::serving::{Confirmation, GitServing};
+use crate::stash::{StashApplyResult, StashEntry, StashPushOptions};
+use crate::tag::Tag;
 
 #[async_trait]
 impl GitServing for GitCliEngine {
@@ -44,6 +46,51 @@ impl GitServing for GitCliEngine {
     ) -> GitResult<()> {
         self.unstage_hunk(repo, hunk, path).await
     }
+    async fn stage_lines(
+        &self,
+        repo: &Repository,
+        hunk: &DiffHunk,
+        lines: &[u32],
+        path: &GitPath,
+    ) -> GitResult<()> {
+        self.stage_lines(repo, hunk, lines, path).await
+    }
+    async fn unstage_lines(
+        &self,
+        repo: &Repository,
+        hunk: &DiffHunk,
+        lines: &[u32],
+        path: &GitPath,
+    ) -> GitResult<()> {
+        self.unstage_lines(repo, hunk, lines, path).await
+    }
+    async fn stash_list(&self, repo: &Repository) -> GitResult<Vec<StashEntry>> {
+        self.stash_list(repo).await
+    }
+    async fn stash_push(
+        &self,
+        repo: &Repository,
+        options: &StashPushOptions,
+    ) -> GitResult<StashEntry> {
+        self.stash_push(repo, options).await
+    }
+    async fn stash_apply(&self, repo: &Repository, oid: &str) -> GitResult<StashApplyResult> {
+        self.stash_apply(repo, oid).await
+    }
+    async fn stash_pop(&self, repo: &Repository, oid: &str) -> GitResult<StashApplyResult> {
+        self.stash_pop(repo, oid).await
+    }
+    async fn stash_drop(
+        &self,
+        repo: &Repository,
+        oid: &str,
+        confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        self.stash_drop(repo, oid, confirmation).await
+    }
+    async fn stash_diff(&self, repo: &Repository, oid: &str) -> GitResult<Vec<FileDiff>> {
+        self.stash_diff(repo, oid).await
+    }
     async fn commit(
         &self,
         repo: &Repository,
@@ -65,6 +112,47 @@ impl GitServing for GitCliEngine {
         limit: usize,
     ) -> GitResult<Vec<Commit>> {
         self.log_page(repo, skip, limit).await
+    }
+    async fn log_after(
+        &self,
+        repo: &Repository,
+        cursor: &[String],
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        self.log_after(repo, cursor, limit).await
+    }
+    async fn tags(&self, repo: &Repository) -> GitResult<Vec<Tag>> {
+        self.tags(repo).await
+    }
+    async fn create_tag(
+        &self,
+        repo: &Repository,
+        name: &str,
+        target: Option<&str>,
+        message: Option<&str>,
+    ) -> GitResult<Tag> {
+        self.create_tag(repo, name, target, message).await
+    }
+    async fn delete_tag(
+        &self,
+        repo: &Repository,
+        name: &str,
+        confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        self.delete_tag(repo, name, confirmation).await
+    }
+    async fn push_tag(&self, repo: &Repository, remote: &str, name: &str) -> GitResult<()> {
+        self.push_tag(repo, remote, name).await
+    }
+    async fn delete_remote_tag(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        name: &str,
+        confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        self.delete_remote_tag(repo, remote, name, confirmation)
+            .await
     }
     async fn search_log(
         &self,

@@ -34,6 +34,22 @@ impl AppCore {
         .await
     }
 
+    /// Página siguiente del historial por **cursor** (sin `--skip`): `cursor` es la frontera del
+    /// recorrido (ver `ariadna_git::history_cursor`), `limit` el tamaño de la página. El orden es
+    /// el de `log_page`; el coste no depende de la profundidad.
+    pub async fn log_after(
+        &self,
+        tab_id: &str,
+        cursor: Vec<String>,
+        limit: usize,
+    ) -> ApiResult<Vec<Commit>> {
+        let limit = limit.clamp(1, MAX_PAGE);
+        self.read_op(tab_id, "historial", move |e, r| {
+            Box::pin(async move { e.log_after(&r, &cursor, limit).await })
+        })
+        .await
+    }
+
     /// Borrar una rama local con confirmación nativa. Si git la considera no fusionada se pide
     /// una segunda confirmación, más seria, para forzar el borrado.
     pub async fn delete_branch(&self, tab_id: &str, name: String, force: bool) -> ApiResult<Done> {

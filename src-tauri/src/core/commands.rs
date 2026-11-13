@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use ariadna_git::session::OpFuture;
 use ariadna_git::{
-    amend, Commit, Confirmation, ConflictFile, DiffScope, FileDiff, GitPath, GitServing,
+    amend, Commit, Confirmation, ConflictFile, DiffScope, FileDiff, GitError, GitPath, GitServing,
     IntegrationState, MergeFastForward, MergeResult, RefreshOutcome, Repository, RepositorySession,
+    StashApplyResult, StashEntry, StashPushOptions,
 };
 
 use super::api::{AmendDraft, ApiSnapshot, CommitResult, Done, HunkArg};
@@ -148,6 +149,142 @@ impl AppCore {
             (path, hunk),
             |e, r, (p, h)| Box::pin(async move { e.unstage_hunk(&r, &h, &p).await }),
         )
+        .await
+    }
+
+    /// Prepara solo las líneas `lines` (índices en `hunk.lines`) de un hunk.
+    pub async fn stage_lines(
+        &self,
+        tab_id: &str,
+        path: GitPath,
+        hunk: HunkArg,
+        lines: Vec<u32>,
+    ) -> ApiResult<()> {
+        let hunk: ariadna_git::DiffHunk = hunk.into();
+        self.mutate_op(
+            tab_id,
+            "preparar líneas",
+            (path, hunk, lines),
+            |e, r, (p, h, l)| Box::pin(async move { e.stage_lines(&r, &h, &l, &p).await }),
+        )
+        .await
+    }
+
+    /// Quita de preparados solo las líneas `lines` de un hunk preparado.
+    pub async fn unstage_lines(
+        &self,
+        tab_id: &str,
+        path: GitPath,
+        hunk: HunkArg,
+        lines: Vec<u32>,
+    ) -> ApiResult<()> {
+        let hunk: ariadna_git::DiffHunk = hunk.into();
+        self.mutate_op(
+            tab_id,
+            "quitar líneas de preparados",
+            (path, hunk, lines),
+            |e, r, (p, h, l)| Box::pin(async move { e.unstage_lines(&r, &h, &l, &p).await }),
+        )
+        .await
+    }
+
+    // --- stash -----------------------------------------------------------------------------
+
+    pub async fn stash_list(&self, tab_id: &str) -> ApiResult<Vec<StashEntry>> {
+        self.read_op(tab_id, "stashes", |e, r| {
+            Box::pin(async move { e.stash_list(&r).await })
+        })
+        .await
+    }
+
+    pub async fn stash_push(
+        &self,
+        tab_id: &str,
+        message: Option<String>,
+        include_untracked: bool,
+        staged_only: bool,
+    ) -> ApiResult<StashEntry> {
+        let options = StashPushOptions {
+            message,
+            include_untracked,
+            staged_only,
+        };
+        self.mutate_op(tab_id, "guardar en stash", options, |e, r, o| {
+            Box::pin(async move { e.stash_push(&r, &o).await })
+        })
+        .await
+    }
+
+    pub async fn stash_apply(&self, tab_id: &str, oid: String) -> ApiResult<StashApplyResult> {
+        self.mutate_op(tab_id, "aplicar stash", oid, |e, r, o| {
+            Box::pin(async move { e.stash_apply(&r, &o).await })
+        })
+        .await
+    }
+
+    /// Aplica y borra el stash. Con conflictos el stash se conserva y el repo queda con las
+    /// entradas sin resolver (las ve el panel de Conflictos).
+    pub async fn stash_pop(&self, tab_id: &str, oid: String) -> ApiResult<StashApplyResult> {
+        self.mutate_op(tab_id, "sacar del stash", oid, |e, r, o| {
+            Box::pin(async move { e.stash_pop(&r, &o).await })
+        })
+        .await
+    }
+
+    /// Borrar un stash: confirmación nativa que nombra repo, rama y mensaje.
+    pub async fn stash_drop(&self, tab_id: &str, oid: String) -> ApiResult<Done> {
+        let (s, meta) = self.live(tab_id)?;
+        let wanted = oid.clone();
+        let list = self.stash_list(tab_id).await?;
+        let needle = wanted.to_ascii_lowercase();
+        let valid =
+            (4..=64).contains(&needle.len()) && needle.bytes().all(|b| b.is_ascii_hexdigit());
+        if !valid {
+            return Err(GitError::InvalidReference(wanted).into());
+        }
+        // Sin confirmación no se borra nada: si ya no existe, se dice y se acaba.
+        let Some(entry) = list.iter().find(|e| e.oid.starts_with(&needle)) else {
+            return Err(GitError::StashNotFound { oid: wanted }.into());
+        };
+        let detail = format!(
+            "stash@{{{}}}: {}{}",
+            entry.index,
+            entry.message,
+            entry
+                .branch
+                .as_deref()
+                .map(|b| format!(" (rama {b})"))
+                .unwrap_or_default()
+        );
+        let ok = self
+            .inner
+            .prompter
+            .confirm(
+                "Borrar el stash",
+                &format!(
+                    "En {}: se borrará el stash y sus cambios guardados. No se puede deshacer.",
+                    Self::context(&s, &meta)
+                ),
+                &detail,
+            )
+            .await;
+        if !ok {
+            return Ok(Done { done: false });
+        }
+        let confirmation = Confirmation::granted("borrar el stash");
+        s.mutate("borrar stash", move |e, r| {
+            let (o, c) = (oid.clone(), confirmation.clone());
+            Box::pin(async move { e.stash_drop(&r, &o, &c).await })
+        })
+        .await?;
+        Ok(Done { done: true })
+    }
+
+    /// Diff de un stash (para verlo antes de aplicarlo).
+    pub async fn stash_diff(&self, tab_id: &str, oid: String) -> ApiResult<Vec<FileDiff>> {
+        self.read_op(tab_id, "diff del stash", move |e, r| {
+            Box::pin(async move { e.stash_diff(&r, &oid).await })
+        })
         .await
     }
 

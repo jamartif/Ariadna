@@ -4,6 +4,7 @@
 //! Los métodos viven como **métodos inherentes** repartidos por archivos:
 //! * `core_ops`: abrir repo, status, stage/unstage, commit, amend, log, diff.
 //! * `branch_ops`: ramas, remotos, merge, integración, conflictos.
+//! * `stash_ops`: stash.
 //!
 //! `impl GitServing for GitCliEngine` (en `serving_impl.rs`) solo reenvía a esos métodos, que
 //! deben tener **exactamente** la misma firma que el trait.
@@ -12,7 +13,10 @@ use crate::runner::GitRunner;
 
 mod branch_ops;
 mod core_ops;
+mod log_cursor;
 mod serving_impl;
+mod stash_ops;
+mod tag_ops;
 
 /// Motor git por CLI.
 #[derive(Debug, Clone)]

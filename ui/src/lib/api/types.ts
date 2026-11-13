@@ -284,6 +284,35 @@ export interface DoneResult {
   done: boolean;
 }
 
+// ---- Stash (ipc.md «Stash») --------------------------------------------------------
+
+/** Entrada de la lista de stashes. Se identifica por `oid`, nunca por `index` (cambia al guardar o borrar). */
+export interface StashEntry {
+  /** Posición actual (`stash@{index}`); solo informativa. */
+  index: number;
+  oid: string;
+  message: string;
+  /** Rama en la que se guardó; `null` en HEAD separado. */
+  branch: string | null;
+  /** `true` si el mensaje lo generó git (`WIP on …`) y no el usuario. */
+  autoMessage: boolean;
+  createdAtIso: string;
+}
+
+export interface StashPushOptions {
+  message?: string | null;
+  includeUntracked?: boolean;
+  /** Solo lo preparado (`git stash push --staged`). Excluye `includeUntracked`. */
+  stagedOnly?: boolean;
+}
+
+export interface StashApplyResult {
+  /** Archivos que han quedado en conflicto (el repo conserva el estado de conflicto). */
+  conflicts: GitPath[];
+  /** `true` si el stash se ha borrado (solo `stashPop` sin conflictos). */
+  dropped: boolean;
+}
+
 // ---- Credenciales y clonado (ipc.md, `clone_repository`, `*_credential`) ---------
 
 /** PAT de un solo uso para clonar. Nunca se guarda ni se registra. */
@@ -518,6 +547,12 @@ export const API_ERROR_CODES = [
   'DIVERGED_LOCAL_BRANCH',
   'INVALID_REFERENCE',
   'HUNK_NOT_FOUND',
+  'PATCH_REJECTED',
+  'STASH_NOT_FOUND',
+  'NOTHING_TO_STASH',
+  'INVALID_TAG_NAME',
+  'TAG_EXISTS',
+  'TAG_NOT_FOUND',
   'NO_INTEGRATION',
   'CONFIRMATION_REQUIRED',
   'PATH_ESCAPES_REPOSITORY',

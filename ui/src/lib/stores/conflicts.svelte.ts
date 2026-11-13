@@ -48,8 +48,14 @@ export class ConflictsController {
     return this.tab.snapshot?.integration ?? 'none';
   }
 
+  /** Hay un merge/rebase/cherry-pick en curso, o archivos en conflicto sin integración (p. ej. tras aplicar un stash). */
   get active(): boolean {
-    return this.integration !== 'none';
+    return this.integration !== 'none' || this.files.length > 0;
+  }
+
+  /** Conflictos sin integración en curso: no hay nada que continuar ni abortar. */
+  get standalone(): boolean {
+    return this.integration === 'none' && this.files.length > 0;
   }
 
   get files(): ConflictFile[] {

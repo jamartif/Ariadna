@@ -577,6 +577,73 @@ async fn unstage_hunk(
 }
 
 #[tauri::command]
+async fn stage_lines(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    path: GitPath,
+    hunk: HunkArg,
+    lines: Vec<u32>,
+) -> Cmd<()> {
+    core.stage_lines(&tab_id, path, hunk, lines).await
+}
+
+#[tauri::command]
+async fn unstage_lines(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    path: GitPath,
+    hunk: HunkArg,
+    lines: Vec<u32>,
+) -> Cmd<()> {
+    core.unstage_lines(&tab_id, path, hunk, lines).await
+}
+
+#[tauri::command]
+async fn stash_list(core: State<'_, AppCore>, tab_id: String) -> Cmd<Vec<ariadna_git::StashEntry>> {
+    core.stash_list(&tab_id).await
+}
+
+#[tauri::command]
+async fn stash_push(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    message: Option<String>,
+    include_untracked: bool,
+    staged_only: bool,
+) -> Cmd<ariadna_git::StashEntry> {
+    core.stash_push(&tab_id, message, include_untracked, staged_only)
+        .await
+}
+
+#[tauri::command]
+async fn stash_apply(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    oid: String,
+) -> Cmd<ariadna_git::StashApplyResult> {
+    core.stash_apply(&tab_id, oid).await
+}
+
+#[tauri::command]
+async fn stash_pop(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    oid: String,
+) -> Cmd<ariadna_git::StashApplyResult> {
+    core.stash_pop(&tab_id, oid).await
+}
+
+#[tauri::command]
+async fn stash_drop(core: State<'_, AppCore>, tab_id: String, oid: String) -> Cmd<Done> {
+    core.stash_drop(&tab_id, oid).await
+}
+
+#[tauri::command]
+async fn stash_diff(core: State<'_, AppCore>, tab_id: String, oid: String) -> Cmd<Vec<FileDiff>> {
+    core.stash_diff(&tab_id, oid).await
+}
+
+#[tauri::command]
 async fn discard(core: State<'_, AppCore>, tab_id: String, paths: Vec<GitPath>) -> Cmd<Done> {
     core.discard(&tab_id, paths).await
 }
@@ -628,8 +695,57 @@ async fn log_page(
     skip: usize,
     limit: usize,
     query: Option<String>,
+    cursor: Option<Vec<String>>,
 ) -> Cmd<Vec<Commit>> {
-    core.log_page(&tab_id, skip, limit, query).await
+    // Con cursor (y sin búsqueda) se recorre desde la frontera: sin `--skip`, coste constante.
+    let searching = query.as_deref().is_some_and(|q| !q.trim().is_empty());
+    match cursor {
+        Some(cursor) if !searching => core.log_after(&tab_id, cursor, limit).await,
+        _ => core.log_page(&tab_id, skip, limit, query).await,
+    }
+}
+
+// --- etiquetas (contrato en `specs/rust/ipc.md`, «Etiquetas») --------------------------------
+
+#[tauri::command]
+async fn list_tags(core: State<'_, AppCore>, tab_id: String) -> Cmd<Vec<ariadna_git::Tag>> {
+    core.list_tags(&tab_id).await
+}
+
+#[tauri::command]
+async fn create_tag(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    name: String,
+    target: Option<String>,
+    message: Option<String>,
+) -> Cmd<ariadna_git::Tag> {
+    core.create_tag(&tab_id, name, target, message).await
+}
+
+#[tauri::command]
+async fn delete_tag(core: State<'_, AppCore>, tab_id: String, name: String) -> Cmd<Done> {
+    core.delete_tag(&tab_id, name).await
+}
+
+#[tauri::command]
+async fn push_tag(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    remote: String,
+    name: String,
+) -> Cmd<()> {
+    core.push_tag(&tab_id, remote, name).await
+}
+
+#[tauri::command]
+async fn delete_remote_tag(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    remote: String,
+    name: String,
+) -> Cmd<Done> {
+    core.delete_remote_tag(&tab_id, remote, name).await
 }
 
 #[tauri::command]
@@ -896,6 +1012,14 @@ pub fn run() {
             unstage,
             stage_hunk,
             unstage_hunk,
+            stage_lines,
+            unstage_lines,
+            stash_list,
+            stash_push,
+            stash_apply,
+            stash_pop,
+            stash_drop,
+            stash_diff,
             discard,
             commit,
             amend,
@@ -903,6 +1027,11 @@ pub fn run() {
             diff,
             log,
             log_page,
+            list_tags,
+            create_tag,
+            delete_tag,
+            push_tag,
+            delete_remote_tag,
             merge_clean,
             create_branch,
             rename_branch,

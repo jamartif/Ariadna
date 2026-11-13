@@ -9,7 +9,7 @@ Spec §3.3. **El estado vive en Rust**; la interfaz es una vista. Este documento
 - `GitPath` viaja como **cadena** si es UTF-8 y como **lista de bytes** (`number[]`) si no lo es. La UI debe aceptar ambas (`type GitPath = string | number[]`) y devolverlas sin tocar.
 - Toda llamada de pestaña lleva `tabId` (el `session_id` de Rust). Nunca hay estado global implícito.
 - Las rutas del sistema (carpeta de repo) viajan como `string`.
-- **Errores**: un comando fallido rechaza la promesa con un objeto `ApiError { code, message, detail? }`. `code` es estable (`NOT_A_REPOSITORY`, `GIT_NOT_FOUND`, `COMMAND_FAILED`, `NOTHING_TO_COMMIT`, `EMPTY_COMMIT_MESSAGE`, `DETACHED_HEAD_COMMIT`, `CANNOT_AMEND`, `LOCAL_CHANGES_BLOCK_CHECKOUT`, `DIVERGED_LOCAL_BRANCH`, `INVALID_REFERENCE`, `HUNK_NOT_FOUND`, `NO_INTEGRATION`, `CONFIRMATION_REQUIRED`, `PATH_ESCAPES_REPOSITORY`, `TIMEOUT`, `CANCELLED`, `PARSE`, `LOCKED`, `DUBIOUS_OWNERSHIP`, `IO`, `REPO_MISSING`, `AUTH`, `AI_DISABLED`, `AI_NOT_INSTALLED`, `AI_NOT_LOGGED_IN`, `AI_QUOTA`, `AI_BAD_OUTPUT`, `AI_CONTEXT_TOO_LARGE`, `AI_TIMEOUT`, `AI_CONSENT_REQUIRED`, `AI_NO_STAGED_CHANGES`, `AI_SENSITIVE_FILE`, `AI_NO_BRANCH_CHANGES`, `AI_BASE_NOT_FOUND`, `MERGE_CONFLICTS`, `CONFLICTS_PENDING`, `CONFLICT_MARKERS_REMAIN`, `CONFLICT_NOT_TEXT`, `CONFLICT_NOT_FOUND`, `NOT_FOUND`, `POLICY`, `CONFLICT`, `RATE_LIMITED`, `NETWORK`). `message` ya está en español y listo para mostrar. La UI **nunca** interpreta `message`.
+- **Errores**: un comando fallido rechaza la promesa con un objeto `ApiError { code, message, detail? }`. `code` es estable (`NOT_A_REPOSITORY`, `GIT_NOT_FOUND`, `COMMAND_FAILED`, `NOTHING_TO_COMMIT`, `EMPTY_COMMIT_MESSAGE`, `DETACHED_HEAD_COMMIT`, `CANNOT_AMEND`, `LOCAL_CHANGES_BLOCK_CHECKOUT`, `DIVERGED_LOCAL_BRANCH`, `INVALID_REFERENCE`, `INVALID_TAG_NAME`, `TAG_EXISTS`, `TAG_NOT_FOUND`, `HUNK_NOT_FOUND`, `NO_INTEGRATION`, `CONFIRMATION_REQUIRED`, `PATH_ESCAPES_REPOSITORY`, `TIMEOUT`, `CANCELLED`, `PARSE`, `LOCKED`, `DUBIOUS_OWNERSHIP`, `IO`, `REPO_MISSING`, `AUTH`, `AI_DISABLED`, `AI_NOT_INSTALLED`, `AI_NOT_LOGGED_IN`, `AI_QUOTA`, `AI_BAD_OUTPUT`, `AI_CONTEXT_TOO_LARGE`, `AI_TIMEOUT`, `AI_CONSENT_REQUIRED`, `AI_NO_STAGED_CHANGES`, `AI_SENSITIVE_FILE`, `AI_NO_BRANCH_CHANGES`, `AI_BASE_NOT_FOUND`, `MERGE_CONFLICTS`, `CONFLICTS_PENDING`, `CONFLICT_MARKERS_REMAIN`, `CONFLICT_NOT_TEXT`, `CONFLICT_NOT_FOUND`, `NOT_FOUND`, `POLICY`, `CONFLICT`, `RATE_LIMITED`, `NETWORK`). `message` ya está en español y listo para mostrar. La UI **nunca** interpreta `message`.
 - **Confirmaciones destructivas**: la UI **no** envía ningún "confirmed". Los comandos destructivos abren un **diálogo nativo desde Rust** que nombra repo, rama y ruta, y devuelven `{ done: false }` si el usuario cancela. Lo hacen `discard`, `write_conflict_resolution`, `resolve_conflict`, `abort_integration`, `merge_abort`, `checkout` cuando hay divergencia, `commit` en HEAD detached y cerrar una pestaña con trabajo pendiente.
 - **Revisión**: cada `Snapshot` lleva `revision` monótona. La UI descarta un snapshot con revisión menor **o igual** que la que ya tiene. Un cambio externo (editor, `git` en otra terminal) detectado por la vigilancia sube la revisión en 1; un refresco que no encuentra cambios **no publica nada** (ni `snapshot` ni `SnapshotPublished`), así que los ecos de nuestras propias mutaciones no provocan cascadas.
 - Operaciones largas (`fetch`, `pull`, `push`, IA): emiten `session-event` con `OperationStarted/Finished`; la UI las muestra y puede llamar a `cancel_operation`.
@@ -64,13 +64,19 @@ La sesión (pestañas abiertas y orden) se guarda en `session.json` (versionado,
 | `refresh` | — | `Snapshot` o `null` si se omitió |
 | `stage` / `unstage` | `paths: GitPath[]` | `void` |
 | `stage_hunk` / `unstage_hunk` | `path: GitPath, hunk: DiffHunk` | `void` |
+| `stage_lines` / `unstage_lines` | `path: GitPath, hunk: DiffHunk, lines: number[]` | `void` (ver «Líneas sueltas y stash»; `lines` son índices en `hunk.lines`) |
+| `stash_list` | — | `StashEntry[]` (del más reciente al más antiguo) |
+| `stash_push` | `message: string \| null, includeUntracked: boolean, stagedOnly: boolean` | `StashEntry` |
+| `stash_apply` / `stash_pop` | `oid: string` | `StashApplyResult { conflicts: GitPath[], dropped: boolean }` |
+| `stash_drop` | `oid: string` | `{ done: boolean }` (**confirmación nativa**) |
+| `stash_diff` | `oid: string` | `FileDiff[]` (cambios guardados; los archivos sin seguimiento, como nuevos) |
 | `discard` | `paths: GitPath[]` | `{ done: boolean }` (confirmación nativa) |
 | `commit` | `message, allowDetached` | `{ done: boolean, sha: string \| null }` (si HEAD está detached y `allowDetached` es falso, Rust pregunta) |
 | `amend` | `message` | `string` (sha) |
 | `amend_draft` | — | `{ message: string, canAmend: boolean, reason: string \| null }` |
 | `diff` | `scope: DiffScope, paths: GitPath[]` | `FileDiff[]` |
 | `log` | `limit, query: string \| null` | `Commit[]` (con `query`, busca en todo el historial) |
-| `log_page` | `skip, limit (≤ 500), query: string \| null` | `Commit[]` (página del historial de HEAD con `git log --skip`; con `query` busca por mensaje, autor o hash y pagina el resultado; cada `Commit` lleva `parents` y `refs` para pintar el grafo) |
+| `log_page` | `skip, limit (≤ 500), query: string \| null, cursor?: string[] \| null` | `Commit[]` (página del historial de HEAD; con `query` busca por mensaje, autor o hash y pagina el resultado por `skip`; cada `Commit` lleva `parents` y `refs` para pintar el grafo). Sin `cursor` usa `git log --skip` (compatible con clientes antiguos); **con `cursor` continúa el recorrido desde esa frontera, sin `--skip`** (ver «Historial por cursor»). `cursor` se ignora si hay `query` |
 | `create_branch` | `name, startPoint: string \| null` | `void` |
 | `rename_branch` | `old, new` | `void` |
 | `checkout` | `reference` | `{ done: boolean }` (Rust gestiona la divergencia con diálogo) |
@@ -90,6 +96,11 @@ La sesión (pestañas abiertas y orden) se guarda en `session.json` (versionado,
 | `fetch` | `remote` | `void` |
 | `pull` | `remote, refspec: string \| null, rebase?: boolean \| null` | `MergeResult` (sin `rebase` usa el ajuste `pullRebase`) |
 | `push` | `remote, refspec: string \| null, setUpstream` | `void` |
+| `list_tags` | — | `Tag[]` (ligeras y anotadas, de la más reciente a la más antigua; ver «Etiquetas») |
+| `create_tag` | `name, target: string \| null, message: string \| null` | `Tag`. `target` = SHA o revisión del commit (`null` = HEAD); con `message` no vacío la etiqueta es **anotada**. Errores: `INVALID_TAG_NAME`, `TAG_EXISTS`, `INVALID_REFERENCE` |
+| `delete_tag` | `name` | `{ done: boolean }` (**confirmación nativa**; solo la etiqueta local). `TAG_NOT_FOUND` sin preguntar si ya no existe |
+| `push_tag` | `remote, name` | `void` (`git push <remote> refs/tags/<name>`; sin confirmación, como `push`). `TAG_NOT_FOUND`, `AUTH`, `COMMAND_FAILED` (p. ej. el remoto ya tiene otra con ese nombre) |
+| `delete_remote_tag` | `remote, name` | `{ done: boolean }` (**confirmación nativa**; `git push <remote> --delete refs/tags/<name>`; no toca la local) |
 
 ### Estudio de conflictos
 
@@ -100,6 +111,47 @@ La sesión (pestañas abiertas y orden) se guarda en `session.json` (versionado,
 - **UI**: el panel «Conflictos» (cuarta pestaña del workspace) solo existe con `integration != none`; banner con contador en la pestaña; atajos de ámbito `editor`: `Alt+↓/↑` (siguiente/anterior bloque), `Alt+1/2/3` (nuestro/suyo/ambos). «Marcar como resuelto» está deshabilitado mientras queden marcadores. Abortar con ediciones sin aplicar avisa antes en la UI y luego Rust confirma.
 
 Para ver los archivos y el diff de un commit se usa `diff` con `scope: { commit: sha }` (primer padre en merges; los commits raíz también). El historial de la UI es una lista virtualizada que pide `log_page` al acercarse al final; el grafo de ramas se calcula en la UI a partir de `parents` (algoritmo incremental, `ui/src/lib/util/graph.ts`).
+
+### Historial por cursor
+
+`git log --skip=N` recorre los N commits saltados: el coste de una página crece con la profundidad (481 ms en la última página de 100 000 commits sin commit-graph; `rendimiento.md`). Con `cursor`, `log_page` ejecuta `git log -n <limit> <frontera…> --` y tarda lo mismo a cualquier profundidad.
+
+- **El cursor es la *frontera* del historial ya cargado**, no el hash del último commit: los commits que son padres de algo ya mostrado y aún no se han mostrado, en el orden en que `git log` los fue encolando (`ariadna_git::history_cursor`; la UI usa el equivalente incremental `Frontier` de `ui/src/lib/util/cursor.ts`). En un historial lineal es solo el padre del último commit, pero con merges hacen falta todas las ramas pendientes: `git log <último>^@` perdería las que quedan en la cola y daría otro orden. Frontera vacía = no hay más historial (la UI se ahorra la petición).
+- Cada entrada debe ser un SHA completo (40 o 64 hex) y como mucho 1 000; si no, `INVALID_REFERENCE` sin llegar a git. Un SHA con buena forma que no existe es `COMMAND_FAILED`. Cursor vacío → página vacía.
+- **Equivalencia con `--skip`** (probada con historiales generados con merges, octopus y fechas repetidas, página de 1 a 1 000): los commits no mostrados salen en el mismo orden y con el mismo contenido. Única diferencia: con fechas **iguales** git puede haber emitido un commit antes que un descendiente suyo, y el recorrido nuevo lo vuelve a alcanzar; esos repetidos se descartan en el cliente (`append_new`/`Frontier.has`) y una página de puros repetidos se pide por `skip`, que es exacto. El contrato antiguo (`skip` sin `cursor`) sigue funcionando.
+- Con `query` (búsqueda) no hay cursor: se pagina por `skip` sobre los resultados.
+
+### Etiquetas
+
+`Tag { name, annotated, commit, message: string \| null, tagger: string \| null, dateIso }`. `name` va sin `refs/tags/` y puede llevar `/`. `commit` es el SHA completo del commit al que apunta (en las anotadas, ya «pelado»). `message` (asunto + cuerpo, sin firma PGP) y `tagger` solo existen en las anotadas; `dateIso` es la fecha de la etiqueta o, en una ligera, la del commit. Se leen con `git for-each-ref refs/tags --format=…` (salida estructurada; no se interpreta texto de git).
+
+- **Nombre**: reglas de `git check-ref-format` (sin espacios, `~ ^ : ? * [ \`, `..`, `@{`, `//`, empezar o terminar en `/`, terminar en `.`, tramos que empiezan por `.` o acaban en `.lock`, empezar por `-`) más: no `HEAD` ni más de 255 caracteres. Se valida en Rust antes de tocar nada y se confirma con `git check-ref-format`; la UI repite la comprobación solo para dar feedback inmediato (`ui/src/lib/util/tagName.ts`). Error: `INVALID_TAG_NAME` (`detail` = nombre; `message` explica el motivo).
+- **Crear**: nunca pisa una existente (`TAG_EXISTS`). `target` se resuelve a un commit (`<rev>^{commit}`); un árbol, un blob, un nombre inexistente o un HEAD sin commits dan `INVALID_REFERENCE`. Con `message` no vacío se crea anotada (`git tag -a -F -`, el mensaje viaja por stdin; `--no-sign` ignora `tag.gpgSign`); una anotada necesita identidad (`user.name`/`user.email`), si falta git lo dice (`COMMAND_FAILED`).
+- **Borrar en local** y **borrar en el remoto** abren una confirmación nativa que nombra repo, rama, etiqueta, destino y (en local) si es anotada; `{ done: false }` si se cancela. Con una etiqueta que ya no existe, `delete_tag` falla con `TAG_NOT_FOUND` sin preguntar. Borrar en el remoto de algo que el servidor no tiene depende de éste: un remoto local solo avisa; GitHub/Azure lo rechazan con un error de git.
+- **Publicar** (`push_tag`) envía solo esa etiqueta, nunca `--tags`, y git rechaza pisar una etiqueta remota que apunta a otro objeto (no se usa `--force`). Pasa por la cola de operaciones de red (credenciales/`AUTH` como `push`).
+- Los `refs` de cada `Commit` (`log_page`) ya incluyen `tag: <nombre>`: el historial pinta las etiquetas como chips y el detalle del commit las lista. **Sin estado «publicada»**: saberlo exige red (`ls-remote`), y no se consulta.
+- UI: sección «Etiquetas» en el panel de Ramas (lista, nueva etiqueta en HEAD, publicar, borrar del remoto, borrar), y «Crear etiqueta aquí» en el detalle de un commit del historial (en ese commit). Con varios remotos hay un selector; por defecto `origin`.
+
+### Líneas sueltas y stash
+
+**Líneas sueltas** (`stage_lines` / `unstage_lines`). Rust vuelve a pedir el diff actual del archivo, localiza el hunk por sus rangos y **comprueba que las líneas elegidas siguen siendo las mismas** (tipo y texto): si el diff cambió debajo, rechaza con `HUNK_NOT_FOUND` y no toca nada. Construye un parche parcial y lo aplica por stdin con `git apply --cached --recount` (`--reverse` al quitar):
+
+| Línea sin elegir | Preparar | Quitar de preparados |
+|---|---|---|
+| borrada (`-`) | pasa a **contexto** | se **omite** |
+| añadida (`+`) | se **omite** | pasa a **contexto** |
+
+Las líneas se copian con sus bytes (CRLF intacto); `\ No newline at end of file` solo viaja con la línea a la que acompaña. Un archivo nuevo se crea con solo las líneas elegidas; al quitar líneas de un archivo nuevo ya preparado, el parche es una modificación del índice. Si se eligen **todas** las líneas que cambian, se usa el parche entero del hunk. Rechazos claros con `PATCH_REJECTED` (`detail` = motivo o `stderr` de `git apply`): ninguna línea que cambie elegida, índice fuera del hunk, binario, quitar líneas sueltas de un archivo **borrado**, o parche que git no aplica. La UI elige líneas dentro de **un** hunk a la vez (al preparar líneas de un hunk, los siguientes cambian de posición en el índice).
+
+**Stash**. `StashEntry { index, oid, message, branch: string \| null, autoMessage, createdAtIso }`. Un stash se identifica por su **SHA** (`oid`, completo o prefijo único): Rust lo traduce a `stash@{n}` con la lista leída en ese instante, de modo que un cambio de orden entre medias no afecta a otro stash. Un `oid` que no es hexadecimal se rechaza con `INVALID_REFERENCE` antes de llegar a git; uno que ya no existe, con `STASH_NOT_FOUND`.
+
+- `stash_push`: `message` opcional (se recorta), `includeUntracked` (`-u`; se ignora con `stagedOnly`) y `stagedOnly` (`--staged`: guarda solo lo preparado). Sin nada que guardar responde `NOTHING_TO_STASH` y no crea nada (se comprueba que `refs/stash` no se mueve).
+- `stash_apply` aplica y conserva; `stash_pop` aplica y borra **solo si no hay conflictos**. Con conflictos **no es un error**: devuelve `{ conflicts: [...], dropped: false }`, el stash se conserva y el repo queda con las entradas sin resolver (`snapshot.conflicts`, `integration: "none"`). La UI avisa y abre el panel de Conflictos, que se muestra también sin integración en curso (sin continuar/abortar: no hay merge). Si git se niega porque los cambios locales se pisarían, es un `COMMAND_FAILED` con el `stderr` de git y no se pierde nada.
+- `stash_drop`: **confirmación nativa** (repo, rama, `stash@{n}` y mensaje) antes de borrar; `{ done: false }` si se cancela. Con un `oid` inexistente o inválido falla **sin preguntar**.
+- `stash_diff`: `git diff <stash>^1 <stash>` más, si el stash lleva archivos sin seguimiento (tercer padre), esos archivos como nuevos; todo en un solo diff, así los ids de línea no se repiten.
+- Los comandos de stash lanzan git con `GIT_LITERAL_PATHSPECS=0`: `stash -u` usa pathspecs mágicos por dentro y con la protección global no limpiaría los archivos sin seguimiento. No reciben ninguna ruta del usuario.
+
+Códigos nuevos: `PATCH_REJECTED`, `STASH_NOT_FOUND`, `NOTHING_TO_STASH`. Interfaz: panel «Stashes» (lista + detalle con diff de solo lectura y Aplicar / Sacar / Borrar), sección «Stashes» en la barra lateral, botón «Guardar cambios en stash» en Cambios (mensaje, «Incluir archivos sin seguimiento», «Solo lo preparado»), y atajos `Mod+Shift+S` (guardar), `Mod+Shift+H` (mostrar stashes) y `Mod+Shift+Intro` (preparar/quitar las líneas seleccionadas), además de la paleta.
 
 ### Remotos y «Abrir en el navegador» (D19)
 

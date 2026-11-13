@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
+  import { registerHandlers } from '$lib/shortcuts/registry';
+  import { toasts } from '$lib/stores/toasts.svelte';
   import { t, tn } from '$lib/i18n';
   import { toApiError, type ApiError, type DiffHunk, type FileDiff } from '$lib/api/types';
   import type { TabState } from '$lib/stores/tab.svelte';
@@ -93,6 +95,147 @@
     return h ? { hunk: h, index: topRow.hunkIndex } : null;
   });
 
+  // ---- Líneas sueltas ------------------------------------------------------------------
+  // Se elige dentro de UN hunk a la vez: al preparar líneas de un hunk, los siguientes cambian de
+  // posición en el índice, así que no se mezclan hunks en una misma acción.
+
+  const isChange = (k: string) => k === 'addition' || k === 'deletion';
+  const canPick = $derived(
+    !!file && !file.isBinary && sel !== null && (sel.section === 'staged' || sel.section === 'unstaged' || sel.section === 'untracked')
+  );
+  let linePick = $state.raw<{ hunk: number; lines: number[] } | null>(null);
+  let anchor = $state.raw<{ hunk: number; line: number } | null>(null);
+  let cursor = $state.raw<{ hunk: number; line: number } | null>(null);
+  let listEl = $state<ReturnType<typeof VirtualList<DiffRow>>>();
+
+  /** Líneas que cambian, en orden, con su fila en la lista virtual. */
+  const changeable = $derived.by(() => {
+    const out: { hunk: number; line: number; row: number }[] = [];
+    rows.forEach((r, i) => {
+      if (r.type === 'line' && isChange(r.line.kind)) out.push({ hunk: r.hunkIndex, line: r.lineIndex, row: i });
+    });
+    return out;
+  });
+  /** Línea con el tabindex 0 (roving): la última usada o la primera que cambia. */
+  const activePick = $derived.by(() => {
+    const c = cursor;
+    if (c && changeable.some((x) => x.hunk === c.hunk && x.line === c.line)) return c;
+    const first = changeable[0];
+    return first ? { hunk: first.hunk, line: first.line } : null;
+  });
+  const pickedSet = $derived(new Set(linePick?.lines ?? []));
+  const pickedCount = $derived(linePick?.lines.length ?? 0);
+
+  // Un diff recién cargado (otro archivo o nuevo snapshot) invalida la selección: los índices cambian.
+  $effect(() => {
+    void file;
+    untrack(() => {
+      linePick = null;
+      anchor = null;
+      cursor = null;
+    });
+  });
+
+  function pick(hunk: number, line: number, extend: boolean) {
+    const h = file?.hunks[hunk];
+    if (!canPick || !h || !isChange(h.lines[line]?.kind ?? '')) return;
+    const cur = new Set(linePick && linePick.hunk === hunk ? linePick.lines : []);
+    if (extend && anchor && anchor.hunk === hunk) {
+      const [a, b] = anchor.line <= line ? [anchor.line, line] : [line, anchor.line];
+      for (let i = a; i <= b; i++) if (isChange(h.lines[i]?.kind ?? '')) cur.add(i);
+    } else if (cur.has(line)) cur.delete(line);
+    else cur.add(line);
+    anchor = { hunk, line };
+    cursor = { hunk, line };
+    linePick = cur.size > 0 ? { hunk, lines: [...cur].sort((x, y) => x - y) } : null;
+  }
+
+  function clearPick() {
+    linePick = null;
+    anchor = null;
+    toasts.announce(t('diff.linesCleared'));
+  }
+
+  async function applyLines(): Promise<boolean> {
+    const f = file;
+    const p = linePick;
+    const hunk = f && p ? f.hunks[p.hunk] : undefined;
+    if (!f || !p || !hunk) return false;
+    const ok = staged ? await tab.unstageLines(f.path, hunk, p.lines) : await tab.stageLines(f.path, hunk, p.lines);
+    if (ok) {
+      linePick = null;
+      anchor = null;
+    }
+    return ok;
+  }
+
+  async function moveCursor(delta: number, extend: boolean) {
+    const from = activePick;
+    if (changeable.length === 0 || !from) return;
+    const at = changeable.findIndex((x) => x.hunk === from.hunk && x.line === from.line);
+    const next = changeable[Math.min(changeable.length - 1, Math.max(0, at + delta))];
+    if (!next) return;
+    if (extend) {
+      if (!anchor || anchor.hunk !== from.hunk) anchor = { hunk: from.hunk, line: from.line };
+      pick(next.hunk, next.line, next.hunk === anchor.hunk);
+    } else {
+      cursor = { hunk: next.hunk, line: next.line };
+    }
+    listEl?.scrollToIndex(next.row);
+    await tick();
+    document.getElementById(`dl-${next.hunk}-${next.line}`)?.focus();
+  }
+
+  function pickKey(e: KeyboardEvent) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      void moveCursor(e.key === 'ArrowDown' ? 1 : -1, e.shiftKey);
+    } else if (e.key === 'Escape' && linePick) {
+      e.preventDefault();
+      clearPick();
+    } else if (e.key === 'Enter' && linePick) {
+      e.preventDefault();
+      void applyLines();
+    }
+  }
+
+  /** Con el foco en la propia lista (no en una casilla), ↓/Intro llevan al cursor de líneas. */
+  function regionKey(e: KeyboardEvent) {
+    if (e.target !== e.currentTarget || !canPick) return;
+    if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      e.preventDefault();
+      void moveCursor(0, false);
+    }
+  }
+
+  function onPickClick(e: MouseEvent, hunk: number, line: number) {
+    e.stopPropagation();
+    pick(hunk, line, e.shiftKey);
+  }
+
+  /** Clic en la fila (fuera del texto seleccionable): alterna la línea. Mayús+clic, rango. */
+  function onRowClick(e: MouseEvent, hunk: number, line: number) {
+    if (!canPick) return;
+    const selected = typeof window !== 'undefined' ? window.getSelection()?.toString() ?? '' : '';
+    if (selected !== '' && !e.shiftKey) return;
+    pick(hunk, line, e.shiftKey);
+  }
+
+  onMount(() =>
+    registerHandlers({
+      'lines.apply': () => (linePick ? void applyLines() : false)
+    })
+  );
+
+  function pickLabel(line: { kind: string; text: string; oldLineNumber: number | null; newLineNumber: number | null }): string {
+    const text = line.text.replace(/\r$/, '');
+    return t('diff.pickLine', {
+      kind: line.kind === 'addition' ? t('diff.pickLineNew') : t('diff.pickLineOld'),
+      n: line.newLineNumber ?? line.oldLineNumber ?? 0,
+      text: text.length > 60 ? `${text.slice(0, 60)}…` : text
+    });
+  }
+
   function toggleHunk(h: DiffHunk) {
     if (!file || !sel) return;
     if (staged) void tab.unstageHunk(file.path, h);
@@ -119,6 +262,7 @@
   <span class="hunk-title mono">{hunkHeader(h)}</span>
   {#if h.heading}<span class="hunk-heading mono">{h.heading}</span>{/if}
   <span class="spacer"></span>
+  <span class="bar-actions">
   {#if sel && (sel.section === 'staged' || sel.section === 'unstaged' || sel.section === 'untracked')}
     <button
       type="button"
@@ -133,6 +277,16 @@
       {staged ? t('diff.unstageHunk') : t('diff.stageHunk')}
     </button>
   {/if}
+  {#if canPick && linePick && linePick.hunk === index}
+    <button type="button" class="btn btn-sm btn-primary lines-btn" onclick={applyLines}>
+      <Icon name={staged ? 'minus' : 'plus'} size={12} />
+      {staged ? t('diff.unstageLines', { n: pickedCount }) : t('diff.stageLines', { n: pickedCount })}
+    </button>
+    <button type="button" class="btn btn-ghost btn-icon btn-sm lines-btn" onclick={clearPick} aria-label={t('diff.clearLines')} title={t('diff.clearLines')}>
+      <Icon name="x" size={12} />
+    </button>
+  {/if}
+  </span>
 {/snippet}
 
 <section class="diff" aria-label={t('diff.region')}>
@@ -193,13 +347,18 @@
     {:else if file.hunks.length === 0}
       <EmptyState icon="file-diff" compact title={t('diff.emptyTitle')} body={t('diff.emptyBody')} />
     {:else}
-      <div class="code" style:--lh="{lineH}px">
+      <div class="code" style:--lh="{lineH}px" style:--pick-w={canPick ? '28px' : '0px'}>
+        {#if canPick}
+          <p id="diff-pick-hint" class="sr-only">{t('diff.pickHint')}</p>
+          <p class="sr-only" role="status">{pickedCount > 0 ? tn('diff.linesSelected', pickedCount) : ''}</p>
+        {/if}
         {#if stickyHunk}
           <div class="hunk-row sticky" style:height="{hunkH}px" role="presentation">
             {@render hunkBar(stickyHunk.hunk, stickyHunk.index, file.hunks.length)}
           </div>
         {/if}
         <VirtualList
+          bind:this={listEl}
           items={rows}
           {heightOf}
           horizontal
@@ -208,6 +367,7 @@
           tabindex={0}
           overscan={12}
           onscroll={(top) => (scrollTop = top)}
+          onkeydown={regionKey}
         >
           {#snippet row(r, _i)}
             {#if r.type === 'hunk'}
@@ -223,13 +383,34 @@
             {:else}
               {@const line = r.line}
               {@const tr = truncateLine(line.text, expandedLines[line.id] === true)}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
               <div
                 class="line {line.kind}"
+                class:pickable={canPick && isChange(line.kind)}
+                class:picked={linePick?.hunk === r.hunkIndex && pickedSet.has(r.lineIndex)}
                 style:height="{lineH}px"
                 onmouseenter={() => (hoverHunk = r.hunkIndex)}
                 onmouseleave={() => (hoverHunk = null)}
+                onclick={(e) => isChange(line.kind) && onRowClick(e, r.hunkIndex, r.lineIndex)}
               >
+                {#if canPick}
+                  <span class="pick">
+                    {#if isChange(line.kind)}
+                      <input
+                        type="checkbox"
+                        id="dl-{r.hunkIndex}-{r.lineIndex}"
+                        class="pick-cb"
+                        checked={linePick?.hunk === r.hunkIndex && pickedSet.has(r.lineIndex)}
+                        tabindex={activePick && activePick.hunk === r.hunkIndex && activePick.line === r.lineIndex ? 0 : -1}
+                        aria-label={pickLabel(line)}
+                        aria-describedby="diff-pick-hint"
+                        onclick={(e) => onPickClick(e, r.hunkIndex, r.lineIndex)}
+                        onkeydown={pickKey}
+                        onfocus={() => (cursor = { hunk: r.hunkIndex, line: r.lineIndex })}
+                      />
+                    {/if}
+                  </span>
+                {/if}
                 <span class="gut old" aria-hidden="true">{line.oldLineNumber ?? ''}</span>
                 <span class="gut new" aria-hidden="true">{line.newLineNumber ?? ''}</span>
                 <span class="mark" aria-hidden="true">{marker(line.kind)}</span>
@@ -364,6 +545,12 @@
     transition: opacity var(--dur) var(--ease);
     font-family: var(--font-ui);
     flex: none;
+  }
+  .bar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: none;
     position: sticky;
     right: var(--space-3);
   }
@@ -409,10 +596,51 @@
     z-index: 2;
   }
   .gut.old {
-    left: 0;
+    left: var(--pick-w, 0px);
   }
   .gut.new {
-    left: 52px;
+    left: calc(var(--pick-w, 0px) + 52px);
+  }
+  .pick {
+    position: sticky;
+    left: 0;
+    flex: none;
+    width: var(--pick-w, 28px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-subtle);
+    z-index: 3;
+  }
+  .addition .pick {
+    background: var(--diff-add-gutter);
+  }
+  .deletion .pick {
+    background: var(--diff-del-gutter);
+  }
+  .pick-cb {
+    margin: 0;
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .pick-cb:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+  }
+  .line.pickable {
+    cursor: pointer;
+  }
+  .line.picked {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .line.picked .text {
+    background: var(--accent-soft);
+  }
+  .lines-btn {
+    flex: none;
+    font-family: var(--font-ui);
   }
   .addition .gut {
     background: var(--diff-add-gutter);

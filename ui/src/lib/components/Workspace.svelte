@@ -5,6 +5,7 @@
   import type { TabState, Panel } from '$lib/stores/tab.svelte';
   import { conflictsOf } from '$lib/stores/conflicts.svelte';
   import { prOf } from '$lib/stores/pullRequests.svelte';
+  import { stashOf } from '$lib/stores/stash.svelte';
   import Banner from './Banner.svelte';
   import BranchDetail from './BranchDetail.svelte';
   import BranchesPanel from './BranchesPanel.svelte';
@@ -20,6 +21,8 @@
   import PrDetail from './PrDetail.svelte';
   import PullRequestsPanel from './PullRequestsPanel.svelte';
   import Sidebar from './Sidebar.svelte';
+  import StashDetail from './StashDetail.svelte';
+  import StashesPanel from './StashesPanel.svelte';
   import Splitter from './Splitter.svelte';
 
   interface Props {
@@ -61,16 +64,20 @@
 
   type PanelDef = {
     id: Panel;
-    label: 'panel.changes' | 'panel.history' | 'panel.branches' | 'panel.conflicts' | 'panel.pullRequests';
-    icon: 'file-diff' | 'history' | 'git-branch' | 'git-merge' | 'git-pull-request';
+    label: 'panel.changes' | 'panel.history' | 'panel.branches' | 'panel.stashes' | 'panel.conflicts' | 'panel.pullRequests';
+    icon: 'file-diff' | 'history' | 'git-branch' | 'archive' | 'git-merge' | 'git-pull-request';
   };
   const basePanels: PanelDef[] = [
     { id: 'changes', label: 'panel.changes', icon: 'file-diff' },
     { id: 'history', label: 'panel.history', icon: 'history' },
-    { id: 'branches', label: 'panel.branches', icon: 'git-branch' }
+    { id: 'branches', label: 'panel.branches', icon: 'git-branch' },
+    { id: 'stashes', label: 'panel.stashes', icon: 'archive' }
   ];
   /** El panel «Conflictos» solo existe mientras hay un merge, rebase o cherry-pick en curso. */
   const integrating = $derived((tab.snapshot?.integration ?? 'none') !== 'none');
+  /** También hay panel de Conflictos si quedan archivos en conflicto sin integración (p. ej. tras aplicar un stash). */
+  const conflictsActive = $derived(integrating || (tab.snapshot?.conflicts.length ?? 0) > 0);
+  const stash = $derived(stashOf(tab));
   /**
    * «Pull requests» solo aparece si el remoto lo admite (`pull_request_support`, sin red). Si se llega
    * por la paleta o el atajo con un remoto sin soporte, la pestaña se muestra mientras esté activa
@@ -81,7 +88,7 @@
   const panels = $derived<PanelDef[]>([
     ...basePanels,
     ...(prVisible ? [{ id: 'pullRequests', label: 'panel.pullRequests', icon: 'git-pull-request' } as PanelDef] : []),
-    ...(integrating ? [{ id: 'conflicts', label: 'panel.conflicts', icon: 'git-merge' } as PanelDef] : [])
+    ...(conflictsActive ? [{ id: 'conflicts', label: 'panel.conflicts', icon: 'git-merge' } as PanelDef] : [])
   ]);
   const cc = $derived(conflictsOf(tab));
 
@@ -101,13 +108,28 @@
       'pr.open': () => {
         tab.panel = 'pullRequests';
         return true;
+      },
+      'stash.open': () => {
+        tab.panel = 'stashes';
+        return true;
+      },
+      'stash.push': () => {
+        tab.panel = 'changes';
+        stashOf(tab).openPush();
+        return true;
       }
     })
   );
 
   // Si la integración termina (o se aborta) con el panel abierto, se vuelve a Cambios.
   $effect(() => {
-    if (!integrating && tab.panel === 'conflicts' && !tab.loading) tab.panel = 'changes';
+    if (!conflictsActive && tab.panel === 'conflicts' && !tab.loading) tab.panel = 'changes';
+  });
+
+  // La lista de stashes no viaja en el snapshot: se relee con cada revisión (un `git stash list`).
+  $effect(() => {
+    void tab.revision;
+    if (!tab.hibernated) void stash.load();
   });
 
   function panelKey(e: KeyboardEvent, i: number) {
@@ -212,7 +234,8 @@
                   <Icon name={cc.count > 0 ? 'triangle-alert' : 'circle-check'} size={11} />{cc.count}
                 </span>
               {/if}
-              {#if p.id === 'changes' && conflictCount > 0 && !integrating}
+              {#if p.id === 'stashes' && stash.count > 0}<span class="chip" title={tn('stash.chip', stash.count)}>{stash.count}</span>{/if}
+              {#if p.id === 'changes' && conflictCount > 0 && !conflictsActive}
                 <span class="chip conflict" title={tn('tabs.a11y.conflicts', conflictCount)}>
                   <Icon name="triangle-alert" size={11} />{conflictCount}
                 </span>
@@ -235,6 +258,8 @@
             </div>
           {:else if tab.panel === 'history'}
             <HistoryPanel {tab} />
+          {:else if tab.panel === 'stashes'}
+            <StashesPanel {tab} />
           {:else if tab.panel === 'conflicts'}
             <ConflictsPanel {tab} />
           {:else if tab.panel === 'pullRequests'}
@@ -261,6 +286,8 @@
           <HistoryDetail {tab} />
         {:else if tab.panel === 'branches'}
           <BranchDetail {tab} />
+        {:else if tab.panel === 'stashes'}
+          <StashDetail {tab} />
         {:else if tab.panel === 'conflicts'}
           <ConflictEditor {tab} />
         {:else if tab.panel === 'pullRequests'}

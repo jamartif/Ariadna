@@ -8,6 +8,8 @@ import { esConflicts } from './es.conflicts';
 import { esPr } from './es.pr';
 import { esRemotes } from './es.remotes';
 import { esScreens } from './es.screens';
+import { esStash } from './es.stash';
+import { esTags } from './es.tags';
 import { esSettings } from './es.settings';
 
 export const es = {
@@ -16,6 +18,8 @@ export const es = {
   ...esSettings,
   ...esConflicts,
   ...esPr,
+  ...esStash,
+  ...esTags,
   // Aplicación
   'app.loading': 'Cargando Ariadna…',
   'app.errorTitle': 'No se pudo iniciar Ariadna',

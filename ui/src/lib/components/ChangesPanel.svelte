@@ -3,14 +3,18 @@
   import type { StatusEntry } from '$lib/api/types';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { settings } from '$lib/stores/settings.svelte';
+  import { SHORTCUTS, formatCombo, isMac } from '$lib/shortcuts/registry';
   import { displayStatus, SECTION_ORDER, type SectionId } from '$lib/util/changes';
   import { pathBase, pathDir, pathKey, pathText } from '$lib/util/gitpath';
   import { buildTreeRows } from '$lib/util/tree';
   import EmptyState from './EmptyState.svelte';
   import Icon from './Icon.svelte';
+  import StashPushForm from './StashPushForm.svelte';
   import VirtualList from './VirtualList.svelte';
+  import { stashOf } from '$lib/stores/stash.svelte';
 
   let { tab }: { tab: TabState } = $props();
+  const stash = $derived(stashOf(tab));
 
   type Item =
     | { type: 'header'; section: SectionId; count: number }
@@ -265,6 +269,8 @@
   }
 
   const glyph = (letter: string) => (letter === '?' ? '+' : letter);
+  const stashDef = SHORTCUTS.find((x) => x.id === 'stash.push');
+  const stashCombo = stashDef ? formatCombo(stashDef.combo, isMac()) : '';
 </script>
 
 <div class="changes">
@@ -289,7 +295,19 @@
     <button type="button" class="btn btn-ghost btn-icon btn-sm" onclick={() => tab.refresh()} aria-label={t('changes.refresh')} title={t('changes.refresh')}>
       <Icon name="refresh-cw" size={14} />
     </button>
+    <button
+      type="button"
+      class="btn btn-ghost btn-icon btn-sm"
+      onclick={() => (stash.pushOpen ? stash.closePush() : stash.openPush())}
+      aria-expanded={stash.pushOpen}
+      aria-label={t('stash.save')}
+      title={`${t('stash.save')} (${stashCombo})`}
+    >
+      <Icon name="archive" size={14} />
+    </button>
   </div>
+
+  {#if stash.pushOpen}<StashPushForm {tab} />{/if}
 
   {#if picked.length > 1}
     <div class="selbar" role="toolbar" aria-label={t('changes.selectionBar')}>

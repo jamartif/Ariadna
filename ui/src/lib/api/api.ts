@@ -27,6 +27,9 @@ import type {
   DiffScope,
   DoneResult,
   FileDiff,
+  StashApplyResult,
+  StashEntry,
+  StashPushOptions,
   GitDetect,
   GitIdentity,
   GitPath,
@@ -43,6 +46,7 @@ import type {
 } from './types';
 
 import type { PullRequestApi } from './prApi';
+import type { TagApi } from './tagApi';
 
 export type Unlisten = () => void;
 
@@ -51,7 +55,7 @@ export type Unlisten = () => void;
  * y `mockApi` (en memoria). Un método por comando de `specs/rust/ipc.md`.
  * Todos rechazan con `ApiError`.
  */
-export interface Api extends PullRequestApi {
+export interface Api extends PullRequestApi, TagApi {
   // Aplicación
   appState(): Promise<AppState>;
   pickFolder(): Promise<string | null>;
@@ -81,14 +85,31 @@ export interface Api extends PullRequestApi {
   unstage(tabId: string, paths: GitPath[]): Promise<void>;
   stageHunk(tabId: string, path: GitPath, hunk: DiffHunk): Promise<void>;
   unstageHunk(tabId: string, path: GitPath, hunk: DiffHunk): Promise<void>;
+  /** Prepara solo las líneas `lines` (índices en `hunk.lines`; las demás quedan como están). */
+  stageLines(tabId: string, path: GitPath, hunk: DiffHunk, lines: number[]): Promise<void>;
+  /** Quita de preparados solo las líneas `lines` del hunk preparado. */
+  unstageLines(tabId: string, path: GitPath, hunk: DiffHunk, lines: number[]): Promise<void>;
+  // Stash. Se identifica por `oid`; borrar pide confirmación nativa a Rust.
+  stashList(tabId: string): Promise<StashEntry[]>;
+  stashPush(tabId: string, options: StashPushOptions): Promise<StashEntry>;
+  stashApply(tabId: string, oid: string): Promise<StashApplyResult>;
+  /** Aplica y borra; con conflictos el stash se conserva y el repo queda con los conflictos. */
+  stashPop(tabId: string, oid: string): Promise<StashApplyResult>;
+  stashDrop(tabId: string, oid: string): Promise<DoneResult>;
+  stashDiff(tabId: string, oid: string): Promise<FileDiff[]>;
   discard(tabId: string, paths: GitPath[]): Promise<DoneResult>;
   commit(tabId: string, message: string, allowDetached: boolean): Promise<CommitResult>;
   amend(tabId: string, message: string): Promise<string>;
   amendDraft(tabId: string): Promise<AmendDraft>;
   diff(tabId: string, scope: DiffScope, paths: GitPath[]): Promise<FileDiff[]>;
   log(tabId: string, limit: number, query: string | null): Promise<Commit[]>;
-  /** Página del historial: `limit` commits tras saltar `skip` (con `query`, busca en todo el historial). */
-  logPage(tabId: string, skip: number, limit: number, query: string | null): Promise<Commit[]>;
+  /**
+   * Página del historial: `limit` commits tras saltar `skip` (con `query`, busca en todo el historial).
+   * Con `cursor` (la frontera del historial ya cargado, ver `Frontier`) Rust continúa el recorrido
+   * desde ahí sin `--skip`: mismo orden, coste constante en repos grandes. El cursor se ignora con
+   * `query`. Una página puede traer commits ya cargados (fechas iguales); el cliente los descarta.
+   */
+  logPage(tabId: string, skip: number, limit: number, query: string | null, cursor?: string[] | null): Promise<Commit[]>;
   createBranch(tabId: string, name: string, startPoint: string | null): Promise<void>;
   renameBranch(tabId: string, oldName: string, newName: string): Promise<void>;
   checkout(tabId: string, reference: string): Promise<DoneResult>;

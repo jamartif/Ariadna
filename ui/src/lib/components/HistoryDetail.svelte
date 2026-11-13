@@ -9,6 +9,7 @@
   import CodeDiff from './CodeDiff.svelte';
   import EmptyState from './EmptyState.svelte';
   import Icon from './Icon.svelte';
+  import TagCreateForm from './TagCreateForm.svelte';
 
   /** Detalle del commit seleccionado: cabecera, archivos y diff (columna derecha). */
   let { tab }: { tab: TabState } = $props();
@@ -16,6 +17,15 @@
   const h = $derived(historyOf(tab));
   const c = $derived(h.selected);
   const date = $derived(c ? new Date(c.authorDateIso) : null);
+  /** Etiquetas que ya apuntan a este commit (salen de sus refs: `tag: v1`). */
+  const tagNames = $derived((c?.refs ?? []).filter((r) => r.startsWith('tag: ')).map((r) => r.slice(5)));
+  let tagging = $state(false);
+
+  // Cambiar de commit cierra el formulario: la etiqueta se crearía en otro.
+  $effect(() => {
+    void c?.sha;
+    tagging = false;
+  });
 
   const totals = $derived.by(() => {
     let add = 0;
@@ -53,7 +63,7 @@
   {#if !c}
     <EmptyState icon="history" title={t('history.pickTitle')} body={t('history.pickBody')} />
   {:else}
-    <header class="head">
+    <header class="head" class:tagging>
       <h2 class="subject">{c.subject}</h2>
       {#if c.body.trim() !== ''}<pre class="body">{c.body.trim()}</pre>{/if}
       <dl class="meta">
@@ -73,7 +83,21 @@
         {#if c.parents.length > 0}
           <div><dt>{tn('history.parents', c.parents.length)}</dt><dd>{#each c.parents as p (p)}<code class="mono p">{p.slice(0, 7)}</code>{/each}</dd></div>
         {/if}
+        {#if tagNames.length > 0}
+          <div>
+            <dt>{t('tags.onCommit')}</dt>
+            <dd>{#each tagNames as n (n)}<span class="tagchip" title={n}><Icon name="tag" size={10} />{n}</span>{/each}</dd>
+          </div>
+        {/if}
       </dl>
+      <div class="head-actions">
+        <button type="button" class="btn btn-ghost btn-sm" onclick={() => (tagging = true)} disabled={tagging}>
+          <Icon name="tag" size={13} />{t('tags.newHere')}
+        </button>
+      </div>
+      {#if tagging}
+        <TagCreateForm {tab} target={c.sha} idPrefix="tag-commit" onclose={() => (tagging = false)} />
+      {/if}
     </header>
 
     <div class="files-bar">
@@ -142,6 +166,10 @@
     max-height: 40%;
     overflow: auto;
   }
+  /* Con el formulario de etiqueta abierto la cabecera necesita sitio para verlo entero. */
+  .head.tagging {
+    max-height: 80%;
+  }
   .subject {
     margin: 0 0 var(--space-2);
     font-size: var(--text-md);
@@ -187,6 +215,25 @@
   }
   .p + .p {
     margin-left: var(--space-2);
+  }
+  .head-actions {
+    margin-top: var(--space-2);
+  }
+  .tagchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 6px;
+    height: 18px;
+    border-radius: var(--pill);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    background: var(--warning-soft);
+    color: var(--warning);
   }
   .files-bar {
     display: flex;

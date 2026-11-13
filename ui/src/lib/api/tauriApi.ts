@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Api } from './api';
 import { createTauriPullRequests } from './tauriPr';
+import { createTauriTags } from './tauriTags';
 import { toApiError } from './types';
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -39,13 +40,22 @@ export function createTauriApi(): Api {
     unstage: (tabId, paths) => call('unstage', { tabId, paths }),
     stageHunk: (tabId, path, hunk) => call('stage_hunk', { tabId, path, hunk }),
     unstageHunk: (tabId, path, hunk) => call('unstage_hunk', { tabId, path, hunk }),
+    stageLines: (tabId, path, hunk, lines) => call('stage_lines', { tabId, path, hunk, lines }),
+    unstageLines: (tabId, path, hunk, lines) => call('unstage_lines', { tabId, path, hunk, lines }),
+    stashList: (tabId) => call('stash_list', { tabId }),
+    stashPush: (tabId, o) =>
+      call('stash_push', { tabId, message: o.message ?? null, includeUntracked: o.includeUntracked ?? false, stagedOnly: o.stagedOnly ?? false }),
+    stashApply: (tabId, oid) => call('stash_apply', { tabId, oid }),
+    stashPop: (tabId, oid) => call('stash_pop', { tabId, oid }),
+    stashDrop: (tabId, oid) => call('stash_drop', { tabId, oid }),
+    stashDiff: (tabId, oid) => call('stash_diff', { tabId, oid }),
     discard: (tabId, paths) => call('discard', { tabId, paths }),
     commit: (tabId, message, allowDetached) => call('commit', { tabId, message, allowDetached }),
     amend: (tabId, message) => call('amend', { tabId, message }),
     amendDraft: (tabId) => call('amend_draft', { tabId }),
     diff: (tabId, scope, paths) => call('diff', { tabId, scope, paths }),
     log: (tabId, limit, query) => call('log', { tabId, limit, query }),
-    logPage: (tabId, skip, limit, query) => call('log_page', { tabId, skip, limit, query }),
+    logPage: (tabId, skip, limit, query, cursor) => call('log_page', { tabId, skip, limit, query, cursor: cursor ?? null }),
     createBranch: (tabId, name, startPoint) => call('create_branch', { tabId, name, startPoint }),
     renameBranch: (tabId, oldName, newName) =>
       call('rename_branch', { tabId, old: oldName, new: newName }),
@@ -91,6 +101,7 @@ export function createTauriApi(): Api {
     aiGeneratePullRequest: (tabId, options) => call('ai_generate_pull_request', { tabId, options: options ?? null }),
 
     ...createTauriPullRequests(),
+    ...createTauriTags(),
 
     async listen(event, handler) {
       const un = await listen<never>(event, (e) => handler(e.payload as never));

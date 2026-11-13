@@ -142,6 +142,17 @@ export const diffHunk = obj({
   lines: arr(diffLine)
 });
 
+export const stashEntry = obj({
+  index: int,
+  oid: str,
+  message: str,
+  branch: nullable(str),
+  autoMessage: bool,
+  createdAtIso: str
+});
+
+export const stashApplyResult = obj({ conflicts: arr(gitPath), dropped: bool });
+
 export const fileDiff = obj({
   path: gitPath,
   oldPath: nullable(gitPath),
@@ -389,6 +400,8 @@ export function detect(value: unknown): { name: string; validator: V } | null {
   if (!list && has('revision', 'status', 'branches')) return { name: 'Snapshot', validator: snapshot };
   if (!list && has('entries', 'branchName')) return { name: 'GitStatus', validator: gitStatus };
   if (!list && has('tabs', 'recents')) return { name: 'AppState', validator: appState };
+  if (has('autoMessage', 'oid', 'createdAtIso')) return { name: list ? 'StashEntry[]' : 'StashEntry', validator: list ? arr(stashEntry) : stashEntry };
+  if (!list && has('conflicts', 'dropped')) return { name: 'StashApplyResult', validator: stashApplyResult };
   if (has('hunks', 'isBinary')) return { name: list ? 'FileDiff[]' : 'FileDiff', validator: list ? arr(fileDiff) : fileDiff };
   if (has('sha', 'subject')) return { name: list ? 'Commit[]' : 'Commit', validator: list ? arr(commit) : commit };
   if (has('indexStatus', 'workTreeStatus')) return { name: list ? 'StatusEntry[]' : 'StatusEntry', validator: list ? arr(statusEntry) : statusEntry };

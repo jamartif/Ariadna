@@ -41,6 +41,10 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'commit.focus', combo: 'Mod+L', scope: 'tab', label: 'shortcut.focusCommit' },
   // Mod+Shift+P (no Mod+P: lo usa imprimir en la WebView).
   { id: 'pr.open', combo: 'Mod+Shift+P', scope: 'tab', label: 'shortcut.pullRequests' },
+  // Líneas sueltas y stash.
+  { id: 'lines.apply', combo: 'Mod+Shift+Enter', scope: 'tab', label: 'shortcut.applyLines' },
+  { id: 'stash.push', combo: 'Mod+Shift+S', scope: 'tab', label: 'shortcut.stashPush' },
+  { id: 'stash.open', combo: 'Mod+Shift+H', scope: 'tab', label: 'shortcut.stashOpen' },
   { id: 'commit.submit', combo: 'Mod+Enter', scope: 'editor', label: 'shortcut.commit' },
   // Mod+Shift+G (no Alt: en macOS ⌥G produce «©» y la tecla no coincide).
   { id: 'ai.generate', combo: 'Mod+Shift+G', scope: 'tab', label: 'shortcut.aiGenerate' },

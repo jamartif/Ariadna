@@ -3,6 +3,7 @@
   import type { Snapshot } from '$lib/api/types';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { branchesOf } from '$lib/stores/branches.svelte';
+  import { stashOf } from '$lib/stores/stash.svelte';
   import Icon from './Icon.svelte';
   import EmptyState from './EmptyState.svelte';
 
@@ -16,6 +17,14 @@
     current = name;
     branchesOf(tab).select(name);
     tab.panel = 'branches';
+  }
+
+  const stash = $derived(stashOf(tab));
+
+  function openStash(oid: string): void {
+    current = `stash:${oid}`;
+    tab.panel = 'stashes';
+    void stash.select(oid);
   }
 
   function openRemotes(name: string): void {
@@ -65,6 +74,28 @@
               <button type="button" class="item" aria-pressed={current === b.name} onclick={() => openBranch(b.name)}>
                 <Icon name="cloud" size={14} />
                 <span class="name mono">{b.name}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
+    {#if stash.count > 0}
+      <section>
+        <h2><span>{t('sidebar.stashes')}</span><span class="chip">{stash.count}</span></h2>
+        <ul>
+          {#each stash.list as s (s.oid)}
+            <li>
+              <button
+                type="button"
+                class="item"
+                aria-pressed={current === `stash:${s.oid}`}
+                aria-label={t('stash.openPanel', { message: s.message })}
+                onclick={() => openStash(s.oid)}
+              >
+                <Icon name="archive" size={14} />
+                <span class="name">{s.message}</span>
               </button>
             </li>
           {/each}

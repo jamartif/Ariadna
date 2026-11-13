@@ -21,7 +21,7 @@ export interface Selection {
   path: GitPath;
 }
 
-export type Panel = 'changes' | 'history' | 'branches' | 'conflicts' | 'pullRequests';
+export type Panel = 'changes' | 'history' | 'branches' | 'stashes' | 'conflicts' | 'pullRequests';
 
 const DRAFT_PREFIX = 'ariadna.draft:';
 
@@ -316,7 +316,7 @@ export class TabState {
       this.clearPending();
       const err = toApiError(e);
       toasts.error(title, err);
-      if (err.code === 'HUNK_NOT_FOUND') void this.refresh();
+      if (err.code === 'HUNK_NOT_FOUND' || err.code === 'PATCH_REJECTED') void this.refresh();
       return undefined;
     }
   }
@@ -369,6 +369,24 @@ export class TabState {
 
   async unstageHunk(path: GitPath, hunk: DiffHunk): Promise<void> {
     await this.run(t('op.unstageHunkFailed'), [], () => this.api.unstageHunk(this.id, path, hunk));
+  }
+
+  /** Prepara solo las líneas `lines` (índices en `hunk.lines`). `true` si Rust lo aplicó. */
+  async stageLines(path: GitPath, hunk: DiffHunk, lines: number[]): Promise<boolean> {
+    const done = await this.run(t('op.stageLinesFailed'), [], async () => {
+      await this.api.stageLines(this.id, path, hunk, lines);
+      return true;
+    });
+    return done === true;
+  }
+
+  /** Quita de preparados solo las líneas `lines` del hunk preparado. */
+  async unstageLines(path: GitPath, hunk: DiffHunk, lines: number[]): Promise<boolean> {
+    const done = await this.run(t('op.unstageLinesFailed'), [], async () => {
+      await this.api.unstageLines(this.id, path, hunk, lines);
+      return true;
+    });
+    return done === true;
   }
 
   async refresh(): Promise<void> {

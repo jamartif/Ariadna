@@ -11,7 +11,9 @@ mod pull_requests;
 mod remotes;
 mod session;
 mod settings;
+mod stash;
 mod tabs;
+mod tags;
 mod watch;
 mod window_config;
 

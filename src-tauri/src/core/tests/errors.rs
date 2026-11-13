@@ -54,6 +54,39 @@ pub fn every_git_error() -> Vec<(GitError, &'static str)> {
             },
             "HUNK_NOT_FOUND",
         ),
+        (
+            GitError::PatchRejected {
+                path: "a.txt".into(),
+                reason: "el parche no aplica".into(),
+            },
+            "PATCH_REJECTED",
+        ),
+        (
+            GitError::StashNotFound {
+                oid: "abc1234".into(),
+            },
+            "STASH_NOT_FOUND",
+        ),
+        (GitError::NothingToStash, "NOTHING_TO_STASH"),
+        (
+            GitError::InvalidTagName {
+                name: "a b".into(),
+                reason: "carácter prohibido".into(),
+            },
+            "INVALID_TAG_NAME",
+        ),
+        (
+            GitError::TagExists {
+                name: "v1.0".into(),
+            },
+            "TAG_EXISTS",
+        ),
+        (
+            GitError::TagNotFound {
+                name: "v1.0".into(),
+            },
+            "TAG_NOT_FOUND",
+        ),
         (GitError::NoIntegrationInProgress, "NO_INTEGRATION"),
         (
             GitError::ConfirmationRequired {
@@ -111,7 +144,7 @@ fn cada_git_error_tiene_su_codigo_exacto_y_mensaje_en_espanol() {
 #[test]
 fn los_codigos_cubren_exactamente_el_contrato() {
     let mapped: BTreeSet<&str> = every_git_error().iter().map(|(_, c)| *c).collect();
-    assert_eq!(mapped.len(), 21, "21 variantes, 21 códigos distintos");
+    assert_eq!(mapped.len(), 27, "27 variantes, 27 códigos distintos");
     let mut expected: BTreeSet<&str> = ALL_CODES.iter().copied().collect();
     // No vienen de git: REPO_MISSING (pestaña ausente), los AI_* y POLICY/RATE_LIMITED y los de PR.
     assert!(expected.remove("REPO_MISSING"));
@@ -134,7 +167,7 @@ fn los_codigos_cubren_exactamente_el_contrato() {
         assert!(expected.remove(c), "{c}");
     }
     assert_eq!(mapped, expected);
-    assert_eq!(ALL_CODES.len(), 42);
+    assert_eq!(ALL_CODES.len(), 48);
 }
 
 #[test]

@@ -14,6 +14,7 @@ import { prTab } from '../test/prHelpers';
 import BranchDetail from './components/BranchDetail.svelte';
 import BranchesPanel from './components/BranchesPanel.svelte';
 import CommandPalette from './components/CommandPalette.svelte';
+import DiffView from './components/DiffView.svelte';
 import ConflictEditor from './components/ConflictEditor.svelte';
 import ConflictsPanel from './components/ConflictsPanel.svelte';
 import HistoryDetail from './components/HistoryDetail.svelte';
@@ -21,6 +22,7 @@ import HistoryPanel from './components/HistoryPanel.svelte';
 import PrDetail from './components/PrDetail.svelte';
 import PullRequestsPanel from './components/PullRequestsPanel.svelte';
 import RemotesSection from './components/RemotesSection.svelte';
+import TagsSection from './components/TagsSection.svelte';
 import SettingsDialog from './components/SettingsDialog.svelte';
 import Workspace from './components/Workspace.svelte';
 
@@ -186,3 +188,49 @@ describe('foco en formularios de PR', () => {
     await waitFor(() => expect(document.activeElement).toBe(open));
   });
 });
+
+describe('axe: líneas sueltas y stash', () => {
+  it('diff con casillas por línea y una selección activa', async () => {
+    const { tab } = await loadedTab();
+    const e = tab.sections.unstaged.find((x) => x.path === 'src/lib/api/types.ts')!;
+    tab.select('unstaged', e);
+    render(DiffView, { props: { tab } });
+    const boxes = await screen.findAllByRole('checkbox', { name: /^Seleccionar la línea/ });
+    await userEvent.click(boxes[1] as HTMLElement);
+    await screen.findAllByRole('button', { name: 'Preparar líneas seleccionadas (1)' });
+    await expectNoSeriousViolations();
+  });
+
+  it('espacio de trabajo con el panel de Stashes abierto', async () => {
+    const { tab } = await loadedTab();
+    await tab.api.stashPush(tab.id, { message: 'axe', includeUntracked: true });
+    tab.panel = 'stashes';
+    render(Workspace, { props: { tab, onclose: () => {}, onlocate: () => {} } });
+    await screen.findByRole('heading', { level: 2, name: 'axe' });
+    await expectNoSeriousViolations(document.body, ['aria-allowed-role']);
+  });
+});
+
+describe('axe: etiquetas', () => {
+  it('lista de etiquetas con el formulario de nueva etiqueta abierto', async () => {
+    const ctx = await loadedTab('tab-ariadna');
+    render(TagsSection, { props: { tab: ctx.tab } });
+    await screen.findByRole('button', { name: 'Publicar la etiqueta «v0.2.0»' });
+    await userEvent.click(screen.getByRole('button', { name: 'Nueva etiqueta' }));
+    await userEvent.type(await screen.findByLabelText('Nombre'), 'mala etiqueta');
+    await screen.findByText('El nombre no puede tener espacios.');
+    await expectNoSeriousViolations();
+  });
+
+  it('detalle del commit con «Crear etiqueta aquí» abierto', async () => {
+    const ctx = await loadedTab('tab-ariadna');
+    render(HistoryPanel, { props: { tab: ctx.tab } });
+    render(HistoryDetail, { props: { tab: ctx.tab } });
+    const list = await screen.findByRole('listbox', { name: 'Lista de commits' });
+    await waitFor(() => expect(list.querySelectorAll('[role="option"]').length).toBeGreaterThan(2));
+    await userEvent.click(await screen.findByRole('button', { name: 'Crear etiqueta aquí' }));
+    await screen.findByLabelText('Mensaje (opcional)');
+    await expectNoSeriousViolations();
+  });
+});
+

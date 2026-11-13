@@ -33,6 +33,21 @@ pub enum GitError {
     InvalidReference(String),
     #[error("Ese hunk ya no está en {path}. Actualiza el diff e inténtalo de nuevo.")]
     HunkNotFound { path: String },
+    /// El parche de líneas sueltas no se pudo construir o git lo rechazó.
+    #[error("No se pueden preparar esas líneas: {reason}")]
+    PatchRejected { path: String, reason: String },
+    /// El stash ya no existe (otro proceso lo borró o lo aplicó).
+    #[error("Ese stash ya no existe. Actualiza la lista e inténtalo de nuevo.")]
+    StashNotFound { oid: String },
+    #[error("No hay cambios que guardar en el stash.")]
+    NothingToStash,
+    /// El nombre de etiqueta incumple las reglas de `git check-ref-format`.
+    #[error("El nombre de etiqueta «{name}» no es válido: {reason}.")]
+    InvalidTagName { name: String, reason: String },
+    #[error("Ya existe una etiqueta llamada «{name}». Elige otro nombre o bórrala antes.")]
+    TagExists { name: String },
+    #[error("La etiqueta «{name}» ya no existe. Actualiza la lista e inténtalo de nuevo.")]
+    TagNotFound { name: String },
     #[error("No hay un merge, rebase o cherry-pick en curso.")]
     NoIntegrationInProgress,
     #[error("Hace falta confirmación explícita para {action}.")]

@@ -36,7 +36,7 @@ export function diffStats(d: FileDiff): { additions: number; deletions: number }
 
 export type DiffRow =
   | { type: 'hunk'; hunkIndex: number; hunk: DiffHunk }
-  | { type: 'line'; hunkIndex: number; line: DiffLine; /** Línea emparejada (borrada ↔ añadida) para el resaltado intra-línea. */ partner: DiffLine | null };
+  | { type: 'line'; hunkIndex: number; /** Posición de la línea dentro de `hunk.lines`. */ lineIndex: number; line: DiffLine; /** Línea emparejada (borrada ↔ añadida) para el resaltado intra-línea. */ partner: DiffLine | null };
 
 /** Aplana hunks en filas para la lista virtualizada. */
 export function flattenDiff(d: FileDiff): DiffRow[] {
@@ -44,7 +44,7 @@ export function flattenDiff(d: FileDiff): DiffRow[] {
   d.hunks.forEach((hunk, hunkIndex) => {
     rows.push({ type: 'hunk', hunkIndex, hunk });
     const pairs = pairLines(hunk.lines);
-    for (const line of hunk.lines) rows.push({ type: 'line', hunkIndex, line, partner: pairs.get(line.id) ?? null });
+    hunk.lines.forEach((line, lineIndex) => rows.push({ type: 'line', hunkIndex, lineIndex, line, partner: pairs.get(line.id) ?? null }));
   });
   return rows;
 }

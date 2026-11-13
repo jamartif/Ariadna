@@ -52,6 +52,35 @@
     "message": "Ese hunk ya no está en a.txt. Actualiza el diff e inténtalo de nuevo."
   },
   {
+    "code": "PATCH_REJECTED",
+    "detail": "el parche no aplica",
+    "message": "No se pueden preparar esas líneas: el parche no aplica"
+  },
+  {
+    "code": "STASH_NOT_FOUND",
+    "detail": "abc1234",
+    "message": "Ese stash ya no existe. Actualiza la lista e inténtalo de nuevo."
+  },
+  {
+    "code": "NOTHING_TO_STASH",
+    "message": "No hay cambios que guardar en el stash."
+  },
+  {
+    "code": "INVALID_TAG_NAME",
+    "detail": "a b",
+    "message": "El nombre de etiqueta «a b» no es válido: carácter prohibido."
+  },
+  {
+    "code": "TAG_EXISTS",
+    "detail": "v1.0",
+    "message": "Ya existe una etiqueta llamada «v1.0». Elige otro nombre o bórrala antes."
+  },
+  {
+    "code": "TAG_NOT_FOUND",
+    "detail": "v1.0",
+    "message": "La etiqueta «v1.0» ya no existe. Actualiza la lista e inténtalo de nuevo."
+  },
+  {
     "code": "NO_INTEGRATION",
     "message": "No hay un merge, rebase o cherry-pick en curso."
   },

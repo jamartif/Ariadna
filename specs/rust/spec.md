@@ -33,9 +33,10 @@ Cada requisito es `[P]` paridad con el Swift o `[N]` novedad. Las novedades no p
 | Windows | [N] | Ver §4 |
 | Tema moderno, paleta de comandos | [N] | Ver §7 |
 | Clonar desde URL con PAT o inicio de sesión del GCM; Azure DevOps y GitHub reconocidos | [N] | Paridad de uso con GitKraken (§4.3, D19, D20) |
+| Preparar/quitar líneas sueltas dentro de un hunk; stash (guardar, listar, aplicar, sacar, borrar con confirmación, ver diff) | [N] | Uso diario (`ipc.md` «Líneas sueltas y stash»); los conflictos al aplicar un stash van al panel de Conflictos |
 | Pull requests: crear, listar, detalle, bajar rama, revisar y comentar, votar, completar | [N] | Azure DevOps y GitHub (§4.4, D21) |
 
-**Fuera de v0.1 (igual que el Swift):** init, stash, tags, submódulos, LFS, worktrees (solo se detectan y se avisa), rebase interactivo, cherry-pick visual, stage por líneas sueltas, grafo de commits, diff lado a lado, actualizador automático, tiendas de aplicaciones.
+**Fuera de v0.1 (igual que el Swift):** init, tags, submódulos, LFS, worktrees (solo se detectan y se avisa), rebase interactivo, cherry-pick visual, grafo de commits, diff lado a lado, actualizador automático, tiendas de aplicaciones.
 
 ## 2. Decisiones
 

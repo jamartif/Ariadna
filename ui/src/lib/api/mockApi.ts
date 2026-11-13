@@ -53,10 +53,13 @@ import {
   type RemoteView,
   type SettingsView,
   type Snapshot,
+  type StashApplyResult,
+  type StashEntry,
   type StatusEntry,
   type TabInfo
 } from './types';
 import { createMockPullRequests } from './mockPr';
+import { createMockTags } from './mockTags';
 import { pathText } from '../util/gitpath';
 import { matchRule, normalizePattern } from '../util/profileRules';
 import { parseRemote, remoteBranchUrl, repoWebUrl } from '../util/remote';
@@ -171,6 +174,11 @@ function clone<T>(v: T): T {
 
 function err(code: ApiErrorCode, message: string, detail?: string): ApiError {
   return new ApiError({ code, message, detail });
+}
+
+/** Añade `refs` a commits concretos (índice → refs), sin tocar el resto. */
+function withRefs(commits: Commit[], extra: Record<number, string[]>): Commit[] {
+  return commits.map((c, i) => (extra[i] ? { ...c, refs: [...c.refs, ...extra[i]] } : c));
 }
 
 function branch(name: string, i: number, isHead: boolean, upstream: string | null, ahead = 0, behind = 0): Branch {
@@ -289,7 +297,8 @@ function buildAriadna(): MockRepo {
       }
     ],
     integration: 'none',
-    commits: makeCommits([
+    commits: withRefs(
+      makeCommits([
       'Añade el motor de diff por hunk',
       'Implementa recientes con favoritos',
       'Refactor del runner de git con tope de salida',
@@ -297,6 +306,9 @@ function buildAriadna(): MockRepo {
       'Documenta el contrato IPC',
       'Primer esqueleto del workspace de Cargo'
     ]),
+      // Dos etiquetas de ejemplo (la más reciente se simula anotada).
+      { 2: ['tag: v0.2.0'], 5: ['tag: v0.1.0'] }
+    ),
     revision: 1,
     busy: null,
     ahead: 3,
@@ -437,6 +449,8 @@ export type MockApi = Api & {
   __openedUrls: () => string[];
   /** Solo pruebas: inicios de sesión de IA pedidos, en orden. */
   __aiLogins: () => AiLoginInfo[];
+  /** Solo pruebas: etiquetas publicadas en remotos (`remoto/nombre`), ordenadas. */
+  __publishedTags: (tabId: string) => string[];
   /** Simula un elemento del menú nativo (`menu-action`). */
   __menuAction: (id: string) => void;
 };
@@ -805,6 +819,116 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     sortHunks(to);
   }
 
+  // ---- Líneas sueltas y stash (ipc.md «Líneas sueltas» y «Stash») ----
+
+  const isChange = (k: string) => k === 'addition' || k === 'deletion';
+
+  /** Rehace contadores y cabecera de un hunk con las líneas indicadas. */
+  function rebuildHunk(h: DiffHunk, lines: DiffHunk['lines'], suffix: string): DiffHunk {
+    const adds = lines.filter((l) => l.kind === 'addition').length;
+    const dels = lines.filter((l) => l.kind === 'deletion').length;
+    const ctx = lines.filter((l) => l.kind === 'context').length;
+    return { ...h, id: `${h.id}${suffix}`, oldCount: ctx + dels, newCount: ctx + adds, lines };
+  }
+
+  /**
+   * Mueve solo las líneas elegidas de un hunk de `from` a `to`. El resto queda en `from`.
+   * Mismas reglas de rechazo que Rust (`PATCH_REJECTED`, `HUNK_NOT_FOUND`).
+   */
+  function moveLines(from: DiffHunk[], to: DiffHunk[], hunk: DiffHunk, lines: number[]): void {
+    const i = from.findIndex(
+      (h) =>
+        h.id === hunk.id ||
+        (h.oldStart === hunk.oldStart && h.oldCount === hunk.oldCount && h.newStart === hunk.newStart && h.newCount === hunk.newCount)
+    );
+    if (i < 0) throw err('HUNK_NOT_FOUND', 'El hunk ya no existe: el archivo cambió. Se ha actualizado la vista.');
+    const current = from[i] as DiffHunk;
+    const picked = new Set<number>();
+    for (const n of lines) {
+      const l = current.lines[n];
+      if (!l) throw err('PATCH_REJECTED', `No se pueden preparar esas líneas: la línea ${n} no existe en el hunk`);
+      if (isChange(l.kind)) picked.add(n);
+    }
+    if (picked.size === 0) throw err('PATCH_REJECTED', 'No se pueden preparar esas líneas: no se ha seleccionado ninguna línea que cambie');
+    const total = current.lines.filter((l) => isChange(l.kind)).length;
+    if (picked.size === total) {
+      from.splice(i, 1);
+      to.push(current);
+      sortHunks(to);
+      return;
+    }
+    const moved = current.lines.filter((l, n) => !isChange(l.kind) || picked.has(n));
+    const rest = current.lines.filter((l, n) => !isChange(l.kind) || !picked.has(n));
+    from[i] = rebuildHunk(current, rest, '');
+    to.push(rebuildHunk(current, moved, `~${++opCounter}`));
+    sortHunks(to);
+  }
+
+  interface MockStash {
+    entry: StashEntry;
+    files: MockFile[];
+  }
+  const stashes = new Map<string, MockStash[]>();
+  let stashCounter = 0;
+  const stashesOf = (r: MockRepo): MockStash[] => {
+    let s = stashes.get(r.tabId);
+    if (!s) {
+      s = [];
+      stashes.set(r.tabId, s);
+    }
+    return s;
+  };
+  const reindexStashes = (list: MockStash[]) => list.forEach((s, n) => (s.entry.index = n));
+  function findStash(r: MockRepo, oid: string): MockStash {
+    if (!/^[0-9a-f]{4,64}$/i.test(oid)) throw err('INVALID_REFERENCE', `La referencia «${oid}» no es válida.`, oid);
+    const found = stashesOf(r).filter((s) => s.entry.oid.startsWith(oid.toLowerCase()));
+    if (found.length !== 1) throw err('STASH_NOT_FOUND', 'Ese stash ya no existe. Actualiza la lista e inténtalo de nuevo.', oid);
+    return found[0] as MockStash;
+  }
+  function stashFiles(s: MockStash): FileDiff[] {
+    return s.files.map((f) => ({
+      path: f.path,
+      oldPath: f.originalPath ?? null,
+      isBinary: f.binary === true,
+      isNewFile: f.base === 'A' || f.base === '?',
+      isDeletedFile: f.base === 'D',
+      hunks: sortHunks([...f.staged, ...f.unstaged].map((h) => clone(h)))
+    }));
+  }
+  /** Aplica un stash al repo simulado. Con `scenario: 'stash-conflict'` deja un conflicto. */
+  function applyStash(r: MockRepo, s: MockStash, pop: boolean): StashApplyResult {
+    const overlap = s.files.find((f) => r.files.some((x) => x.path === f.path && x.base !== 'U' && (hasStaged(x) || hasUnstaged(x))));
+    if (overlap && scenario !== 'stash-conflict') {
+      throw err(
+        'COMMAND_FAILED',
+        'git terminó con código 1.',
+        `error: Your local changes to the following files would be overwritten by merge:\n\t${overlap.path}\nPlease commit your changes or stash them before you merge.`
+      );
+    }
+    if (scenario === 'stash-conflict') {
+      const defs = demoConflictDefs();
+      r.conflictDefs = defs;
+      const [path, d] = [...defs.entries()][0] as [string, MockConflictDef];
+      r.files = r.files.filter((f) => f.path !== path);
+      r.files.unshift({ path, base: 'U', staged: [], unstaged: [], conflictKind: d.kind });
+      publish(r);
+      return { conflicts: [path as GitPath], dropped: false };
+    }
+    for (const saved of s.files) {
+      const copy = clone(saved);
+      const existing = r.files.find((x) => x.path === copy.path);
+      if (existing) r.files = r.files.filter((x) => x !== existing);
+      r.files.push(copy);
+    }
+    if (pop) {
+      const list = stashesOf(r);
+      list.splice(list.indexOf(s), 1);
+      reindexStashes(list);
+    }
+    publish(r);
+    return { conflicts: [], dropped: pop };
+  }
+
   const api: MockApi = {
     __repos: repos,
 
@@ -1016,6 +1140,91 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         if (f.staged.length === 0 && f.base === 'A' && f.wasUntracked) f.base = '?';
         publish(r);
       });
+    },
+    async stageLines(tabId, path, hunk, lines) {
+      const r = repoOf(tabId);
+      await operation(r, 'Preparando líneas', () => {
+        const f = findFile(r, path);
+        moveLines(f.unstaged, f.staged, hunk, lines);
+        if (f.base === '?') f.base = 'A';
+        publish(r);
+      });
+    },
+    async unstageLines(tabId, path, hunk, lines) {
+      const r = repoOf(tabId);
+      await operation(r, 'Quitando líneas', () => {
+        const f = findFile(r, path);
+        moveLines(f.staged, f.unstaged, hunk, lines);
+        if (f.staged.length === 0 && f.base === 'A' && f.wasUntracked) f.base = '?';
+        publish(r);
+      });
+    },
+    async stashList(tabId) {
+      await delay(Math.min(latency, 60));
+      return clone(stashesOf(repoOf(tabId)).map((s) => s.entry));
+    },
+    async stashPush(tabId, options) {
+      const r = repoOf(tabId);
+      return operation(r, 'Guardando en stash', () => {
+        const staged = options.stagedOnly === true;
+        const candidates = r.files.filter(
+          (f) => f.base !== 'U' && !f.ignored && (staged ? hasStaged(f) : hasStaged(f) || (f.base === '?' ? options.includeUntracked === true : hasUnstaged(f)))
+        );
+        if (candidates.length === 0) throw err('NOTHING_TO_STASH', 'No hay cambios que guardar en el stash.');
+        const saved = candidates.map((f) => {
+          const copy = clone(f);
+          if (staged) copy.unstaged = [];
+          return copy;
+        });
+        for (const f of candidates) {
+          if (staged) {
+            f.staged = [];
+            f.binaryStaged = false;
+            if (f.base === 'A' && f.wasUntracked) f.base = '?';
+            if (!hasUnstaged(f) && f.base !== '?') r.files = r.files.filter((x) => x !== f);
+          } else {
+            r.files = r.files.filter((x) => x !== f);
+          }
+        }
+        const message = (options.message ?? '').trim();
+        const entry: StashEntry = {
+          index: 0,
+          oid: sha(900 + ++stashCounter),
+          message: message !== '' ? message : `${(r.commits[0]?.sha ?? sha(1)).slice(0, 7)} ${r.commits[0]?.subject ?? 'WIP'}`,
+          branch: r.detached ? null : r.branch,
+          autoMessage: message === '',
+          createdAtIso: now().toISOString()
+        };
+        const list = stashesOf(r);
+        list.unshift({ entry, files: saved });
+        reindexStashes(list);
+        publish(r);
+        return clone(entry);
+      });
+    },
+    async stashApply(tabId, oid) {
+      const r = repoOf(tabId);
+      return operation(r, 'Aplicando stash', () => clone(applyStash(r, findStash(r, oid), false)));
+    },
+    async stashPop(tabId, oid) {
+      const r = repoOf(tabId);
+      return operation(r, 'Sacando del stash', () => clone(applyStash(r, findStash(r, oid), true)));
+    },
+    async stashDrop(tabId, oid) {
+      const r = repoOf(tabId);
+      return operation(r, 'Borrando stash', () => {
+        const s = findStash(r, oid);
+        const where = s.entry.branch ? ` (rama ${s.entry.branch})` : '';
+        if (!confirmFn(`¿Borrar el stash «${s.entry.message}»${where} de ${r.name}? No se puede deshacer.`)) return { done: false };
+        const list = stashesOf(r);
+        list.splice(list.indexOf(s), 1);
+        reindexStashes(list);
+        return { done: true };
+      });
+    },
+    async stashDiff(tabId, oid) {
+      await delay(Math.min(latency, 80));
+      return clone(stashFiles(findStash(repoOf(tabId), oid)));
     },
     async discard(tabId, paths) {
       const r = repoOf(tabId);
@@ -1663,6 +1872,15 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     },
     /** Solo pruebas: inicios de sesión pedidos, en orden. */
     __aiLogins: () => [...aiLogins],
+
+    // Etiquetas: viven en los `refs` de los commits simulados (se ven también en el historial).
+    ...createMockTags({
+      repoOf: (tabId) => repoOf(tabId),
+      publish: (tabId) => publish(repoOf(tabId)),
+      delay: () => delay(Math.min(latency, 60)),
+      confirm: (m) => confirmFn(m),
+      now
+    }),
 
     // Pull requests (M8): datos de ejemplo en memoria, mismos comandos y errores que Rust.
     ...createMockPullRequests({

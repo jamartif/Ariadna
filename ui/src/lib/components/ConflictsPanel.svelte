@@ -20,7 +20,9 @@
         ? t('conflicts.title.rebasing')
         : c.integration === 'cherryPicking'
           ? t('conflicts.title.cherryPicking')
-          : ''
+          : c.standalone
+            ? t('conflicts.title.standalone')
+            : ''
   );
   const progress = $derived(c.total === 0 ? 0 : Math.round((c.resolved.length / c.total) * 100));
 
@@ -101,6 +103,11 @@
       {/if}
     </div>
 
+    {#if c.standalone}
+      <footer class="foot">
+        <p class="hint" aria-live="polite">{t('conflicts.standaloneNote')}</p>
+      </footer>
+    {:else}
     <footer class="foot">
       {#if c.integration === 'merging' && c.canContinue}
         <label class="lbl" for="merge-message">{t('conflicts.messageLabel')}</label>
@@ -145,6 +152,7 @@
         {#if c.files.length > 0}{tn('conflicts.continueBlocked', c.files.length)}{:else}{t('conflicts.doneBody')}{/if}
       </p>
     </footer>
+    {/if}
   {/if}
 </section>
 

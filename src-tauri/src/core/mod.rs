@@ -16,6 +16,7 @@ pub mod prompter;
 mod remote_ops;
 pub mod session_file;
 pub mod settings;
+mod tag_ops;
 pub mod watch;
 
 #[cfg(test)]

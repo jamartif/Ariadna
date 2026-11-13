@@ -20,7 +20,7 @@
 
 ## M1 — Fundación
 
-> Estado: implementado en `crates/ariadna-process` y `crates/ariadna-git` (203 tests en verde entre los tres crates de Rust, probados en Linux/WSL; la CI valida macOS y Windows). Pendiente: fixtures contra git real en CI, fuzz de parsers y `core.longpaths`.
+> Estado: implementado en `crates/ariadna-process` y `crates/ariadna-git` (203 tests en verde entre los tres crates de Rust, probados en Linux/WSL; la CI valida macOS y Windows). Pendiente: fixtures contra git real en CI y `core.longpaths`.
 - [ ] Cambiar a macOS 15 como mínimo en la configuración de Tauri y en la CI (D15)
 - [x] `Cargo.toml` workspace, `rust-toolchain.toml` (≥ 1.77.2), rustfmt, clippy, cargo-deny
 - [ ] CI Rust: macos-15, windows-2025, windows-11-arm, ubuntu; job agregador; caché
@@ -31,13 +31,13 @@
 - [x] `DiffParser` · ParserTests
 - [x] `ConflictParser` con diff3 · ParserTests
 - [x] Almacén de recientes y favoritos + importación del `recents.json` Swift (G-15)
-- [ ] Fuzz/propiedades de los parsers
+- [x] Fuzz/propiedades de los parsers (`proptest`, `tests/parser_props.rs`: sin pánicos, roundtrip del diff, contadores)
 - [x] Parsers de log, ramas y remotos, y `AmendDraft` (los necesitan 7 tests Swift)
 - [ ] Atajos ⌘O y ⌘R, menús nativos y tamaño mínimo de ventana 980×640 (huecos detectados en la matriz)
 
 ## M2 — Motor Git
 
-> Estado: implementado (`GitCliEngine`, `GitRunner`, `RepositorySession`). 125 tests nuevos en `ariadna-git` contra git real. Pendiente: contrato IPC de Tauri (M4), el test de 50 000 archivos (hoy se prueba con 5 000 rutas) y `core.longpaths` en CI de Windows.
+> Estado: implementado (`GitCliEngine`, `GitRunner`, `RepositorySession`). 125 tests nuevos en `ariadna-git` contra git real. Pendiente: contrato IPC de Tauri (M4), `core.longpaths` en CI de Windows.
 - [x] Trait `GitServing` y `GitCliEngine` con endurecimiento de §4.1
 - [x] Cola serial por clave de repo; lecturas con `GIT_OPTIONAL_LOCKS=0`; refrescos coalescidos con `revision` (§3.2) · OperationQueueTests
 - [x] G-01 abrir repo, error claro
@@ -49,7 +49,7 @@
 - [x] G-08 log y diff · G-09 búsqueda global
 - [ ] Contrato IPC: comandos, enum de errores, eventos, `operation_id`, `cancel_operation` (§3.3)
 - [x] Reintento acotado ante `index.lock` ajeno
-- [ ] Tests con 50 000 archivos (rutas por stdin, NF-3)
+- [x] Tests con 50 000 archivos (rutas por stdin, NF-3): `tests/perf.rs` (`#[ignore]`) y `tests/bulk_paths.rs`; informe en `rendimiento.md`
 
 ## M3 — Ramas, remotos, merge
 
@@ -97,9 +97,13 @@
 - [x] Barra de commit (Ctrl/⌘+Intro), amend
 - [ ] Historial paginado con filtro local y búsqueda global (NF-4)
 - [x] Ramas y remotos, con icono del proveedor y acciones «Abrir en el navegador» / «Crear pull request» (D19): sección «Remotos» en el panel Ramas (lista con proveedor, traer/bajar/subir la rama actual, añadir/renombrar/quitar con confirmación nativa) y botones en el detalle de rama. `list_remotes`, `add_remote`, `rename_remote`, `remove_remote`, `open_remote_url`. Solo enlaces: la API de PR es M8
+- [x] Historial por cursor (NF-4): `log_page` acepta `cursor` opcional (la *frontera* del historial cargado, no solo el último hash: con merges hace falta toda la cola de `git log`) y continúa con `git log <frontera>` sin `--skip`; coste constante en repos grandes (medidas en `rendimiento.md`). Probado contra `--skip` con historiales generados con merges, octopus y fechas repetidas; el contrato antiguo (`skip`) sigue vigente. `ariadna_git::history_cursor`, `GitServing::log_after`, `Frontier` en la UI
+- [x] Etiquetas (tags): `list_tags`, `create_tag` (HEAD o un commit; con mensaje = anotada), `delete_tag` y `delete_remote_tag` (confirmación nativa), `push_tag`; validación de `git check-ref-format` y errores tipados `INVALID_TAG_NAME` / `TAG_EXISTS` / `TAG_NOT_FOUND`. UI: sección «Etiquetas» en Ramas, «Crear etiqueta aquí» en el detalle del commit y chips en la lista del historial. Sin estado «publicada» (exigiría red)
 - [x] Estudio de conflicto a tres paneles + resultado (panel «Conflictos», `merge_start`/`merge_state`/`resolve_conflict`/`merge_continue`/`merge_abort`; textarea con resultado editable, sin CodeMirror: no está en el proyecto)
 - [x] Ajustes: pantalla (General, Git, IA, Cuentas, Acerca de), `settings.json` versionado y atómico, pull con rebase, ruta de git con «Detectar», reglas repo → perfil (`ipc.md` «Ajustes»)
 - [x] Vitest de componentes
+- [x] Líneas sueltas dentro de un hunk (`stage_lines` / `unstage_lines`): casillas por línea, clic, Mayús+clic, teclado (↑/↓, Espacio, Mayús+↑/↓, Esc, `Mod+Shift+Intro`); parche parcial (`ariadna-git::partial`) con `git apply --cached --recount` por stdin; CRLF, sin salto final, archivos nuevos, rutas con espacios/Unicode; rechazo claro (`PATCH_REJECTED`)
+- [x] Stash: `stash_list/push/apply/pop/drop/diff` (identidad por SHA, `drop` con confirmación nativa, conflictos al aplicar/sacar → panel de Conflictos); panel «Stashes», sección en la barra lateral, botón «Guardar cambios en stash» en Cambios, atajos y paleta; mock en el backend simulado; i18n
 - [ ] Publicar `0.1.0-alpha.1` (macOS y Windows x64)
 
 ## M6 — IA (→ alpha.2)
@@ -153,7 +157,7 @@
   - [ ] Zoom 200 % y reflujo
   - [ ] axe en E2E contra la app real (`tauri-driver`)
   - [ ] Revisión manual con NVDA y VoiceOver (no realizada)
-- [ ] Rendimiento contra NF-1…NF-6 con fixtures sintéticos
+- [ ] Rendimiento contra NF-1…NF-6 con fixtures sintéticos — hecho el motor (NF-3, NF-4, NF-5 en `rendimiento.md`); faltan NF-1, NF-2, NF-6 y la interfaz (requieren ventana real)
 - [ ] E2E con `tauri-driver` (macOS y Windows x64)
 - [ ] Regresión visual con baselines por SO
 - [ ] Capturas automáticas en CI

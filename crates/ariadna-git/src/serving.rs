@@ -10,6 +10,16 @@ use crate::models::{
     Branch, Commit, ConflictFile, DiffHunk, DiffScope, FileDiff, GitPath, GitStatus,
     IntegrationState, MergeFastForward, MergeResult, Remote, Repository,
 };
+use crate::stash::{StashApplyResult, StashEntry, StashPushOptions};
+use crate::tag::Tag;
+
+fn unsupported_stash() -> GitError {
+    GitError::Io("el stash no está soportado por este motor".into())
+}
+
+fn unsupported_tags() -> GitError {
+    GitError::Io("las etiquetas no están soportadas por este motor".into())
+}
 
 /// Permiso explícito para una escritura que pisa trabajo del usuario.
 ///
@@ -55,6 +65,33 @@ pub trait GitServing: Send + Sync {
         hunk: &DiffHunk,
         path: &GitPath,
     ) -> GitResult<()>;
+    /// Prepara solo las líneas `lines` (índices en `hunk.lines`) del hunk. Por defecto no está
+    /// soportado: lo implementa el motor real.
+    async fn stage_lines(
+        &self,
+        _repo: &Repository,
+        _hunk: &DiffHunk,
+        _lines: &[u32],
+        path: &GitPath,
+    ) -> GitResult<()> {
+        Err(GitError::Io(format!(
+            "preparar líneas de {} no está soportado por este motor",
+            path.to_string_lossy()
+        )))
+    }
+    /// Quita de preparados solo las líneas `lines` del hunk preparado.
+    async fn unstage_lines(
+        &self,
+        _repo: &Repository,
+        _hunk: &DiffHunk,
+        _lines: &[u32],
+        path: &GitPath,
+    ) -> GitResult<()> {
+        Err(GitError::Io(format!(
+            "quitar líneas de {} no está soportado por este motor",
+            path.to_string_lossy()
+        )))
+    }
     /// Devuelve el SHA del commit creado.
     async fn commit(
         &self,
@@ -75,6 +112,19 @@ pub trait GitServing: Send + Sync {
     ) -> GitResult<Vec<Commit>> {
         let all = self.log(repo, skip.saturating_add(limit)).await?;
         Ok(all.into_iter().skip(skip).collect())
+    }
+    /// Página del historial recorriendo desde la frontera `cursor` (ver
+    /// [`history_cursor`](crate::history_cursor)): mismo orden que `log_page`, pero sin `--skip`.
+    /// Por defecto no está soportado: lo implementa el motor real.
+    async fn log_after(
+        &self,
+        _repo: &Repository,
+        _cursor: &[String],
+        _limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        Err(GitError::Io(
+            "el cursor de historial no está soportado por este motor".into(),
+        ))
     }
     /// Busca por mensaje, autor o hash en todo el historial de HEAD.
     async fn search_log(
@@ -145,6 +195,76 @@ pub trait GitServing: Send + Sync {
         paths: &[GitPath],
         confirmation: &Confirmation,
     ) -> GitResult<()>;
+    /// Lista de stashes, del más reciente al más antiguo.
+    async fn stash_list(&self, _repo: &Repository) -> GitResult<Vec<StashEntry>> {
+        Err(unsupported_stash())
+    }
+    /// Guarda los cambios en un stash y devuelve su entrada.
+    async fn stash_push(
+        &self,
+        _repo: &Repository,
+        _options: &StashPushOptions,
+    ) -> GitResult<StashEntry> {
+        Err(unsupported_stash())
+    }
+    /// Aplica el stash `oid` sin borrarlo. Con conflictos los deja en el repo.
+    async fn stash_apply(&self, _repo: &Repository, _oid: &str) -> GitResult<StashApplyResult> {
+        Err(unsupported_stash())
+    }
+    /// Aplica el stash `oid` y lo borra si no hubo conflictos.
+    async fn stash_pop(&self, _repo: &Repository, _oid: &str) -> GitResult<StashApplyResult> {
+        Err(unsupported_stash())
+    }
+    /// Borra el stash `oid`. Destructivo: pide [`Confirmation`].
+    async fn stash_drop(
+        &self,
+        _repo: &Repository,
+        _oid: &str,
+        _confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        Err(unsupported_stash())
+    }
+    /// Diff del stash `oid` (cambios guardados; los archivos sin seguimiento como nuevos).
+    async fn stash_diff(&self, _repo: &Repository, _oid: &str) -> GitResult<Vec<FileDiff>> {
+        Err(unsupported_stash())
+    }
+    /// Etiquetas (ligeras y anotadas), de la más reciente a la más antigua.
+    async fn tags(&self, _repo: &Repository) -> GitResult<Vec<Tag>> {
+        Err(unsupported_tags())
+    }
+    /// Crea una etiqueta en `target` (HEAD si `None`); con `message` no vacío es anotada.
+    async fn create_tag(
+        &self,
+        _repo: &Repository,
+        _name: &str,
+        _target: Option<&str>,
+        _message: Option<&str>,
+    ) -> GitResult<Tag> {
+        Err(unsupported_tags())
+    }
+    /// Borra una etiqueta local. Destructivo: pide [`Confirmation`].
+    async fn delete_tag(
+        &self,
+        _repo: &Repository,
+        _name: &str,
+        _confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        Err(unsupported_tags())
+    }
+    /// Publica una etiqueta en `remote`.
+    async fn push_tag(&self, _repo: &Repository, _remote: &str, _name: &str) -> GitResult<()> {
+        Err(unsupported_tags())
+    }
+    /// Borra una etiqueta del remoto. Destructivo: pide [`Confirmation`].
+    async fn delete_remote_tag(
+        &self,
+        _repo: &Repository,
+        _remote: &str,
+        _name: &str,
+        _confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        Err(unsupported_tags())
+    }
     async fn list_remotes(&self, repo: &Repository) -> GitResult<Vec<Remote>>;
     async fn add_remote(&self, repo: &Repository, name: &str, url: &str) -> GitResult<()>;
     /// Renombra un remoto (git reescribe sus ramas de seguimiento).

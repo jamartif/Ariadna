@@ -3,6 +3,7 @@ import { SHORTCUTS, formatCombo, isMac, runShortcut } from '$lib/shortcuts/regis
 import type { AppStore } from './app.svelte';
 import { settings } from './settings.svelte';
 import { prOf } from './pullRequests.svelte';
+import { stashOf } from './stash.svelte';
 import { settingsUi } from './settingsPanel.svelte';
 
 export interface PaletteAction {
@@ -75,6 +76,26 @@ export function buildActions(app: AppStore): PaletteAction[] {
     add({ id: 'commit.focus', label: t('shortcut.focusCommit'), group: g2, shortcut: combo('commit.focus'), run: () => runShortcut('commit.focus') });
     add({ id: 'panel.changes', label: t('palette.showChanges'), group: g2, run: () => (tab.panel = 'changes') });
     add({ id: 'panel.history', label: t('palette.showHistory'), group: g2, run: () => (tab.panel = 'history') });
+    add({
+      id: 'stash.push',
+      label: t('palette.stashPush'),
+      group: g2,
+      shortcut: combo('stash.push'),
+      run: () => {
+        tab.panel = 'changes';
+        stashOf(tab).openPush();
+      }
+    });
+    add({ id: 'stash.open', label: t('palette.stashOpen'), group: g2, shortcut: combo('stash.open'), run: () => (tab.panel = 'stashes') });
+    const latest = stashOf(tab).list[0];
+    if (latest) {
+      add({
+        id: 'stash.popLatest',
+        label: `${t('palette.stashPop')}: ${latest.message}`,
+        group: g2,
+        run: () => void stashOf(tab).pop(latest.oid)
+      });
+    }
     add({ id: 'pr.open', label: t('shortcut.pullRequests'), group: g2, shortcut: combo('pr.open'), run: () => (tab.panel = 'pullRequests') });
     if (prOf(tab).supported) {
       add({
