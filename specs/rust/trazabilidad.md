@@ -286,7 +286,7 @@ Recomendación: **Añadir** = incorporar al spec/tareas como requisito; **Fuera 
 | H-31 | Flag de compilación `ARIADNA_AI` y pantalla de Ajustes alternativa sin IA | `Package.swift`, `SettingsView` | **Cubierto** por D10 (IA siempre en el binario, apagada) |
 | H-32 | `PathSafety.validateRef`: rechaza nombres vacíos, con prefijo `-`, `..`, `@{`, `.lock`, caracteres prohibidos | `PathSafety.swift` | **Cubierto** por §4.1 (`git check-ref-format`, rechazo de `-`) |
 | H-33 | Mensajes informativos tras cada acción («Commit creado. No se ha hecho push.», «Operación abortada…») y alerta «No se pudo completar» | `AppModel`, `RootView` | **Cubierto** en §3.3 (toast/banner); **añadir** el catálogo de textos en español al backlog de UI |
-| H-34 | Idioma: UI en español; mensajes de git se muestran tal cual los emite el CLI (spec Swift §7) | `spec.md` Swift §7 | **Añadir:** el spec Rust habla de «texto localizable» sin decidir idiomas de v0.1 |
+| H-34 | Idioma: UI en español; mensajes de git se muestran tal cual los emite el CLI (spec Swift §7) | `spec.md` Swift §7 | **Cubierto y ampliado:** la UI es bilingüe español/inglés (catálogos `es*`/`en*`, ajuste `language` en `settings.json`, cambio en caliente y `<html lang>`). Los mensajes de git y los errores propios de Rust siguen en español |
 | H-35 | Botones Pull/Push muestran `behind`/`ahead`; etiqueta de rama y aviso de HEAD detached en la barra | `WorkspaceView.toolbar` | **Añadir** a M5.5 |
 | H-36 | Linux: el núcleo compila y se prueba sin Mac | `Package.swift`, `ConflictAndSettings` | **Cubierto** (CI ubuntu §10) |
 | H-37 | Selector de carpeta nativo (`NSOpenPanel`) en la bienvenida | `AppModel.FolderPicker` | **Cubierto** por M4.9 («Examinar»); plugin dialog de Tauri |

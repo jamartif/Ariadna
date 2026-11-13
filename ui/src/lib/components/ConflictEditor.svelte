@@ -2,11 +2,13 @@
   import { onMount, untrack } from 'svelte';
   import { t, tn } from '$lib/i18n';
   import type { ConflictFile } from '$lib/api/types';
-  import { registerHandlers } from '$lib/shortcuts/registry';
+  import { formatCombo, isMac, registerHandlers, SHORTCUTS } from '$lib/shortcuts/registry';
+  import { settingsUi } from '$lib/stores/settingsPanel.svelte';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { conflictsOf } from '$lib/stores/conflicts.svelte';
   import { dominantEol, locateLines, parseMarkers, splitLines, withEol, type HunkChoiceSide } from '$lib/util/conflictMarkers';
   import { pathText } from '$lib/util/gitpath';
+  import ConflictAiProposal from './ConflictAiProposal.svelte';
   import EmptyState from './EmptyState.svelte';
   import Icon from './Icon.svelte';
 
@@ -22,6 +24,32 @@
   const current = $derived(parsed.regions[c.currentHunk] ?? null);
   const into = $derived(tab.snapshot?.status.branchName ?? tab.info.branch ?? 'HEAD');
   const hasBase = $derived(f ? f.base.content !== null : false);
+
+  // --- IA (solo propone: el editor cambia cuando el usuario pulsa «Usar») -------------------
+  const ai = $derived(tab.ai);
+  /** La IA está desactivada en Ajustes: en vez del botón se ofrece el enlace. */
+  const aiOff = $derived(c.aiEnabled === false);
+  const aiCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'conflicts.ai')?.combo ?? 'Alt+R', isMac()));
+  const proposal = $derived(c.aiProposal);
+  const aiNeedsSettings = $derived(
+    c.aiError?.code === 'AI_DISABLED' ||
+      c.aiError?.code === 'AI_CONSENT_REQUIRED' ||
+      c.aiError?.code === 'AI_NOT_INSTALLED' ||
+      c.aiError?.code === 'AI_NOT_LOGGED_IN'
+  );
+
+  /** Pide la propuesta (o regenera si el panel está abierto). Nunca escribe en el archivo. */
+  function askAi(regenerate = false) {
+    const file = untrack(() => c.selected);
+    if (!file || aiOff) return;
+    if (regenerate) void c.regenerateAi(file);
+    else void c.resolveWithAi(file);
+  }
+
+  /** Esc cancela la generación en curso (el proceso del CLI se mata de verdad). */
+  function onWindowKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && c.aiLoading) void c.cancelAi();
+  }
 
   /** Rango de líneas de cada bloque dentro del archivo completo de cada lado (para resaltar). */
   function ranges(content: string | null, pick: 'ours' | 'base' | 'theirs'): ({ start: number; end: number } | null)[] {
@@ -84,8 +112,10 @@
     if (f && current) c.resolveHunk(f, side);
   }
 
-  onMount(() =>
-    registerHandlers({
+  onMount(() => {
+    // El estado de la IA decide si se ofrece el botón o el aviso con enlace a Ajustes.
+    if (!ai.state) void ai.loadState();
+    return registerHandlers({
       'conflicts.next': () => {
         if (!f || mode !== 'editor') return false;
         c.nextHunk(f);
@@ -96,12 +126,19 @@
       },
       'conflicts.ours': () => (current ? void apply('ours') : false),
       'conflicts.theirs': () => (current ? void apply('theirs') : false),
-      'conflicts.both': () => (current ? void apply('both') : false)
-    })
-  );
+      'conflicts.both': () => (current ? void apply('both') : false),
+      // Con la IA desactivada el atajo no hace nada: se avisa en el propio editor.
+      'conflicts.ai': () => {
+        if (!f || mode !== 'editor' || c.aiBusy) return false;
+        askAi();
+      }
+    });
+  });
 
   const lineCount = (s: string | null) => (s === null ? 0 : splitLines(s).length);
 </script>
+
+<svelte:window onkeydown={onWindowKey} />
 
 <section class="editor" data-scope="editor" bind:this={root} aria-label={t('conflicts.editorRegion')}>
   {#if !c.active}
@@ -120,20 +157,62 @@
       </div>
 
       {#if mode === 'editor'}
-        <div class="nav" role="group" aria-label={t('conflicts.hunkOf', { i: pending === 0 ? 0 : c.currentHunk + 1, n: parsed.regions.length })}>
-          <span class="count" class:ok={pending === 0} aria-live="polite" role="status">
-            <Icon name={pending === 0 ? 'circle-check' : 'triangle-alert'} size={13} />
-            {pending === 0 ? t('conflicts.allResolved') : tn('conflicts.pending', pending)}
-          </span>
-          <button type="button" class="btn btn-sm btn-icon" disabled={parsed.regions.length < 2} onclick={() => f && c.prevHunk(f)} title="{t('conflicts.prev')} (Alt+↑)" aria-label={t('conflicts.prev')}>
-            <Icon name="arrow-up" size={14} />
-          </button>
-          <button type="button" class="btn btn-sm btn-icon" disabled={parsed.regions.length < 2} onclick={() => f && c.nextHunk(f)} title="{t('conflicts.next')} (Alt+↓)" aria-label={t('conflicts.next')}>
-            <Icon name="arrow-down" size={14} />
-          </button>
+        <div class="bar-actions">
+          <div class="nav" role="group" aria-label={t('conflicts.hunkOf', { i: pending === 0 ? 0 : c.currentHunk + 1, n: parsed.regions.length })}>
+            <span class="count" class:ok={pending === 0} aria-live="polite" role="status">
+              <Icon name={pending === 0 ? 'circle-check' : 'triangle-alert'} size={13} />
+              {pending === 0 ? t('conflicts.allResolved') : tn('conflicts.pending', pending)}
+            </span>
+            <button type="button" class="btn btn-sm btn-icon" disabled={parsed.regions.length < 2} onclick={() => f && c.prevHunk(f)} title="{t('conflicts.prev')} (Alt+↑)" aria-label={t('conflicts.prev')}>
+              <Icon name="arrow-up" size={14} />
+            </button>
+            <button type="button" class="btn btn-sm btn-icon" disabled={parsed.regions.length < 2} onclick={() => f && c.nextHunk(f)} title="{t('conflicts.next')} (Alt+↓)" aria-label={t('conflicts.next')}>
+              <Icon name="arrow-down" size={14} />
+            </button>
+          </div>
+
+          {#if c.aiLoading}
+            <span class="ai-loading" role="status">
+              <Icon name="loader" size={14} spin />{t('conflicts.ai.generating')}
+            </span>
+            <button type="button" class="btn btn-sm" onclick={() => void c.cancelAi()}>
+              {t('ai.cancel')}<kbd class="kbd">Esc</kbd>
+            </button>
+          {:else}
+            <button
+              type="button"
+              class="btn btn-sm btn-ai"
+              disabled={aiOff || c.busy !== null || c.aiRegenerating}
+              onclick={() => askAi()}
+              title={aiOff ? t('conflicts.ai.disabledBody') : t('conflicts.ai.generateTitle', { shortcut: aiCombo })}
+              aria-label={t('conflicts.ai.label', { shortcut: aiCombo })}
+            >
+              <Icon name="sparkles" size={14} />{t('conflicts.ai.button')}<kbd class="kbd">{aiCombo}</kbd>
+            </button>
+          {/if}
         </div>
       {/if}
     </header>
+
+    {#if mode === 'editor' && aiOff}
+      <div class="ainote" role="status">
+        <Icon name="sparkles" size={14} />
+        <span><strong>{t('conflicts.ai.disabledTitle')}.</strong> {t('conflicts.ai.disabledBody')}</span>
+        <button type="button" class="btn btn-sm" onclick={() => settingsUi.open('ai')}>{t('conflicts.ai.openSettings')}</button>
+      </div>
+    {/if}
+
+    {#if mode === 'editor' && c.aiError && !proposal}
+      <div class="aierr" role="alert">
+        <Icon name="circle-alert" size={14} />
+        <span class="aierr-text"><strong>{t('conflicts.ai.errorTitle')}.</strong> {c.aiError.message}</span>
+        {#if aiNeedsSettings}
+          <button type="button" class="btn btn-sm" onclick={() => settingsUi.open('ai')}>{t('conflicts.ai.openSettings')}</button>
+        {/if}
+        <button type="button" class="btn btn-sm" onclick={() => askAi()}>{t('conflicts.ai.retry')}</button>
+        <button type="button" class="btn btn-sm btn-ghost" onclick={() => c.dismissAiError()}>{t('conflicts.ai.dismiss')}</button>
+      </div>
+    {/if}
 
     {#if c.isStale(f)}
       <div class="stale" role="alert">
@@ -240,6 +319,23 @@
       </div>
     {/if}
   {/if}
+
+  {#if proposal && f}
+    <ConflictAiProposal
+      path={pathText(f.path)}
+      current={text}
+      content={proposal.content}
+      rationale={proposal.rationale}
+      providerName={ai.providerName(proposal.provider)}
+      commandSummary={proposal.commandSummary}
+      regenerating={c.aiRegenerating}
+      error={c.aiError?.message ?? null}
+      onuse={() => c.useAiProposal(f)}
+      onregenerate={() => askAi(true)}
+      ondiscard={() => c.discardAiProposal()}
+      onclose={() => c.discardAiProposal()}
+    />
+  {/if}
 </section>
 
 <style>
@@ -276,10 +372,51 @@
     color: var(--st-unmerged-fg);
     flex: none;
   }
+  .bar-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+  }
   .nav {
     display: flex;
     align-items: center;
     gap: var(--space-2);
+  }
+  .ai-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+  }
+  .btn-ai {
+    gap: 6px;
+  }
+  .btn-ai:disabled {
+    opacity: 0.55;
+  }
+  .ainote,
+  .aierr {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-sm);
+  }
+  .ainote {
+    background: var(--bg-subtle);
+    color: var(--text-muted);
+  }
+  .aierr {
+    background: var(--danger-soft);
+    color: var(--text);
+  }
+  .aierr-text {
+    flex: 1 1 16rem;
+    min-width: 0;
   }
   .count {
     display: inline-flex;

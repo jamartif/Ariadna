@@ -2,7 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { registerHandlers } from '$lib/shortcuts/registry';
   import { toasts } from '$lib/stores/toasts.svelte';
-  import { t, tn } from '$lib/i18n';
+  import { intlLocale, t, tn } from '$lib/i18n';
   import { toApiError, type ApiError, type DiffHunk, type FileDiff } from '$lib/api/types';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { settings } from '$lib/stores/settings.svelte';
@@ -337,7 +337,7 @@
     {#if file.isBinary}
       <EmptyState icon="file" compact title={t('diff.binaryTitle')} body={t('diff.binaryBody')} />
     {:else if giant && !showContent}
-      <EmptyState icon="triangle-alert" tone="neutral" title={t('diff.giantTitle')} body={t('diff.giantBody', { lines: countLines(file).toLocaleString('es-ES') })}>
+      <EmptyState icon="triangle-alert" tone="neutral" title={t('diff.giantTitle')} body={t('diff.giantBody', { lines: countLines(file).toLocaleString(intlLocale()) })}>
         <button
           type="button"
           class="btn btn-primary"
@@ -424,7 +424,7 @@
                     class="more btn btn-sm"
                     onclick={() => (expandedLines = { ...expandedLines, [line.id]: true })}
                   >
-                    {t('diff.seeMore', { n: line.text.length.toLocaleString('es-ES') })}
+                    {t('diff.seeMore', { n: line.text.length.toLocaleString(intlLocale()) })}
                   </button>
                 {/if}
               </div>

@@ -28,10 +28,15 @@
   /** Pestaña con tabindex 0 (roving): la enfocada, o la activa. */
   const tabStop = $derived(focusedId && ids.includes(focusedId) ? focusedId : (activeId ?? ids[0] ?? null));
 
-  function label(e: Entry): string {
-    if (e.kind === 'new') return t('tabs.newTab');
+  /**
+   * Detalle accesible de la pestaña. El nombre accesible sale del contenido visible (repo, rama y
+   * contador) más este texto oculto: un `aria-label` que reordenara el texto rompería
+   * «Label in Name» (axe `label-content-name-mismatch`). Se conserva además como tooltip.
+   */
+  function details(e: Entry): string {
+    if (e.kind === 'new') return '';
     const i = e.info;
-    const parts = [i.name];
+    const parts: string[] = [];
     if (i.missing) parts.push(t('tabs.a11y.missing'));
     if (i.branch) parts.push(t('tabs.a11y.branch', { branch: i.branch }));
     if (i.detached) parts.push(t('tabs.a11y.detached'));
@@ -39,6 +44,10 @@
     if (i.conflictCount > 0) parts.push(tn('tabs.a11y.conflicts', i.conflictCount));
     if (i.busy) parts.push(t('tabs.a11y.busy', { op: i.busy }));
     return parts.join(', ');
+  }
+
+  function label(e: Entry): string {
+    return e.kind === 'new' ? t('tabs.newTab') : [e.info.name, details(e)].filter(Boolean).join(', ');
   }
 
   function tabEls(): HTMLElement[] {
@@ -198,7 +207,7 @@
           data-tab-id={entry.id}
           aria-selected={isActive}
           aria-controls={isActive ? 'tabpanel-main' : undefined}
-          aria-label={label(entry)}
+          title={label(entry)}
           tabindex={tabStop === entry.id ? 0 : -1}
           class="tab-btn"
           onclick={() => onClick(entry.id)}
@@ -235,14 +244,17 @@
             {:else if i.changeCount > 0}
               <span class="pill count" title={tn('tabs.a11y.changes', i.changeCount)}>{i.changeCount}</span>
             {/if}
+            <span class="sr-only">{details(entry)}</span>
           {/if}
         </button>
+        <!-- Un `tablist` solo admite hijos `tab`: el botón de cerrar queda fuera del árbol de
+             accesibilidad (el teclado cierra con Supr o Mod+W sobre la pestaña enfocada). -->
         <button
           type="button"
           class="close"
           tabindex="-1"
-          aria-label={t('tabs.close', { name: entry.kind === 'new' ? t('tabs.newTab') : entry.info.name })}
-          title={t('tabs.closeHint')}
+          aria-hidden="true"
+          title={`${t('tabs.closeHint')} — ${entry.kind === 'new' ? t('tabs.newTab') : entry.info.name}`}
           onclick={() => onclose(entry.id)}
         >
           <Icon name="x" size={12} />

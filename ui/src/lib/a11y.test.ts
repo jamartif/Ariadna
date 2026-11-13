@@ -12,7 +12,7 @@ import { expectNoSeriousViolations } from '../test/axe';
 import { loadedTab, mockApi, resetGlobals } from '../test/helpers';
 import { prTab } from '../test/prHelpers';
 import BranchDetail from './components/BranchDetail.svelte';
-import BranchesPanel from './components/BranchesPanel.svelte';
+import BranchRail from './components/BranchRail.svelte';
 import CommandPalette from './components/CommandPalette.svelte';
 import DiffView from './components/DiffView.svelte';
 import ConflictEditor from './components/ConflictEditor.svelte';
@@ -22,9 +22,9 @@ import HistoryPanel from './components/HistoryPanel.svelte';
 import PrDetail from './components/PrDetail.svelte';
 import PullRequestsPanel from './components/PullRequestsPanel.svelte';
 import RemotesSection from './components/RemotesSection.svelte';
+import RepoDialog from './components/RepoDialog.svelte';
 import TagsSection from './components/TagsSection.svelte';
 import SettingsDialog from './components/SettingsDialog.svelte';
-import Sidebar from './components/Sidebar.svelte';
 import Workspace from './components/Workspace.svelte';
 
 /**
@@ -126,21 +126,50 @@ describe('axe: Ajustes', () => {
   });
 });
 
-describe('axe: Ramas y remotos', () => {
-  it('lista de ramas, detalle y sección de remotos', async () => {
+describe('axe: Ajustes en inglés', () => {
+  it('General con la interfaz en inglés (idioma recién cambiado)', async () => {
+    settingsUi.section = 'general';
+    render(SettingsDialog, { props: { api: mockApi(), tabId: 'tab-ariadna', onclose: vi.fn() } });
+    await screen.findByLabelText('Idioma');
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText('Idioma'), 'en');
+    await screen.findByRole('dialog', { name: 'Settings' });
+    await user.click(screen.getByRole('tab', { name: 'General' }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true'));
+    expect(screen.getByLabelText('Diff text size')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    await expectNoSeriousViolations();
+  });
+});
+
+describe('axe: riel de ramas, detalle y remotos', () => {
+  it('riel con rama actual, seguimiento y inspector', async () => {
     const ctx = await loadedTab('tab-ariadna');
-    render(BranchesPanel, { props: { tab: ctx.tab } });
+    render(BranchRail, {
+      props: { tab: ctx.tab, collapsed: false, ontoggle: vi.fn(), oninspect: vi.fn(), onrepo: vi.fn() }
+    });
     render(BranchDetail, { props: { tab: ctx.tab } });
     await screen.findByRole('button', { name: /Nueva rama/ });
+    const nav = await screen.findByRole('navigation', { name: 'Árbol de ramas' });
+    expect(within(nav).getByText('(rama actual)', { exact: false })).toBeInTheDocument();
     await expectNoSeriousViolations();
     void branchesOf(ctx.tab);
   });
 
-  it('barra lateral con rama actual, seguimiento y remotos', async () => {
+  it('riel contraído (solo iconos)', async () => {
     const ctx = await loadedTab('tab-ariadna');
-    render(Sidebar, { props: { tab: ctx.tab, snapshot: ctx.tab.snapshot, loading: false } });
-    const nav = await screen.findByRole('navigation', { name: 'Ramas y remotos' });
-    expect(within(nav).getByText('(rama actual)', { exact: false })).toBeInTheDocument();
+    render(BranchRail, {
+      props: { tab: ctx.tab, collapsed: true, ontoggle: vi.fn(), oninspect: vi.fn(), onrepo: vi.fn() }
+    });
+    await screen.findByRole('button', { name: 'Expandir el riel de ramas' });
+    await expectNoSeriousViolations();
+  });
+
+  it('diálogo de remotos y etiquetas', async () => {
+    const ctx = await loadedTab('tab-ariadna');
+    render(RepoDialog, { props: { tab: ctx.tab, onclose: vi.fn() } });
+    await screen.findByRole('dialog', { name: 'Remotos y etiquetas' });
+    await screen.findByRole('region', { name: 'Etiquetas del repositorio' });
     await expectNoSeriousViolations();
   });
 

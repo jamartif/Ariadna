@@ -25,8 +25,10 @@ export const esSettings = {
 
   // General
   'settings.general.language': 'Idioma',
-  'settings.general.languageHint': 'Por ahora Ariadna solo está disponible en español.',
+  'settings.general.languageHint': 'Se aplica al momento. Ariadna está disponible en español e inglés.',
+  'settings.general.languageSystem': 'Sistema',
   'settings.general.languageEs': 'Español',
+  'settings.general.languageEn': 'English',
   'settings.general.theme': 'Tema',
   'settings.general.themeSystem': 'Sistema',
   'settings.general.themeLight': 'Claro',

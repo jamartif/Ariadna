@@ -1,9 +1,9 @@
 import { render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { branchesOf } from '$lib/stores/branches.svelte';
 import { loadedTab, resetGlobals } from '../../test/helpers';
 import BranchDetail from './BranchDetail.svelte';
-import BranchesPanel from './BranchesPanel.svelte';
 import RemotesSection from './RemotesSection.svelte';
 import Toasts from './Toasts.svelte';
 
@@ -108,7 +108,6 @@ describe('Remotos', () => {
 describe('Ramas: abrir en el navegador y crear pull request', () => {
   async function withDetail(opts = {}, tabId = 'tab-ariadna') {
     const ctx = await loadedTab(tabId, opts);
-    render(BranchesPanel, { props: { tab: ctx.tab } });
     render(BranchDetail, { props: { tab: ctx.tab } });
     render(Toasts);
     const detail = await screen.findByRole('region', { name: 'Detalle de la rama' });
@@ -129,9 +128,9 @@ describe('Ramas: abrir en el navegador y crear pull request', () => {
   });
 
   it('una rama remota usa su propio remoto y el nombre sin prefijo', async () => {
-    const { api, detail } = await withDetail();
-    const remoteRow = [...document.querySelectorAll<HTMLElement>('button.item')].find((b) => b.querySelector('.name')?.textContent === 'origin/main')!;
-    await userEvent.click(remoteRow);
+    const { api, tab, detail } = await withDetail();
+    const remote = tab.snapshot!.remoteBranches.find((b) => b.name === 'origin/main')!;
+    branchesOf(tab).select(remote.name);
     const pr = await within(detail).findByRole('button', { name: 'Crear pull request' });
     await waitFor(() => expect(pr).toBeEnabled());
     await userEvent.click(pr);

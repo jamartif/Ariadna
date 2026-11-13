@@ -18,7 +18,7 @@ pub struct ApiError {
 pub type ApiResult<T> = Result<T, ApiError>;
 
 /// Todos los códigos del contrato (para tests y documentación).
-pub const ALL_CODES: [&str; 48] = [
+pub const ALL_CODES: [&str; 50] = [
     "MERGE_CONFLICTS",
     "CONFLICTS_PENDING",
     "CONFLICT_MARKERS_REMAIN",
@@ -62,6 +62,8 @@ pub const ALL_CODES: [&str; 48] = [
     "AI_CONSENT_REQUIRED",
     "AI_NO_STAGED_CHANGES",
     "AI_SENSITIVE_FILE",
+    "AI_CONFLICT_NOT_TEXT",
+    "AI_CONFLICT_INVALID_PROPOSAL",
     "POLICY",
     "RATE_LIMITED",
     "NOT_FOUND",
@@ -70,7 +72,7 @@ pub const ALL_CODES: [&str; 48] = [
 ];
 
 /// Códigos `AI_*` del contrato (los produce [`From<AiError>`] y el servicio de IA).
-pub const AI_CODES: [&str; 10] = [
+pub const AI_CODES: [&str; 12] = [
     "AI_DISABLED",
     "AI_NOT_INSTALLED",
     "AI_NOT_LOGGED_IN",
@@ -81,6 +83,8 @@ pub const AI_CODES: [&str; 10] = [
     "AI_CONSENT_REQUIRED",
     "AI_NO_STAGED_CHANGES",
     "AI_SENSITIVE_FILE",
+    "AI_CONFLICT_NOT_TEXT",
+    "AI_CONFLICT_INVALID_PROPOSAL",
 ];
 
 impl ApiError {
@@ -217,7 +221,7 @@ impl From<AiError> for ApiError {
                 ),
             ),
             AiError::ProviderFailed { detail, .. } => ("COMMAND_FAILED", non_empty(detail)),
-            AiError::ConflictProposalRejected(d) => ("AI_BAD_OUTPUT", non_empty(d)),
+            AiError::ConflictProposalRejected(d) => ("AI_CONFLICT_INVALID_PROPOSAL", non_empty(d)),
             AiError::SensitiveFile(p) => ("AI_SENSITIVE_FILE", non_empty(p)),
             AiError::RateLimited { retry_after_secs } => {
                 ("RATE_LIMITED", Some(retry_after_secs.to_string()))

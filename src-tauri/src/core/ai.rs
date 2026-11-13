@@ -17,7 +17,8 @@ use ariadna_ai::env::{isolation, shares_login_between_profiles};
 use ariadna_ai::login::{write_script, LoginPlan, OsTerminal, Shell, TerminalLauncher};
 use ariadna_ai::orchestrator::{Limiter, Orchestrator, Profile, ProfileKind};
 use ariadna_ai::prompt::{
-    is_sensitive_path, redact_secrets, PromptBuilder, PromptPreview, PullRequestInput,
+    is_sensitive_path, redact_secrets, validate_conflict_proposal, ConflictInput, PromptBuilder,
+    PromptPreview, PullRequestInput,
 };
 use ariadna_ai::provider::DEFAULT_TIMEOUT;
 use ariadna_ai::resolve::{resolve_binary, SearchEnv};
@@ -25,15 +26,17 @@ use ariadna_ai::{
     AiContextPolicy, AiError, AiProvider, AiSettings, Availability, CallContext, CliProvider,
     CliProviderConfig, CommitLanguage, CommitOptions, ProviderChoice, ProviderId,
 };
-use ariadna_git::{CommandKind, DiffScope, FileDiff, GitPath};
+use ariadna_git::{
+    CommandKind, ConflictFile, ConflictKind, ConflictSide, DiffScope, FileDiff, GitPath,
+};
 use ariadna_process::CancellationToken;
 use serde::{Deserialize, Serialize};
 
 use super::api::{
-    AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitSuggestion, AiContextPreview,
-    AiExcludeReason, AiExcludedFile, AiLoginInfo, AiLoginRequest, AiPreviewFile, AiProfileInfo,
-    AiProviderState, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState,
-    ApiSessionEvent, ApiSessionEventKind, AppEvent,
+    AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitSuggestion, AiConflictSuggestion,
+    AiContextPreview, AiExcludeReason, AiExcludedFile, AiLoginInfo, AiLoginRequest, AiPreviewFile,
+    AiProfileInfo, AiProviderState, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch,
+    AiState, ApiSessionEvent, ApiSessionEventKind, AppEvent,
 };
 use super::app::AppCore;
 use super::error::{ApiError, ApiResult};
@@ -594,6 +597,39 @@ enum Plan {
 enum Purpose {
     Commit,
     PullRequest,
+    Conflict,
+}
+
+impl Purpose {
+    /// (qué se envía, para qué, qué garantía se da). Sin nombres de archivo: eso va aparte.
+    fn describe(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            Self::Commit => (
+                "el diff PREPARADO de este repositorio",
+                "proponer un mensaje de commit",
+                "La IA solo propone: nunca hace commit ni toca el repositorio.",
+            ),
+            Self::PullRequest => (
+                "los commits y el diff de la rama actual contra la rama base",
+                "proponer el título y la descripción de una pull request",
+                "La IA solo propone: nunca hace commit, no crea la pull request ni toca el repositorio.",
+            ),
+            Self::Conflict => (
+                "las tres versiones (base, nuestra y suya) del archivo en conflicto",
+                "proponer el archivo completo ya resuelto",
+                "La IA solo propone: no escribe el archivo ni lo marca como resuelto.",
+            ),
+        }
+    }
+}
+
+/// Lo que necesita el diálogo de consentimiento: qué archivos, cuánto contexto y para qué.
+struct Consent<'a> {
+    files: &'a [AiPreviewFile],
+    /// Archivos que se quedan fuera (sensibles, binarios, demasiado grandes).
+    excluded: usize,
+    context_bytes: usize,
+    purpose: Purpose,
 }
 
 /// Datos de una rama frente a su base, tal como los leyó git.
@@ -691,6 +727,59 @@ fn parse_pr_commits(raw: &str) -> Vec<String> {
             }
         })
         .collect()
+}
+
+/// Propuesta de conflicto inservible (marcadores, texto de más o nada). Nunca lleva el
+/// contenido: el detalle solo dice qué pasó.
+fn invalid_proposal(detail: &str) -> ApiError {
+    ApiError::new(
+        "AI_CONFLICT_INVALID_PROPOSAL",
+        "La propuesta no sirve como resolución del conflicto. Regenera o resuelve el archivo a mano.",
+        Some(detail.to_owned()),
+    )
+}
+
+/// Nombre del tipo de conflicto tal como lo ve la UI (`bothModified`, `deletedByUs`…).
+fn conflict_kind_name(kind: ConflictKind) -> &'static str {
+    match kind {
+        ConflictKind::BothModified => "bothModified",
+        ConflictKind::BothAdded => "bothAdded",
+        ConflictKind::BothDeleted => "bothDeleted",
+        ConflictKind::AddedByUs => "addedByUs",
+        ConflictKind::AddedByThem => "addedByThem",
+        ConflictKind::DeletedByUs => "deletedByUs",
+        ConflictKind::DeletedByThem => "deletedByThem",
+        ConflictKind::Unknown => "unknown",
+    }
+}
+
+/// Las tres versiones del conflicto y el archivo de trabajo, todo en UTF-8. `None` si algún lado
+/// es binario, si el archivo de trabajo no es texto (o no existe) o si no es UTF-8 válido: es
+/// exactamente lo que no se puede mandar a la IA.
+#[allow(clippy::type_complexity)]
+fn conflict_texts(
+    file: &ConflictFile,
+) -> Option<(Option<String>, Option<String>, Option<String>, String)> {
+    if file.ours.is_binary || file.base.is_binary || file.theirs.is_binary {
+        return None;
+    }
+    let side = |s: &ConflictSide| -> Option<Option<String>> {
+        match s.content.as_deref() {
+            None => Some(None),
+            Some(bytes) => std::str::from_utf8(bytes).ok().map(|t| Some(t.to_owned())),
+        }
+    };
+    let working = file.working_tree.as_deref()?;
+    if working.contains(&0) {
+        return None;
+    }
+    let working = std::str::from_utf8(working).ok()?.to_owned();
+    Some((
+        side(&file.ours)?,
+        side(&file.base)?,
+        side(&file.theirs)?,
+        working,
+    ))
 }
 
 fn not_installed(p: ProviderId) -> AiError {
@@ -1144,8 +1233,18 @@ impl AppCore {
             .map_err(ApiError::from)?;
 
         if let Plan::NeedConsent(provider) = svc.plan(&st)? {
-            self.ai_ask_consent(provider, st.active_profile, &gathered, run, Purpose::Commit)
-                .await?;
+            self.ai_ask_consent(
+                provider,
+                st.active_profile,
+                Consent {
+                    files: &gathered.files,
+                    excluded: gathered.excluded.len(),
+                    context_bytes: gathered.prompt.context_bytes,
+                    purpose: Purpose::Commit,
+                },
+                run,
+            )
+            .await?;
             st = svc.snapshot_with(rule.as_ref());
         }
         if run.token.is_cancelled() {
@@ -1175,6 +1274,165 @@ impl AppCore {
             provider: suggestion.provider.binary_name().to_owned(),
             command_summary: suggestion.command_summary.clone(),
             repo_revision: gathered.revision,
+        })
+    }
+
+    // --- resolución de conflictos -------------------------------------------------------------
+
+    /// `ai_resolve_conflict`: propone el archivo **completo** ya resuelto a partir de las tres
+    /// versiones del conflicto (base, nuestra y suya).
+    ///
+    /// Mismos filtros y garantías que el resto de la IA: sensibles, binarios, texto que no es
+    /// UTF-8 y tope de contexto antes de llamar al CLI; consentimiento por perfil y proveedor;
+    /// una sola generación por pestaña, cancelable de verdad. La propuesta se valida (sin
+    /// marcadores de conflicto y sin tocar el texto fuera de los bloques) y **no se escribe
+    /// nada**: el texto vuelve a la UI para que el usuario lo revise y decida.
+    pub async fn ai_resolve_conflict(
+        &self,
+        tab_id: &str,
+        path: GitPath,
+    ) -> ApiResult<AiConflictSuggestion> {
+        let st = self.ai().snapshot();
+        if !st.settings.enabled {
+            return Err(ApiError::from(AiError::AiDisabled));
+        }
+        self.live(tab_id)?;
+
+        let run = self.ai().begin(tab_id);
+        let label = "IA: resolver conflicto".to_owned();
+        self.ai_event(
+            tab_id,
+            ApiSessionEventKind::OperationStarted {
+                operation_id: run.op_id,
+                label: label.clone(),
+            },
+        );
+        let result = self.ai_conflict_inner(tab_id, &path, &run).await;
+        self.ai_event(
+            tab_id,
+            ApiSessionEventKind::OperationFinished {
+                operation_id: run.op_id,
+                label,
+                ok: result.is_ok(),
+                error: result.as_ref().err().cloned(),
+            },
+        );
+        drop(run);
+        result
+    }
+
+    async fn ai_conflict_inner(
+        &self,
+        tab_id: &str,
+        path: &GitPath,
+        run: &Run,
+    ) -> ApiResult<AiConflictSuggestion> {
+        let svc = self.ai();
+        let rule = self.rule_for_tab(tab_id);
+        let mut st = svc.snapshot_with(rule.as_ref());
+        let max_bytes = st.settings.max_context_bytes;
+
+        let (session, _) = self.live(tab_id)?;
+        let revision = Self::fresh_snapshot(&session).await.revision;
+        let shown = path.to_string_lossy().into_owned();
+
+        // Estado del conflicto: solo lectura (índice con etapas 1/2/3 y archivo de trabajo).
+        let files = self.get_conflicts(tab_id).await?;
+        let file = files.iter().find(|f| &f.path == path).ok_or_else(|| {
+            ApiError::new(
+                "CONFLICT_NOT_FOUND",
+                "Ese archivo ya no está en conflicto.",
+                Some(shown.clone()),
+            )
+        })?;
+
+        // Mismos filtros que el resto de la IA: lo sensible no se envía nunca.
+        if is_sensitive_path(&shown) {
+            return Err(ApiError::from(AiError::SensitiveFile(shown)));
+        }
+        let Some((ours, base, theirs, working)) = conflict_texts(file) else {
+            return Err(ApiError::new(
+                "AI_CONFLICT_NOT_TEXT",
+                "Este conflicto es binario o no es texto UTF-8, y la IA no puede resolverlo: elige una versión entera.",
+                Some(shown),
+            ));
+        };
+
+        let input = ConflictInput {
+            path: shown.clone(),
+            kind: conflict_kind_name(file.kind).to_owned(),
+            ours,
+            base,
+            theirs,
+            working_tree: Some(working.clone()),
+        };
+        let prompt = PromptBuilder::resolve_conflict(&input).map_err(ApiError::from)?;
+        AiContextPolicy::new(max_bytes)
+            .validate_len(prompt.context_bytes)
+            .map_err(ApiError::from)?;
+        if run.token.is_cancelled() {
+            return Err(AiError::Cancelled.into());
+        }
+
+        if let Plan::NeedConsent(provider) = svc.plan(&st)? {
+            let files = [AiPreviewFile {
+                path: path.clone(),
+                bytes: prompt.context_bytes,
+            }];
+            self.ai_ask_consent(
+                provider,
+                st.active_profile,
+                Consent {
+                    files: &files,
+                    excluded: 0,
+                    context_bytes: prompt.context_bytes,
+                    purpose: Purpose::Conflict,
+                },
+                run,
+            )
+            .await?;
+            st = svc.snapshot_with(rule.as_ref());
+        }
+        if run.token.is_cancelled() {
+            return Err(AiError::Cancelled.into());
+        }
+
+        let providers: Vec<Arc<dyn AiProvider>> = ProviderId::AUTO_ORDER
+            .into_iter()
+            .map(|id| Arc::new(svc.provider(id, &st)) as Arc<dyn AiProvider>)
+            .collect();
+        let orchestrator = Orchestrator::new(providers, Arc::clone(&svc.shared.limiter));
+        let call = CallContext::new(revision.to_string()).with_cancel(run.token.clone());
+        let suggestion = orchestrator
+            .propose_conflict_resolution(
+                &svc.call_profile(&st),
+                st.settings.provider,
+                &call,
+                &input,
+            )
+            .await
+            .map_err(ApiError::from)?;
+
+        let content = suggestion
+            .proposed_content
+            .clone()
+            .filter(|c| !c.trim().is_empty())
+            .ok_or_else(|| invalid_proposal("el proveedor no devolvió el archivo completo"))?;
+        // Se vuelve a validar aquí (además de en el proveedor): sin marcadores, sin tocar el
+        // texto fuera de los bloques y sin `[REDACTED]` que se comería un secreto del archivo.
+        // El texto llega como `String`, así que es UTF-8 válido por construcción.
+        validate_conflict_proposal(&working, &content).map_err(ApiError::from)?;
+
+        Ok(AiConflictSuggestion {
+            path: path.clone(),
+            content,
+            rationale: suggestion
+                .rationale
+                .clone()
+                .filter(|r| !r.trim().is_empty()),
+            provider: suggestion.provider.binary_name().to_owned(),
+            command_summary: suggestion.command_summary.clone(),
+            repo_revision: revision,
         })
     }
 
@@ -1519,9 +1777,13 @@ impl AppCore {
             self.ai_ask_consent(
                 provider,
                 st.active_profile,
-                &gathered,
+                Consent {
+                    files: &gathered.files,
+                    excluded: gathered.excluded.len(),
+                    context_bytes: gathered.prompt.context_bytes,
+                    purpose: Purpose::PullRequest,
+                },
                 run,
-                Purpose::PullRequest,
             )
             .await?;
             st = svc.snapshot_with(rule.as_ref());
@@ -1554,14 +1816,18 @@ impl AppCore {
     }
 
     /// Diálogo nativo de primer uso: qué se envía y a quién. Se guarda lo que decida.
+    ///
+    /// Sirve para commit, pull request y conflicto: lo único que cambia es el texto (`purpose`)
+    /// y la lista de archivos/bytes de contexto, que siempre viene del mismo cálculo.
     async fn ai_ask_consent(
         &self,
         provider: ProviderId,
         kind: ProfileKind,
-        g: &Gathered,
+        c: Consent<'_>,
         run: &Run,
-        purpose: Purpose,
     ) -> ApiResult<()> {
+        let (files, excluded, context_bytes, purpose) =
+            (c.files, c.excluded, c.context_bytes, c.purpose);
         let svc = self.ai();
         // Dos pestañas que piden consentimiento a la vez no abren dos diálogos.
         let _guard = svc.shared.consent_lock.lock().await;
@@ -1571,42 +1837,31 @@ impl AppCore {
             return Ok(());
         }
         let name = provider.display_name();
-        let total: usize = g.files.iter().map(|f| f.bytes).sum();
-        let mut lines: Vec<String> = g
-            .files
+        let total: usize = files.iter().map(|f| f.bytes).sum();
+        let mut lines: Vec<String> = files
             .iter()
             .take(SHOWN_FILES)
             .map(|f| f.path.to_string_lossy().into_owned())
             .collect();
-        if g.files.len() > SHOWN_FILES {
-            lines.push(format!("… y {} más", g.files.len() - SHOWN_FILES));
+        if files.len() > SHOWN_FILES {
+            lines.push(format!("… y {} más", files.len() - SHOWN_FILES));
         }
-        if !g.excluded.is_empty() {
+        if excluded > 0 {
             lines.push(format!(
-                "(no se envían {} archivo(s): sensibles, binarios o demasiado grandes)",
-                g.excluded.len()
+                "(no se envían {excluded} archivo(s): sensibles, binarios o demasiado grandes)"
             ));
         }
-        let (what, goal) = match purpose {
-            Purpose::Commit => (
-                "el diff PREPARADO de este repositorio",
-                "proponer un mensaje de commit",
-            ),
-            Purpose::PullRequest => (
-                "los commits y el diff de la rama actual contra la rama base",
-                "proponer el título y la descripción de una pull request",
-            ),
-        };
+        let (what, goal, guarantee) = purpose.describe();
         let message = format!(
             "Ariadna enviará a {name} {what} para {goal}.\n\n\
              • {} archivo(s), {} (contexto total: {}).\n\
              • El contenido sale de tu equipo hacia {name}, mediante su CLI y tu sesión (perfil {}).\n\
              • Se excluyen .env, claves, certificados y binarios, y se ocultan los secretos detectados.\n\
-             • La IA solo propone: nunca hace commit, no crea la pull request ni toca el repositorio.\n\n\
+             • {guarantee}\n\n\
              Se te pregunta una vez por perfil y proveedor.",
-            g.files.len(),
+            files.len(),
             human_size(total),
-            human_size(g.prompt.context_bytes),
+            human_size(context_bytes),
             st.profile().name,
         );
         let title = format!("Enviar contexto a {name}");

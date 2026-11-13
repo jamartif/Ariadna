@@ -8,6 +8,8 @@
  *  - `tab`: con una pestaña de repositorio activa.
  *  - `editor`: solo cuando el foco está dentro de un elemento `[data-scope~="editor"]`.
  */
+import { t } from '$lib/i18n';
+
 export type ShortcutScope = 'global' | 'tab' | 'editor';
 
 export interface ShortcutDef {
@@ -36,6 +38,9 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'repo.open', combo: 'Mod+O', scope: 'global', label: 'shortcut.openRepo' },
   { id: 'palette.open', combo: 'Mod+K', scope: 'global', label: 'shortcut.palette' },
   { id: 'changes.refresh', combo: 'Mod+R', scope: 'tab', label: 'shortcut.refresh' },
+  // Riel de ramas: contraer/expandir y llevar el foco a su buscador (cambio rápido de rama).
+  { id: 'rail.toggle', combo: 'Mod+B', scope: 'tab', label: 'shortcut.toggleRail' },
+  { id: 'rail.focus', combo: 'Mod+Shift+B', scope: 'tab', label: 'shortcut.branchSearch' },
   { id: 'changes.stageAll', combo: 'Mod+Shift+A', scope: 'tab', label: 'shortcut.stageAll' },
   { id: 'changes.unstageAll', combo: 'Mod+Shift+U', scope: 'tab', label: 'shortcut.unstageAll' },
   { id: 'commit.focus', combo: 'Mod+L', scope: 'tab', label: 'shortcut.focusCommit' },
@@ -54,6 +59,8 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'conflicts.ours', combo: 'Alt+1', scope: 'editor', label: 'shortcut.conflictOurs' },
   { id: 'conflicts.theirs', combo: 'Alt+2', scope: 'editor', label: 'shortcut.conflictTheirs' },
   { id: 'conflicts.both', combo: 'Alt+3', scope: 'editor', label: 'shortcut.conflictBoth' },
+  // Alt+R: resolver el archivo entero con IA (solo con el foco en el estudio de conflictos).
+  { id: 'conflicts.ai', combo: 'Alt+R', scope: 'editor', label: 'shortcut.conflictAi' },
   { id: 'clone.open', combo: 'Mod+Shift+O', scope: 'global', label: 'shortcut.clone' },
   { id: 'settings.open', combo: 'Mod+,', scope: 'global', label: 'shortcut.settings' }
 ];
@@ -101,23 +108,22 @@ export function matches(e: KeyboardEvent, def: ShortcutDef, mac: boolean): boole
   return eventCombo(e) === normalizeCombo(def.combo, mac);
 }
 
-const SYMBOLS: Record<string, string> = {
+/** Teclas con nombre propio: el resto se muestran tal cual (`K`, `1`, `←`). */
+const SYMBOL_KEYS: Record<string, string> = {
   arrowleft: '←',
   arrowright: '→',
   arrowup: '↑',
-  arrowdown: '↓',
-  enter: 'Intro',
-  tab: 'Tab'
+  arrowdown: '↓'
 };
 
-/** Texto para mostrar, p. ej. `Ctrl+Mayús+Tab` o `⌘K`. */
+/** Texto para mostrar, p. ej. `Ctrl+Mayús+Tab` o `⌘K`. Traduce las teclas con nombre. */
 export function formatCombo(combo: string, mac: boolean): string {
   const p = parseCombo(combo);
-  const key = SYMBOLS[p.key] ?? p.key.toUpperCase();
+  const key = SYMBOL_KEYS[p.key] ?? (p.key === 'enter' ? t('shortcut.key.enter') : p.key === 'tab' ? t('shortcut.key.tab') : p.key.toUpperCase());
   if (mac) {
     return `${p.ctrl ? '⌃' : ''}${p.alt ? '⌥' : ''}${p.shift ? '⇧' : ''}${p.meta || p.mod ? '⌘' : ''}${key}`;
   }
-  return [p.ctrl || p.mod ? 'Ctrl' : '', p.alt ? 'Alt' : '', p.shift ? 'Mayús' : '', key].filter(Boolean).join('+');
+  return [p.ctrl || p.mod ? 'Ctrl' : '', p.alt ? 'Alt' : '', p.shift ? t('shortcut.key.shift') : '', key].filter(Boolean).join('+');
 }
 
 /**

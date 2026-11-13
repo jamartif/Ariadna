@@ -8,6 +8,20 @@ usa [versionado semántico](https://semver.org/lang/es/).
 ## [Sin publicar]
 
 ### Añadido
+- Interfaz bilingüe español/inglés: catálogos `en.ts`/`en.*.ts` con exactamente las mismas claves
+  que los `es*` (incluidos plurales y parámetros), ajuste `language` (`system` | `es` | `en`) en
+  `settings.json` y selector «Idioma» en Ajustes › General que se aplica **al momento** (también
+  en el arranque, sin parpadeo, con `<html lang>` actualizado). Las fechas y números usan el
+  idioma activo. Tests de paridad de claves, de detección y persistencia del idioma, de cambio de
+  idioma en Ajustes y axe de la pantalla en inglés.
+- Resolver conflictos con IA: comando `ai_resolve_conflict(tabId, path)` que propone el
+  archivo **completo** ya resuelto a partir de las tres versiones (base, nuestra y suya), con
+  los mismos filtros y garantías que el resto de la IA (sensibles, binarios, tope de contexto,
+  consentimiento por perfil, cancelación) y validación de la propuesta (sin marcadores y sin
+  tocar nada fuera de los bloques). Botón ✨ «Resolver con IA» (`Alt+R`) en el editor de
+  conflictos, con panel de revisión: justificación, diferencias contra el resultado actual y
+  «Usar» (pasa al editor como texto editable, sin escribir en disco), «Regenerar» y
+  «Descartar». Nuevos códigos `AI_CONFLICT_NOT_TEXT` y `AI_CONFLICT_INVALID_PROPOSAL`.
 - Pruebas de propiedades (`proptest`) de los parsers de `ariadna-git` (status, diff, log,
   ramas, remotos, conflictos, rutas): ninguno entra en pánico con bytes arbitrarios, UTF-8
   inválido o entrada truncada, y `diff → reconstruir` reproduce la entrada byte a byte.

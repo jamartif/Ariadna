@@ -21,17 +21,41 @@
     onreorder: (ids: string[]) => void;
     onpalette: () => void;
     onsettings?: () => void;
+    /** Rama actual del repositorio activo (acción de cambio rápido en la barra). */
+    branch?: string | null;
+    detached?: boolean;
+    ahead?: number;
+    behind?: number;
+    /** Lleva el foco al buscador del riel de ramas (cambio rápido de rama). */
+    onbranches?: () => void;
     /** Para pruebas y revisión visual; por defecto se detecta con `navigator`. */
     platform?: Platform;
     /** `undefined` = detectar Tauri; `null` = sin API de ventana (navegador). */
     windowApi?: WindowApi | null;
   }
-  let { entries, activeId, onactivate, onclose, onnew, onreorder, onpalette, onsettings, platform, windowApi }: Props = $props();
+  let {
+    entries,
+    activeId,
+    onactivate,
+    onclose,
+    onnew,
+    onreorder,
+    onpalette,
+    onsettings,
+    branch = null,
+    detached = false,
+    ahead = 0,
+    behind = 0,
+    onbranches,
+    platform,
+    windowApi
+  }: Props = $props();
 
   const os = $derived(platform ?? detectPlatform());
   const mac = $derived(os === 'mac');
   const paletteCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'palette.open')?.combo ?? 'Mod+K', mac));
   const settingsCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'settings.open')?.combo ?? 'Mod+,', mac));
+  const branchCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'rail.focus')?.combo ?? 'Mod+Shift+B', mac));
   const themeIcon = $derived<IconName>(settings.theme === 'light' ? 'sun' : settings.theme === 'dark' ? 'moon' : 'monitor');
   const themeLabel = $derived(t(`settings.theme.${settings.theme}`));
 
@@ -63,13 +87,34 @@
 
   <TabStrip {entries} {activeId} {onactivate} {onclose} {onnew} {onreorder} />
 
+  {#if branch}
+    <span class="sep" data-tauri-drag-region aria-hidden="true"></span>
+    <button
+      type="button"
+      class="branch"
+      class:detached
+      onclick={() => onbranches?.()}
+      title={`${t('titlebar.branch')} (${branchCombo})`}
+      aria-keyshortcuts="Control+Shift+b Meta+Shift+b"
+    >
+      <Icon name="git-branch" size={14} />
+      <span class="blabel">{t('titlebar.branchLabel')}</span>
+      <span class="bname mono">{branch}</span>
+      {#if detached}<span class="mini">HEAD</span>{/if}
+      {#if ahead > 0}<span class="sync" title={t('sidebar.ahead', { n: ahead })}><Icon name="arrow-up" size={12} />{ahead}</span>{/if}
+      {#if behind > 0}<span class="sync" title={t('sidebar.behind', { n: behind })}><Icon name="arrow-down" size={12} />{behind}</span>{/if}
+      <span class="caret"><Icon name="chevron-down" size={12} /></span>
+    </button>
+  {/if}
+
   <div class="grow" data-tauri-drag-region></div>
 
   <div class="tools">
-    <button type="button" class="palette" onclick={onpalette} aria-label={t('palette.open')} title={t('palette.open')}>
+    <button type="button" class="palette" onclick={onpalette} title={t('palette.open')}>
       <Icon name="search" size={14} />
       <span class="hint">{t('palette.placeholderShort')}</span>
       <kbd>{paletteCombo}</kbd>
+      <span class="sr-only">{t('palette.open')}</span>
     </button>
     <button
       type="button"
@@ -140,6 +185,98 @@
     align-self: stretch;
     min-width: 24px;
   }
+  .sep {
+    width: 1px;
+    height: 20px;
+    flex: none;
+    margin: 0 2px;
+    background: var(--border);
+  }
+  /* Rama actual del repo activo: un clic lleva el foco al buscador del riel. */
+  .branch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    max-width: 320px;
+    min-width: 0;
+    flex: none;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--pill);
+    background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+    color: var(--text);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    transition:
+      border-color var(--dur-fast) var(--ease),
+      background-color var(--dur-fast) var(--ease);
+  }
+  .branch:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-surface);
+  }
+  .branch :global(svg:first-child) {
+    flex: none;
+    color: var(--accent);
+  }
+  .blabel {
+    flex: none;
+    color: var(--text-subtle);
+    font-size: var(--text-2xs);
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .bname {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-xs);
+    font-weight: 650;
+  }
+  .branch .sync {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    flex: none;
+    color: var(--text-muted);
+    font-size: var(--text-2xs);
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  .mini {
+    flex: none;
+    padding: 0 5px;
+    height: 16px;
+    line-height: 16px;
+    border-radius: var(--pill);
+    background: var(--bg-muted);
+    color: var(--text-muted);
+    font-size: var(--text-2xs);
+    font-weight: 650;
+  }
+  .caret {
+    flex: none;
+    color: var(--text-subtle);
+  }
+  @media (max-width: 1180px) {
+    .blabel,
+    .branch .sync,
+    .mini {
+      display: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .branch {
+      border-color: ButtonText;
+    }
+    .branch :global(svg:first-child) {
+      color: CanvasText;
+    }
+  }
   .tools {
     display: flex;
     align-items: center;
@@ -178,7 +315,7 @@
     flex: 1;
     text-align: left;
   }
-  @media (max-width: 900px) {
+  @media (max-width: 1120px) {
     .palette {
       min-width: 0;
       width: 28px;

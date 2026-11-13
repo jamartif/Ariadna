@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
+  import { intlLocale, t } from '$lib/i18n';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { tagsOf } from '$lib/stores/tags.svelte';
   import { relativeTime } from '$lib/util/time';
@@ -73,7 +73,7 @@
           <p class="meta">
             <code class="mono" title={tag.commit}>{tag.commit.slice(0, 7)}</code>
             <span aria-hidden="true">·</span>
-            <time datetime={tag.dateIso} title={new Date(tag.dateIso).toLocaleString('es-ES')}>{relativeTime(tag.dateIso)}</time>
+            <time datetime={tag.dateIso} title={new Date(tag.dateIso).toLocaleString(intlLocale())}>{relativeTime(tag.dateIso)}</time>
             {#if tag.tagger}<span aria-hidden="true">·</span><span>{t('tags.by', { name: tag.tagger })}</span>{/if}
           </p>
           <div class="tools" role="group" aria-label={tag.name}>

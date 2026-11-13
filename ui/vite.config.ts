@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   plugins: [svelte(), svelteTesting()],
+  // No hay recursos estáticos propios: `index.html` está en la raíz y las fuentes vienen
+  // de @fontsource. Sin esta línea, rolldown-vite falla al copiar un `public/` inexistente.
+  publicDir: false,
   resolve: {
     alias: { $lib: fileURLToPath(new URL('./src/lib', import.meta.url)) }
   },

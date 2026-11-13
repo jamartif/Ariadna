@@ -18,7 +18,7 @@ import {
   type SettingsView,
   type ThemePref
 } from '$lib/api/types';
-import { t } from '$lib/i18n';
+import { t, type LanguagePref } from '$lib/i18n';
 import { normalizePattern } from '$lib/util/profileRules';
 import { settings as globalSettings } from './settings.svelte';
 import { toasts } from './toasts.svelte';
@@ -80,7 +80,7 @@ export class SettingsPanel {
   /** Último inicio de sesión preparado por proveedor: el comando con el entorno del perfil, o el error. */
   logins = $state.raw<Record<string, { info: AiLoginInfo | null; error: ApiError | null }>>({});
 
-  private original: { theme: ThemePref; diffFontSize: number } | null = null;
+  private original: { theme: ThemePref; diffFontSize: number; language: LanguagePref } | null = null;
   private disposed = false;
   private checkRun = 0;
 
@@ -98,7 +98,11 @@ export class SettingsPanel {
       if (this.disposed) return;
       this.view = view;
       this.draft = clone(view.settings);
-      this.original = { theme: view.settings.theme, diffFontSize: view.settings.diffFontSize };
+      this.original = {
+        theme: view.settings.theme,
+        diffFontSize: view.settings.diffFontSize,
+        language: view.settings.language
+      };
       this.loadError = null;
     } catch (e) {
       this.loadError = toApiError(e);
@@ -223,16 +227,26 @@ export class SettingsPanel {
     }
   }
 
+  /**
+   * El idioma se aplica al momento (como el tema) y se guarda con el resto del borrador;
+   * «Cancelar» devuelve el que había.
+   */
+  setLanguage(language: LanguagePref): void {
+    if (!this.draft) return;
+    this.draft.language = language;
+    globalSettings.applyExternal(this.draft.theme, this.draft.diffFontSize, language);
+  }
+
   setGitPath(path: string): void {
     if (!this.draft) return;
     this.draft.gitPath = path.trim() === '' ? null : path;
     this.gitCheck = null;
   }
 
-  /** Vuelve a lo guardado (también la vista previa de tema y tamaño). */
+  /** Vuelve a lo guardado (también la vista previa de tema, tamaño e idioma). */
   revert(): void {
     if (this.view) this.draft = clone(this.view.settings);
-    if (this.original) globalSettings.applyExternal(this.original.theme, this.original.diffFontSize);
+    if (this.original) globalSettings.applyExternal(this.original.theme, this.original.diffFontSize, this.original.language);
     this.saveError = null;
     this.gitCheck = null;
   }
@@ -307,8 +321,12 @@ export class SettingsPanel {
       if (this.disposed) return true;
       this.view = view;
       this.draft = clone(view.settings);
-      this.original = { theme: view.settings.theme, diffFontSize: view.settings.diffFontSize };
-      globalSettings.applyExternal(view.settings.theme, view.settings.diffFontSize);
+      this.original = {
+        theme: view.settings.theme,
+        diffFontSize: view.settings.diffFontSize,
+        language: view.settings.language
+      };
+      globalSettings.applyExternal(view.settings.theme, view.settings.diffFontSize, view.settings.language);
       this.gitCheck = null;
       void this.loadAi(); // las reglas pueden cambiar el perfil de la pestaña
       toasts.success(t('settings.saved'));
@@ -351,12 +369,12 @@ export function startSettingsSync(api: Api): () => void {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const push = async (s: { theme: ThemePref; diffFontSize: number }) => {
+  const push = async (s: { theme: ThemePref; diffFontSize: number; language: LanguagePref }) => {
     try {
       // Se parte de lo guardado ahora (el panel de Ajustes pudo cambiar otros campos).
       const current = (await api.getSettings()).settings;
-      if (current.theme === s.theme && current.diffFontSize === s.diffFontSize) return;
-      await api.saveSettings({ ...current, theme: s.theme, diffFontSize: s.diffFontSize });
+      if (current.theme === s.theme && current.diffFontSize === s.diffFontSize && current.language === s.language) return;
+      await api.saveSettings({ ...current, theme: s.theme, diffFontSize: s.diffFontSize, language: s.language });
     } catch {
       /* queda en localStorage; el siguiente arranque lo reintenta */
     }
@@ -366,7 +384,8 @@ export function startSettingsSync(api: Api): () => void {
     try {
       const view = await api.getSettings();
       if (stopped) return;
-      globalSettings.applyExternal(view.settings.theme, view.settings.diffFontSize);
+      // El idioma guardado en `settings.json` manda: se aplica antes del primer pintado útil.
+      globalSettings.applyExternal(view.settings.theme, view.settings.diffFontSize, view.settings.language);
       if (view.load.warning) toasts.warning(t('settings.loadWarning'), view.load.warning);
       globalSettings.onChange = (s) => {
         if (timer) clearTimeout(timer);

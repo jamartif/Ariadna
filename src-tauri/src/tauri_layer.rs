@@ -19,11 +19,11 @@ use tokio::sync::oneshot;
 use crate::core::menu::{app_menu, effect_of, Effect, Entry, Role};
 use crate::core::{
     default_data_dir, locate_git, validate_external_url, AiAccounts, AiAccountsRequest,
-    AiCommitOptions, AiCommitSuggestion, AiContextPreview, AiLoginInfo, AiLoginRequest,
-    AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState, AmendDraft, ApiError,
-    ApiSnapshot, AppConfig, AppCore, AppEvent, AppState, CliStatus, Closed, CommitResult,
-    ConflictResolution, ContinueResult, CredentialTest, Done, EventSink, GitDetect, GitIdentity,
-    HunkArg, MergeStartResult, MergeState, OpenResult, Prompter, RemoteView, Settings,
+    AiCommitOptions, AiCommitSuggestion, AiConflictSuggestion, AiContextPreview, AiLoginInfo,
+    AiLoginRequest, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState,
+    AmendDraft, ApiError, ApiSnapshot, AppConfig, AppCore, AppEvent, AppState, CliStatus, Closed,
+    CommitResult, ConflictResolution, ContinueResult, CredentialTest, Done, EventSink, GitDetect,
+    GitIdentity, HunkArg, MergeStartResult, MergeState, OpenResult, Prompter, RemoteView, Settings,
     SettingsView, WebTarget,
 };
 
@@ -545,6 +545,15 @@ async fn ai_generate_pull_request(
         .await
 }
 
+#[tauri::command]
+async fn ai_resolve_conflict(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    path: GitPath,
+) -> Cmd<AiConflictSuggestion> {
+    core.ai_resolve_conflict(&tab_id, path).await
+}
+
 // --- comandos de pestaña ------------------------------------------------------------------
 
 #[tauri::command]
@@ -1018,6 +1027,7 @@ pub fn run() {
             ai_accounts,
             ai_login,
             ai_generate_pull_request,
+            ai_resolve_conflict,
             get_snapshot,
             refresh,
             stage,

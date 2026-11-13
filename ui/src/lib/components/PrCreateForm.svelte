@@ -11,6 +11,7 @@
   import MarkdownView from './MarkdownView.svelte';
   import PrError from './PrError.svelte';
   import ProposalSheet from './ProposalSheet.svelte';
+  import { profileLabel } from '$lib/stores/ai.svelte';
 
   /** Crear PR desde la rama actual (PR-04): base, título, descripción (con plantilla e IA), borrador y revisores. */
   let { tab }: { tab: TabState } = $props();
@@ -281,7 +282,7 @@
     title={proposal.title}
     body={proposal.body}
     providerName={tab.ai.providerName(proposal.provider)}
-    profileName={tab.ai.state?.profile.name ?? null}
+    profileName={tab.ai.state ? profileLabel(tab.ai.state.profile.kind) : null}
     account={tab.ai.accountLabel(proposal.provider)}
     commandSummary={proposal.commandSummary}
     {stale}

@@ -20,6 +20,12 @@
   const integrating = $derived((tab.snapshot?.integration ?? 'none') !== 'none');
 
   const remotes = $derived(remotesOf(tab));
+  // El panel puede abrirse solo (desde el riel): no depende de que RemotesSection haya cargado.
+  const remoteSig = $derived((tab.snapshot?.remotes ?? []).map((r) => `${r.name}=${r.fetchUrl}`).join('|'));
+  $effect(() => {
+    void remoteSig;
+    if (!tab.hibernated) void remotes.load();
+  });
   /** Remoto y rama para los enlaces al navegador (null = sin remoto con página web). */
   const web = $derived(br ? remotes.linkFor(br.name, remote) : null);
   const webOk = $derived(web !== null && web.remote.canOpen);

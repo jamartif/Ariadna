@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, tn } from '$lib/i18n';
+  import { intlLocale, t, tn } from '$lib/i18n';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { stashOf } from '$lib/stores/stash.svelte';
   import { pathBase, pathDir, pathText } from '$lib/util/gitpath';
@@ -19,11 +19,11 @@
 
   function when(iso: string): string {
     const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' });
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(intlLocale(), { dateStyle: 'long', timeStyle: 'short' });
   }
 </script>
 
-<section class="detail" aria-label={t('stash.region')}>
+<section class="detail" aria-label={t('stash.detailRegion')}>
   {#if !e}
     <EmptyState icon="archive" title={t('stash.pickTitle')} body={t('stash.pickBody')} />
   {:else}

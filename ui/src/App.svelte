@@ -9,7 +9,7 @@
   import Welcome from '$lib/components/Welcome.svelte';
   import Workspace from '$lib/components/Workspace.svelte';
   import { t } from '$lib/i18n';
-  import { installShortcuts, registerHandlers } from '$lib/shortcuts/registry';
+  import { installShortcuts, registerHandlers, runShortcut } from '$lib/shortcuts/registry';
   import { HIBERNATE_CHECK_MS, type AppStore } from '$lib/stores/app.svelte';
   import { buildActions } from '$lib/stores/commands';
   import { settings } from '$lib/stores/settings.svelte';
@@ -20,6 +20,10 @@
 
   const entry = $derived(app.activeEntry);
   const title = $derived(entry?.kind === 'repo' ? `${entry.info.name}${entry.info.branch ? ` — ${entry.info.branch}` : ''}` : '');
+  /** Contexto del repo activo para la barra superior (rama actual y acción de cambio rápido). */
+  const activeTab = $derived(entry?.kind === 'repo' ? app.tabState(entry.id) : null);
+  const status = $derived(activeTab?.snapshot?.status ?? null);
+  const branch = $derived(status?.branchName ?? (entry?.kind === 'repo' ? entry.info.branch : null));
 
   // El título de la ventana (barra de tareas, Alt+Tab) refleja el repo activo.
   $effect(() => {
@@ -91,10 +95,16 @@
     onreorder={(ids) => app.reorder(ids)}
     onpalette={() => (app.paletteOpen = true)}
     onsettings={() => settingsUi.open()}
+    {branch}
+    detached={status?.isDetached ?? false}
+    ahead={status?.ahead ?? 0}
+    behind={status?.behind ?? 0}
+    onbranches={() => runShortcut('rail.focus')}
   />
 
-  <div id="tabpanel-main" class="main" role="tabpanel" aria-labelledby={app.activeId ? `tab-${app.activeId}` : undefined} tabindex="-1">
-   <div class="stage">
+  <main class="main">
+   <div id="tabpanel-main" class="tabpanel" role="tabpanel" aria-labelledby={app.activeId ? `tab-${app.activeId}` : undefined} tabindex="-1">
+    <div class="stage">
     {#if app.status === 'loading'}
       <div class="boot" aria-busy="true" aria-label={t('app.loading')}>
         <div class="boot-col">
@@ -134,8 +144,9 @@
         {/if}
       {/key}
     {/if}
+    </div>
    </div>
-  </div>
+  </main>
 </div>
 
 {#if app.cloneOpen}
@@ -170,8 +181,16 @@
   .main {
     flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
     padding: 0 8px 8px;
     background: var(--bg-app);
+  }
+  .tabpanel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
   /* Tarjeta principal: panel en la capa «superficie» sobre el fondo de la ventana. */
   .stage {

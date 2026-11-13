@@ -2,6 +2,7 @@ import type {
   AiAccounts,
   AiAccountsRequest,
   AiCommitSuggestion,
+  AiConflictSuggestion,
   AiGenerateOptions,
   AiLoginInfo,
   AiLoginRequest,
@@ -172,6 +173,11 @@ export interface Api extends PullRequestApi, TagApi {
   aiLogin(request: AiLoginRequest): Promise<AiLoginInfo>;
   /** Título y descripción de PR a partir de la rama, sus commits y el diff contra la base. Solo propone. */
   aiGeneratePullRequest(tabId: string, options?: AiPullRequestOptions): Promise<AiPullRequestSuggestion>;
+  /**
+   * Resolución propuesta para un archivo EN CONFLICTO: el archivo completo, sin marcadores, a
+   * partir de las tres versiones. Solo propone: no escribe el archivo ni lo marca como resuelto.
+   */
+  aiResolveConflict(tabId: string, path: GitPath): Promise<AiConflictSuggestion>;
 
   // Eventos Rust → UI
   listen<K extends keyof ApiEvents>(event: K, handler: (payload: ApiEvents[K]) => void): Promise<Unlisten>;

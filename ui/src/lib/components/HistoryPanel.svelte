@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { t, tn } from '$lib/i18n';
+  import { intlLocale, t, tn } from '$lib/i18n';
   import type { Commit } from '$lib/api/types';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { historyOf } from '$lib/stores/history.svelte';
@@ -141,7 +141,7 @@
               <div class="line2">
                 <span class="author">{c.authorName}</span>
                 <span class="dot" aria-hidden="true">·</span>
-                <time datetime={c.authorDateIso} title={new Date(c.authorDateIso).toLocaleString('es-ES')}>{relativeTime(c.authorDateIso)}</time>
+                <time datetime={c.authorDateIso} title={new Date(c.authorDateIso).toLocaleString(intlLocale())}>{relativeTime(c.authorDateIso)}</time>
                 <span class="spacer"></span>
                 <code class="sha mono" title={c.sha}>{c.sha.slice(0, 7)}</code>
               </div>

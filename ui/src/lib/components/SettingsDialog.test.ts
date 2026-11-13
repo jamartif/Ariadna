@@ -5,7 +5,7 @@ import { toasts } from '$lib/stores/toasts.svelte';
 import { settingsUi } from '$lib/stores/settingsPanel.svelte';
 import { loadedTab, mockApi, resetGlobals } from '../../test/helpers';
 import SettingsDialog from './SettingsDialog.svelte';
-import Sidebar from './Sidebar.svelte';
+import BranchRail from './BranchRail.svelte';
 import { branchesOf } from '$lib/stores/branches.svelte';
 
 beforeEach(() => {
@@ -56,6 +56,59 @@ describe('Ajustes: estructura y accesibilidad', () => {
     await userEvent.keyboard('{Escape}');
     expect(onclose).toHaveBeenCalled();
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+  });
+});
+
+describe('Ajustes: idioma', () => {
+  it('cambiar a English cambia la interfaz al momento, actualiza <html lang> y se guarda', async () => {
+    const { api } = await setup();
+    const select = screen.getByLabelText('Idioma');
+    expect(select).toBeEnabled();
+    expect(select).toHaveValue('es');
+    expect(document.documentElement.lang).toBe('es');
+
+    await userEvent.selectOptions(select, 'en');
+    // Sin reiniciar y sin recargar: títulos, pestañas, etiquetas y avisos pasan a inglés.
+    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Artificial intelligence' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Theme')).toBeInTheDocument();
+    expect(screen.getByText('You have unsaved changes.')).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe('en');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(async () => expect((await api.getSettings()).settings.language).toBe('en'));
+    // Ya guardado no hay cambios pendientes y seguimos en inglés.
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+  });
+
+  it('«Sistema» sigue al idioma del sistema y se guarda como «system»', async () => {
+    const language = Object.getOwnPropertyDescriptor(navigator, 'language');
+    const languages = Object.getOwnPropertyDescriptor(navigator, 'languages');
+    Object.defineProperty(navigator, 'language', { value: 'en-US', configurable: true });
+    Object.defineProperty(navigator, 'languages', { value: ['en-US'], configurable: true });
+    try {
+      const { api } = await setup();
+      await userEvent.selectOptions(screen.getByLabelText('Idioma'), 'system');
+      expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+      expect(document.documentElement.lang).toBe('en');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(async () => expect((await api.getSettings()).settings.language).toBe('system'));
+    } finally {
+      // jsdom es `en-US` por defecto: se deja como estaba para no contaminar los tests siguientes.
+      Object.defineProperty(navigator, 'language', language ?? { value: 'en-US', configurable: true });
+      Object.defineProperty(navigator, 'languages', languages ?? { value: ['en-US'], configurable: true });
+    }
+  });
+
+  it('cerrar sin guardar devuelve el idioma que había', async () => {
+    await setup();
+    await userEvent.selectOptions(screen.getByLabelText('Idioma'), 'en');
+    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    expect(await screen.findByRole('dialog', { name: 'Ajustes' })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe('es');
+    expect(screen.getByLabelText('Idioma')).toHaveValue('es');
   });
 });
 
@@ -224,22 +277,27 @@ describe('Ajustes: Cuentas, Acerca de y aviso de archivo dañado', () => {
   });
 });
 
-describe('Barra lateral', () => {
+describe('Riel de ramas', () => {
+  function rail(tab: Awaited<ReturnType<typeof loadedTab>>['tab']) {
+    render(BranchRail, {
+      props: { tab, collapsed: false, ontoggle: vi.fn(), oninspect: vi.fn(), onrepo: vi.fn() }
+    });
+  }
+
   it('ya no anuncia que cambiar de rama, crear y fusionar «llegan en la siguiente versión»', async () => {
     const { tab } = await loadedTab();
-    const snap = tab.snapshot!;
-    render(Sidebar, { props: { tab, snapshot: snap, loading: false } });
+    rail(tab);
     expect(screen.queryByText(/siguiente versión/)).toBeNull();
   });
 
-  it('al pulsar una rama abre el panel de Ramas con esa rama seleccionada', async () => {
+  it('al pulsar una rama la selecciona sin salir de la vista actual', async () => {
     const { tab } = await loadedTab();
+    rail(tab);
     const snap = tab.snapshot!;
-    render(Sidebar, { props: { tab, snapshot: snap, loading: false } });
     const name = snap.branches[snap.branches.length - 1]!.name;
     await userEvent.click(screen.getByRole('button', { name: new RegExp(name) }));
-    expect(tab.panel).toBe('branches');
     expect(branchesOf(tab).selected).toBe(name);
+    expect(tab.panel).toBe('changes');
   });
 });
 

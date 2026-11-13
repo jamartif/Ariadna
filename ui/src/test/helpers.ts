@@ -1,5 +1,6 @@
 import { waitFor } from '@testing-library/svelte';
 import { createMockApi, type MockOptions } from '$lib/api/mockApi';
+import { setLocale } from '$lib/i18n';
 import { AppStore } from '$lib/stores/app.svelte';
 import { TabState } from '$lib/stores/tab.svelte';
 import { settings } from '$lib/stores/settings.svelte';
@@ -33,6 +34,10 @@ export function resetGlobals() {
   localStorage.clear();
   settings.theme = 'system';
   settings.density = 'comfortable';
+  settings.language = 'es';
+  // El idioma es estado de módulo: se devuelve a español para que un test no contamine al resto.
+  setLocale('es');
+  document.documentElement.lang = 'es';
   document.documentElement.removeAttribute('data-theme');
   document.documentElement.removeAttribute('data-density');
 }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, tn } from '$lib/i18n';
+  import { intlLocale, t, tn } from '$lib/i18n';
   import type { FileDiff } from '$lib/api/types';
   import { settings } from '$lib/stores/settings.svelte';
   import { countLines, diffStats, flattenDiff, hunkHeader, isGiant, truncateLine, type DiffRow } from '$lib/util/diff';
@@ -54,7 +54,7 @@
 {#if file.isBinary}
   <EmptyState icon="file" compact title={t('diff.binaryTitle')} body={t('history.binaryBody')} />
 {:else if giant && !show}
-  <EmptyState icon="triangle-alert" compact title={t('diff.giantTitle')} body={t('diff.giantBody', { lines: countLines(file).toLocaleString('es-ES') })}>
+  <EmptyState icon="triangle-alert" compact title={t('diff.giantTitle')} body={t('diff.giantBody', { lines: countLines(file).toLocaleString(intlLocale()) })}>
     <button type="button" class="btn btn-primary" onclick={() => (forceShow = true)}>{t('diff.loadGiant')}</button>
   </EmptyState>
 {:else if file.hunks.length === 0}
@@ -96,7 +96,7 @@
             <span class="text mono">{tr.text}</span>
             {#if tr.truncated}
               <button type="button" class="more btn btn-sm" onclick={() => (expanded = { ...expanded, [line.id]: true })}>
-                {t('diff.seeMore', { n: line.text.length.toLocaleString('es-ES') })}
+                {t('diff.seeMore', { n: line.text.length.toLocaleString(intlLocale()) })}
               </button>
             {/if}
           </div>

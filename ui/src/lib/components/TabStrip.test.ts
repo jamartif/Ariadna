@@ -79,7 +79,11 @@ describe('TabStrip', () => {
 
   it('el botón cerrar y la tecla Supr cierran; el botón + crea', async () => {
     const p = setup([repo('a'), repo('b')], 'a');
-    await userEvent.click(screen.getByRole('button', { name: 'Cerrar b' }));
+    await userEvent.click((() => {
+      const tabs = [...document.querySelectorAll<HTMLElement>('.tab')];
+      const b = tabs.find((x) => x.querySelector('.name')?.textContent === 'b');
+      return b!.querySelector<HTMLElement>('.close')!;
+    })());
     expect(p.onclose).toHaveBeenCalledWith('b');
     (screen.getAllByRole('tab')[0] as HTMLElement).focus();
     await userEvent.keyboard('{Delete}');
@@ -98,7 +102,7 @@ describe('TabStrip', () => {
       ],
       'a'
     );
-    expect(screen.getByRole('tab', { name: /a, rama main, 7 cambios/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /a main 7 rama main, 7 cambios/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /2 conflictos/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /ocupado: Preparando 3 archivos/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /carpeta no encontrada/ })).toBeInTheDocument();

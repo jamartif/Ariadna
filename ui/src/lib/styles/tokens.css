@@ -18,6 +18,7 @@
   --bg-raised: #ffffff;
   --bg-float: #ffffff;
   --bg-subtle: #f1f4f9;
+  --bg-rail: #f2f5fa;
   --bg-muted: #e3e9f1;
   --bg-selected: #d8f0f6;
   --bg-overlay: rgb(14 22 34 / 0.42);
@@ -99,6 +100,7 @@
   --bg-raised: #141a22;
   --bg-float: #19212b;
   --bg-subtle: #121821;
+  --bg-rail: #0a0e14;
   --bg-muted: #1b232e;
   --bg-selected: #0e2c35;
   --bg-overlay: rgb(2 5 9 / 0.62);
@@ -181,6 +183,7 @@
     --bg-raised: #141a22;
     --bg-float: #19212b;
     --bg-subtle: #121821;
+  --bg-rail: #0a0e14;
     --bg-muted: #1b232e;
     --bg-selected: #0e2c35;
     --bg-overlay: rgb(2 5 9 / 0.62);

@@ -3,6 +3,7 @@
   import { t, tn } from '$lib/i18n';
   import { formatCombo, isMac, registerHandlers, SHORTCUTS } from '$lib/shortcuts/registry';
   import type { TabState } from '$lib/stores/tab.svelte';
+  import { profileLabel } from '$lib/stores/ai.svelte';
   import { toasts } from '$lib/stores/toasts.svelte';
   import AiConsentDialog from './AiConsentDialog.svelte';
   import Icon from './Icon.svelte';
@@ -22,8 +23,8 @@
   let hadFocus = false;
 
   const comboOf = (id: string, fallback: string) => formatCombo(SHORTCUTS.find((s) => s.id === id)?.combo ?? fallback, isMac());
-  const submitCombo = comboOf('commit.submit', 'Mod+Enter');
-  const aiCombo = comboOf('ai.generate', 'Mod+Shift+G');
+  const submitCombo = $derived(comboOf('commit.submit', 'Mod+Enter'));
+  const aiCombo = $derived(comboOf('ai.generate', 'Mod+Shift+G'));
 
   const ai = $derived(tab.ai);
   const subjectLen = $derived([...tab.summary].length);
@@ -314,7 +315,7 @@
     title={notice.subject}
     body={notice.body}
     providerName={ai.providerName(notice.provider)}
-    profileName={ai.state?.profile.name ?? null}
+    profileName={ai.state ? profileLabel(ai.state.profile.kind) : null}
     account={ai.accountLabel(notice.provider)}
     commandSummary={notice.commandSummary}
     stale={ai.stale}

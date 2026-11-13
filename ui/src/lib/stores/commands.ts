@@ -3,6 +3,7 @@ import { SHORTCUTS, formatCombo, isMac, runShortcut } from '$lib/shortcuts/regis
 import type { AppStore } from './app.svelte';
 import { settings } from './settings.svelte';
 import { prOf } from './pullRequests.svelte';
+import { conflictsOf } from './conflicts.svelte';
 import { stashOf } from './stash.svelte';
 import { settingsUi } from './settingsPanel.svelte';
 
@@ -74,8 +75,23 @@ export function buildActions(app: AppStore): PaletteAction[] {
       run: () => void tab.unstageAll()
     });
     add({ id: 'commit.focus', label: t('shortcut.focusCommit'), group: g2, shortcut: combo('commit.focus'), run: () => runShortcut('commit.focus') });
+    add({
+      id: 'rail.focus',
+      label: t('palette.searchBranch'),
+      group: g2,
+      shortcut: combo('rail.focus'),
+      run: () => runShortcut('rail.focus')
+    });
+    add({
+      id: 'rail.toggle',
+      label: t('palette.toggleRail'),
+      group: g2,
+      shortcut: combo('rail.toggle'),
+      run: () => runShortcut('rail.toggle')
+    });
     add({ id: 'panel.changes', label: t('palette.showChanges'), group: g2, run: () => (tab.panel = 'changes') });
     add({ id: 'panel.history', label: t('palette.showHistory'), group: g2, run: () => (tab.panel = 'history') });
+    add({ id: 'panel.stashes', label: t('palette.showStashes'), group: g2, run: () => (tab.panel = 'stashes') });
     add({
       id: 'stash.push',
       label: t('palette.stashPush'),
@@ -129,6 +145,22 @@ export function buildActions(app: AppStore): PaletteAction[] {
       shortcut: combo('ai.generate'),
       run: () => runShortcut('ai.generate')
     });
+    // Resolver el conflicto seleccionado con IA: lleva al estudio y pide la propuesta.
+    const conflicts = conflictsOf(tab);
+    const conflicted = conflicts.selected;
+    // Solo los conflictos de texto se pueden resolver con IA (los binarios admiten una versión).
+    if (conflicted && conflicts.active && conflicts.mode(conflicted) === 'editor') {
+      add({
+        id: 'conflicts.ai',
+        label: t('conflicts.ai.button'),
+        group: g('palette.group.repo'),
+        shortcut: combo('conflicts.ai'),
+        run: () => {
+          tab.panel = 'conflicts';
+          void conflictsOf(tab).resolveWithAi(conflicted);
+        }
+      });
+    }
   }
 
   add({ id: 'settings.open', label: t('shortcut.settings'), group: g('palette.group.view'), shortcut: combo('settings.open'), run: () => settingsUi.open() });

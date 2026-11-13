@@ -17,7 +17,7 @@ function boot(opts = {}) {
 describe('App (integración con mockApi)', () => {
   it('arranca con la tira de pestañas y el workspace de la pestaña activa', async () => {
     boot();
-    expect(await screen.findByRole('tab', { name: /^ariadna, rama rust-migration/ })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByRole('tab', { name: /^ariadna / })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByRole('grid', { name: /Archivos con cambios/ })).toBeInTheDocument();
     expect(screen.getByRole('tabpanel', { name: /ariadna/ })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Asunto' })).toBeInTheDocument();

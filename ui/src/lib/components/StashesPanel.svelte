@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, tn } from '$lib/i18n';
+  import { intlLocale, t, tn } from '$lib/i18n';
   import type { StashEntry } from '$lib/api/types';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { stashOf } from '$lib/stores/stash.svelte';
@@ -25,7 +25,7 @@
 
   function when(iso: string): string {
     const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' });
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(intlLocale(), { dateStyle: 'medium', timeStyle: 'short' });
   }
 
   function where(e: StashEntry): string {

@@ -904,3 +904,256 @@ async fn pr_solo_con_archivos_sensibles_no_envia_nada() {
     );
     assert_eq!(ai.stdin(), "");
 }
+
+// ------------------------------------------------------------------ conflictos (tres versiones)
+
+use ariadna_git::MergeFastForward;
+
+use crate::core::api::AiConflictSuggestion;
+
+/// JSON de respuesta del CLI falso con un `---FILE---`/`---RATIONALE---` ya montado.
+fn conflict_reply(content: &str) -> String {
+    let result = format!("---FILE---\n{content}---RATIONALE---\nSe combinan los dos cambios.\n");
+    serde_json::json!({
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "result": result
+    })
+    .to_string()
+}
+
+/// Script que contesta `json` (guardado junto al `dump`) y anota stdin.
+fn conflict_script(json: String) -> impl FnOnce(&Path) -> String {
+    move |dump: &Path| {
+        let reply = dump.with_extension("json");
+        std::fs::write(&reply, &json).unwrap();
+        format!(
+            "cat > '{d}'\nprintf '%s\n' \"$@\" > '{d}.args'\ncat '{r}'",
+            d = dump.display(),
+            r = reply.display()
+        )
+    }
+}
+
+impl Ai {
+    /// `main` y `feature` cambian la misma línea de `rel`: el merge queda en curso con conflicto.
+    async fn conflicted_file(
+        script: impl FnOnce(&Path) -> String,
+        rel: &str,
+        base: &[u8],
+        theirs: &[u8],
+        ours: &[u8],
+    ) -> Self {
+        let env = Env::new();
+        let repo = env.repo("conflicto");
+        let bin_dir = env.root.join("bin");
+        let dump = env.root.join("stdin.txt");
+        let bin = fake_claude(&bin_dir, &script(&dump));
+        env.core.inner.ai.set_search_env(SearchEnv::default());
+        env.core
+            .ai_update_settings(AiSettingsPatch {
+                binary_path: Some(crate::core::api::BinaryPathPatch {
+                    id: "claude".into(),
+                    path: Some(bin.to_string_lossy().into_owned()),
+                }),
+                ..AiSettingsPatch::default()
+            })
+            .await
+            .unwrap();
+        let commit = |bytes: &[u8], msg: &str| {
+            env.write(&repo, rel, bytes);
+            env.git(&repo, &["add", "-A"]);
+            env.git(&repo, &["commit", "-q", "-m", msg]);
+        };
+        commit(base, "base");
+        env.git(&repo, &["checkout", "-q", "-b", "feature"]);
+        commit(theirs, "feature");
+        env.git(&repo, &["checkout", "-q", "main"]);
+        commit(ours, "main");
+        let tab = env.open(&repo).await;
+        let ai = Self {
+            env,
+            repo,
+            tab,
+            bin_dir,
+            dump,
+        };
+        ai.env
+            .core
+            .merge_start(&ai.tab, "feature".into(), MergeFastForward::Allow)
+            .await
+            .unwrap();
+        ai
+    }
+
+    /// Conflicto de texto en `c.txt` (la línea del medio cambia en los dos lados).
+    async fn conflicted(script: impl FnOnce(&Path) -> String) -> Self {
+        Self::conflicted_file(
+            script,
+            "c.txt",
+            b"uno\ndos\ntres\n",
+            b"uno\nDOS-feature\ntres\n",
+            b"uno\nDOS-main\ntres\n",
+        )
+        .await
+    }
+
+    async fn resolve(&self, path: &str) -> Result<AiConflictSuggestion, ApiError> {
+        self.env
+            .core
+            .ai_resolve_conflict(&self.tab, path.into())
+            .await
+    }
+
+    fn disk(&self, rel: &str) -> Vec<u8> {
+        std::fs::read(self.repo.join(rel)).unwrap()
+    }
+}
+
+#[tokio::test]
+async fn propone_el_archivo_resuelto_sin_escribirlo() {
+    let ai = Ai::conflicted(conflict_script(conflict_reply(
+        "uno\nDOS-main\ny DOS-feature\ntres\n",
+    )))
+    .await;
+    let before = ai.disk("c.txt");
+    let index_before = ai.env.git(&ai.repo, &["ls-files", "--unmerged", "c.txt"]);
+
+    let s = ai.resolve("c.txt").await.unwrap();
+
+    assert_eq!(s.path.to_string_lossy(), "c.txt");
+    assert_eq!(s.content, "uno\nDOS-main\ny DOS-feature\ntres\n");
+    assert_eq!(s.rationale.as_deref(), Some("Se combinan los dos cambios."));
+    assert_eq!(s.provider, "claude");
+    assert!(!s.command_summary.contains("DOS-main"));
+    // Nada escrito ni marcado como resuelto: el archivo conserva los marcadores y el índice
+    // sigue con las etapas 1/2/3.
+    assert_eq!(ai.disk("c.txt"), before);
+    assert!(String::from_utf8_lossy(&before).contains("<<<<<<<"));
+    assert_eq!(
+        ai.env.git(&ai.repo, &["ls-files", "--unmerged", "c.txt"]),
+        index_before
+    );
+    // El prompt lleva las tres versiones y va por stdin, no por argv.
+    let stdin = ai.stdin();
+    for side in ["DOS-main", "DOS-feature", "uno", "tres"] {
+        assert!(stdin.contains(side), "falta {side} en el prompt");
+    }
+    let args = std::fs::read_to_string(format!("{}.args", ai.dump.display())).unwrap();
+    assert!(!args.contains("DOS-main"));
+    // Un solo diálogo de consentimiento, del perfil y proveedor que responde.
+    assert_eq!(ai.env.prompter.count(), 1);
+    assert!(ai.env.prompter.last().message.contains("perfil Personal"));
+}
+
+#[tokio::test]
+async fn una_propuesta_con_marcadores_se_rechaza() {
+    let ai = Ai::conflicted(conflict_script(conflict_reply(
+        "uno\n<<<<<<< HEAD\nDOS-main\n=======\nDOS-feature\n>>>>>>> feature\ntres\n",
+    )))
+    .await;
+    let e = ai.resolve("c.txt").await.unwrap_err();
+    assert_eq!(e.code, "AI_CONFLICT_INVALID_PROPOSAL", "{e:?}");
+    assert!(!e.message.contains("DOS-main"), "sin contenido en el error");
+    assert!(String::from_utf8_lossy(&ai.disk("c.txt")).contains("<<<<<<<"));
+}
+
+#[tokio::test]
+async fn una_propuesta_que_toca_fuera_de_los_bloques_se_rechaza() {
+    let ai = Ai::conflicted(conflict_script(conflict_reply(
+        "OTRA CABECERA\nDOS-main\ntres\n",
+    )))
+    .await;
+    let e = ai.resolve("c.txt").await.unwrap_err();
+    assert_eq!(e.code, "AI_CONFLICT_INVALID_PROPOSAL", "{e:?}");
+}
+
+#[tokio::test]
+async fn un_conflicto_binario_no_se_envia() {
+    let ai = Ai::conflicted_file(
+        ok_script,
+        "logo.png",
+        b"\x00\x01base\x00",
+        b"\x00\x01suyo\x00",
+        b"\x00\x01nuestro\x00",
+    )
+    .await;
+    let e = ai.resolve("logo.png").await.unwrap_err();
+    assert_eq!(e.code, "AI_CONFLICT_NOT_TEXT", "{e:?}");
+    assert!(!ai.dump.exists(), "no se llamó al CLI");
+    assert_eq!(ai.env.prompter.count(), 0, "ni se preguntó nada");
+}
+
+#[tokio::test]
+async fn un_archivo_sensible_no_se_envia() {
+    let ai = Ai::conflicted_file(ok_script, ".env", b"A=1\n", b"A=2\n", b"A=3\n").await;
+    let e = ai.resolve(".env").await.unwrap_err();
+    assert_eq!(e.code, "AI_SENSITIVE_FILE", "{e:?}");
+    assert!(!ai.dump.exists());
+}
+
+#[tokio::test]
+async fn con_la_ia_desactivada_no_se_llama_al_cli() {
+    let ai = Ai::conflicted(ok_script).await;
+    ai.env
+        .core
+        .ai_update_settings(AiSettingsPatch {
+            enabled: Some(false),
+            ..AiSettingsPatch::default()
+        })
+        .await
+        .unwrap();
+    let e = ai.resolve("c.txt").await.unwrap_err();
+    assert_eq!(e.code, "AI_DISABLED", "{e:?}");
+    assert!(!ai.dump.exists());
+}
+
+#[tokio::test]
+async fn sin_consentimiento_no_se_envia_nada() {
+    let ai = Ai::conflicted(ok_script).await;
+    ai.env.prompter.reject_all();
+    let e = ai.resolve("c.txt").await.unwrap_err();
+    assert_eq!(e.code, "AI_CONSENT_REQUIRED", "{e:?}");
+    assert!(!ai.dump.exists());
+    assert!(String::from_utf8_lossy(&ai.disk("c.txt")).contains("<<<<<<<"));
+}
+
+#[tokio::test]
+async fn un_archivo_que_ya_no_esta_en_conflicto_da_conflict_not_found() {
+    let ai = Ai::conflicted(ok_script).await;
+    let e = ai.resolve("README.md").await.unwrap_err();
+    assert_eq!(e.code, "CONFLICT_NOT_FOUND", "{e:?}");
+}
+
+#[tokio::test]
+async fn cancelar_la_resolucion_mata_el_proceso_y_no_toca_nada() {
+    let ai = Ai::conflicted(|_| "cat > /dev/null\nsleep 30".to_owned()).await;
+    let core = ai.env.core.clone();
+    let tab = ai.tab.clone();
+    let task = tokio::spawn(async move { core.ai_resolve_conflict(&tab, "c.txt".into()).await });
+    wait_until("la resolución se registra", || {
+        ai.env.core.inner.ai.is_running(&ai.tab)
+    })
+    .await;
+    let t = Instant::now();
+    assert!(ai.env.core.ai_cancel(&ai.tab).unwrap());
+    let e = task.await.unwrap().unwrap_err();
+    assert_eq!(e.code, "CANCELLED", "{e:?}");
+    assert!(
+        t.elapsed() < Duration::from_secs(10),
+        "no esperó al sleep 30"
+    );
+    assert!(String::from_utf8_lossy(&ai.disk("c.txt")).contains("<<<<<<<"));
+}
+
+#[tokio::test]
+async fn un_cli_colgado_en_un_conflicto_acaba_en_timeout() {
+    let ai = Ai::conflicted(|_| "cat > /dev/null\nsleep 30".to_owned()).await;
+    ai.env.core.inner.ai.set_timeout(Duration::from_millis(400));
+    let t = Instant::now();
+    let e = ai.resolve("c.txt").await.unwrap_err();
+    assert_eq!(e.code, "AI_TIMEOUT", "{e:?}");
+    assert!(t.elapsed() < Duration::from_secs(10));
+    assert!(!ai.env.core.inner.ai.is_running(&ai.tab), "se da de baja");
+}

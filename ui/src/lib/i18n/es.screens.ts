@@ -152,5 +152,38 @@ export const esScreens = {
   'branches.deleteFailed': 'No se pudo borrar la rama',
   'branches.deleted': 'Rama «{name}» borrada',
   'branches.cannotDeleteCurrent': 'La rama actual no se puede borrar: cambia antes a otra.',
-  'branches.remoteNote': 'Al cambiar a una rama remota se crea una rama local que la sigue.'
+  'branches.remoteNote': 'Al cambiar a una rama remota se crea una rama local que la sigue.',
+
+  // Riel de ramas (gestión siempre visible a la izquierda)
+  'rail.label': 'Riel de ramas',
+  'rail.title': 'Ramas',
+  'rail.count.one': '1 rama',
+  'rail.count.other': '{n} ramas',
+  'rail.collapse': 'Contraer el riel de ramas',
+  'rail.expand': 'Expandir el riel de ramas',
+  'rail.filter': 'Buscar rama',
+  'rail.filterPlaceholder': 'Filtrar ramas…',
+  'rail.clearFilter': 'Borrar el filtro',
+  'rail.branchList': 'Árbol de ramas',
+  'rail.current': 'Rama actual',
+  'rail.currentA11y': 'Rama actual: {name}',
+  'rail.noCurrent': 'Sin rama actual (HEAD desacoplado)',
+  'rail.find': 'Buscar una rama',
+  'rail.repo': 'Remotos y etiquetas',
+  'rail.inspector': 'Rama seleccionada',
+  'rail.actions': 'Acciones de la rama seleccionada',
+  'rail.details': 'Detalle',
+  'rail.detailsOf': 'Detalle de {name}',
+  'rail.merge': 'Fusionar',
+  'rail.noTracks': 'sin seguimiento remoto',
+  'rail.syncActions': 'Traer, bajar y subir la rama actual',
+  'rail.detailTitle': 'Detalle de la rama',
+  'rail.back': 'Volver al detalle',
+  'rail.resize': 'Redimensionar el riel de ramas',
+  'rail.clearSelection': 'Quitar la selección',
+
+  // Remotos y etiquetas (diálogo del riel)
+  'repo.title': 'Remotos y etiquetas',
+  'repo.subtitle': 'Remotos, etiquetas y operaciones del repositorio abierto.',
+  'repo.close': 'Cerrar'
 } as const;

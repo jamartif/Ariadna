@@ -19,12 +19,13 @@ import {
   smallHunk
 } from './mockData';
 import { demoConflictDefs, toConflictFile, toSummary, type MockConflictDef } from './mockConflicts';
-import { hasMarkers } from '$lib/util/conflictMarkers';
+import { hasMarkers, resolveAllRegions } from '$lib/util/conflictMarkers';
 import {
   ApiError,
   type AiAccount,
   type AiAccounts,
   type AiCommitSuggestion,
+  type AiConflictSuggestion,
   type AiLoginInfo,
   type AiPullRequestSuggestion,
   type AiState,
@@ -1645,7 +1646,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     },
     async saveSettings(next) {
       await delay(Math.min(latency, 80));
-      if (next.language !== 'es') throw badSetting('language', 'por ahora solo existe el español (es)');
+      if (!['system', 'es', 'en'].includes(next.language)) throw badSetting('language', 'solo se admite «system», «es» o «en»');
       if (!Number.isInteger(next.diffFontSize) || next.diffFontSize < 10 || next.diffFontSize > 24) throw badSetting('diffFontSize', 'debe estar entre 10 y 24');
       if (!['system', 'light', 'dark'].includes(next.theme)) throw badSetting('theme', 'valor desconocido');
       const path = next.gitPath?.trim() || null;
@@ -1869,6 +1870,61 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         head: r.branch ?? 'HEAD',
         commitCount: r.commits.length
       };
+    },
+    async aiResolveConflict(tabId, path): Promise<AiConflictSuggestion> {
+      const r = repoOf(tabId);
+      if (!ai.enabled) throw err('AI_DISABLED', 'La IA está desactivada en los ajustes de Ariadna.');
+      const shown = pathText(path);
+      const file = r.files.find((f) => f.path === shown && f.base === 'U');
+      if (!file) throw err('CONFLICT_NOT_FOUND', 'Ese archivo ya no está en conflicto.', shown);
+      if (/(^|\/)\.env|\.pem$|\.key$|id_rsa/.test(shown)) {
+        throw err('AI_SENSITIVE_FILE', 'Los archivos sensibles (.env, claves, certificados…) no se envían a la IA.', shown);
+      }
+      const def = r.conflictDefs?.get(shown);
+      if (def?.binary === true || def?.working === null || def?.working === undefined) {
+        throw err('AI_CONFLICT_NOT_TEXT', 'Este conflicto es binario o no es texto UTF-8, y la IA no puede resolverlo: elige una versión entera.', shown);
+      }
+      const wanted = ai.choice === 'auto' ? (ai.providers.find((p) => p.enabled && p.availability !== 'missing') ?? ai.providers[0]) : ai.providers.find((p) => p.id === ai.choice);
+      const provider = wanted as AiState['providers'][number];
+      if (provider.availability === 'missing') {
+        throw err('AI_NOT_INSTALLED', `No se encontró el comando «${provider.id}» en el equipo.`, provider.loginCommand);
+      }
+      if (!provider.consented) {
+        const ok = scenario === 'ai-consent-denied' ? false : confirmFn(`¿Permites que Ariadna envíe a ${provider.displayName} las tres versiones de ${shown} para proponer una resolución? Se excluyen archivos sensibles y se redactan secretos.`);
+        if (!ok) throw err('AI_CONSENT_REQUIRED', 'Sin tu permiso Ariadna no envía nada a la IA.');
+        ai.providers = ai.providers.map((p) => (p.id === provider.id ? { ...p, consented: true } : p));
+      }
+      const op = ++opCounter;
+      emit('session-event', { sessionId: r.tabId, revision: r.revision, kind: { type: 'operationStarted', operationId: op, label: `Resolviendo ${shown} con ${provider.displayName}` } });
+      const think = scenario === 'ai-slow' ? 9000 : Math.max(latency * 8, latency === 0 ? 0 : 900);
+      try {
+        const revisionAtStart = r.revision;
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, think);
+          aiCancelled.set(tabId, () => {
+            clearTimeout(timer);
+            reject(err('CANCELLED', 'Generación cancelada.'));
+          });
+        });
+        if (scenario === 'ai-timeout') throw err('AI_TIMEOUT', `${provider.displayName} no respondió en 120 s.`);
+        if (scenario === 'ai-quota') throw err('AI_QUOTA', `${provider.displayName} ha alcanzado su límite de uso. Vuelve a intentarlo más tarde o elige otro proveedor.`);
+        if (scenario === 'ai-conflict-markers') {
+          throw err('AI_CONFLICT_INVALID_PROPOSAL', 'La propuesta no sirve como resolución del conflicto. Regenera o resuelve el archivo a mano.', 'quedan marcadores de conflicto');
+        }
+        // Propuesta del mock: se conservan los dos lados en cada bloque (como «Aceptar ambos»).
+        const content = resolveAllRegions(def.working, 'both');
+        return {
+          path: pathText(path),
+          content,
+          rationale: 'Se conservan los dos cambios: lo que añade cada rama cabe junto en el archivo. Revísalo antes de marcarlo como resuelto.',
+          provider: provider.id,
+          commandSummary: `${provider.id} -p --output-format json (stdin)`,
+          repoRevision: revisionAtStart
+        };
+      } finally {
+        aiCancelled.delete(tabId);
+        emit('session-event', { sessionId: r.tabId, revision: r.revision, kind: { type: 'operationFinished', operationId: op, label: `Resolviendo ${shown} con ${provider.displayName}`, ok: true, error: null } });
+      }
     },
     /** Solo pruebas: inicios de sesión pedidos, en orden. */
     __aiLogins: () => [...aiLogins],

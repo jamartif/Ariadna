@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, tn } from '$lib/i18n';
+  import { intlLocale, t, tn } from '$lib/i18n';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { historyOf } from '$lib/stores/history.svelte';
   import { toasts } from '$lib/stores/toasts.svelte';
@@ -69,7 +69,7 @@
       <dl class="meta">
         <div><dt>{t('history.author')}</dt><dd>{c.authorName} <span class="mail">&lt;{c.authorEmail}&gt;</span></dd></div>
         {#if date && !Number.isNaN(date.getTime())}
-          <div><dt>{t('history.date')}</dt><dd><time datetime={c.authorDateIso}>{date.toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' })}</time></dd></div>
+          <div><dt>{t('history.date')}</dt><dd><time datetime={c.authorDateIso}>{date.toLocaleString(intlLocale(), { dateStyle: 'long', timeStyle: 'short' })}</time></dd></div>
         {/if}
         <div>
           <dt>{t('history.commit')}</dt>

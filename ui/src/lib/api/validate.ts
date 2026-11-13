@@ -254,6 +254,14 @@ export const aiCommitSuggestion = obj({
   repoRevision: int
 });
 
+export const aiConflictSuggestion = obj({
+  path: gitPath,
+  content: str,
+  provider: str,
+  commandSummary: str,
+  repoRevision: int
+}, { rationale: nullable(str) });
+
 export const aiAccount = obj({
   provider: str,
   state: oneOf('loggedIn', 'loggedOut', 'unavailable'),
@@ -300,7 +308,7 @@ export const profileRule = obj({ pattern: str, profile: oneOf('personal', 'empre
 
 export const appSettings = obj({
   version: int,
-  language: oneOf('es'),
+  language: oneOf('system', 'es', 'en'),
   theme: oneOf('system', 'light', 'dark'),
   diffFontSize: int,
   gitPath: nullable(str),
@@ -410,6 +418,7 @@ export function detect(value: unknown): { name: string; validator: V } | null {
   if (!list && has('title', 'body', 'provider', 'commitCount')) return { name: 'AiPullRequestSuggestion', validator: aiPullRequestSuggestion };
   if (!list && has('accounts', 'profile')) return { name: 'AiAccounts', validator: aiAccounts };
   if (!list && has('launched', 'shell')) return { name: 'AiLoginInfo', validator: aiLoginInfo };
+  if (!list && has('content', 'provider', 'repoRevision')) return { name: 'AiConflictSuggestion', validator: aiConflictSuggestion };
   if (!list && has('subject', 'body', 'provider', 'repoRevision')) return { name: 'AiCommitSuggestion', validator: aiCommitSuggestion };
   if (!list && has('enabled', 'profile', 'providers')) return { name: 'AiState', validator: aiState };
   if (!list && has('maxBytes', 'redactions')) return { name: 'ContextPreview', validator: contextPreview };

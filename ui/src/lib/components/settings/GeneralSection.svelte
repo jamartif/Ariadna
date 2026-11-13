@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '$lib/i18n';
+  import { t, type LanguagePref, type MessageKey } from '$lib/i18n';
   import { DIFF_FONT_MAX, DIFF_FONT_MIN, type ThemePref } from '$lib/api/types';
   import type { SettingsPanel } from '$lib/stores/settingsPanel.svelte';
 
@@ -13,6 +13,17 @@
 
   const draft = $derived(panel.draft);
 
+  const LANGUAGES: { id: LanguagePref; label: MessageKey }[] = [
+    { id: 'system', label: 'settings.general.languageSystem' },
+    { id: 'es', label: 'settings.general.languageEs' },
+    { id: 'en', label: 'settings.general.languageEn' }
+  ];
+
+  function onLanguage(e: Event) {
+    const v = (e.currentTarget as HTMLSelectElement).value;
+    if (v === 'system' || v === 'es' || v === 'en') panel.setLanguage(v);
+  }
+
   function onSize(e: Event) {
     const v = (e.currentTarget as HTMLInputElement).value;
     panel.setDiffFontSize(v.trim() === '' ? Number.NaN : Number(v));
@@ -23,8 +34,10 @@
   <div class="sx">
     <div class="group">
       <label class="lbl" for="set-lang">{t('settings.general.language')}</label>
-      <select id="set-lang" class="field" value={draft.language} disabled aria-describedby="set-lang-hint">
-        <option value="es">{t('settings.general.languageEs')}</option>
+      <select id="set-lang" class="field" onchange={onLanguage} aria-describedby="set-lang-hint">
+        {#each LANGUAGES as l (l.id)}
+          <option value={l.id} selected={draft.language === l.id}>{t(l.label)}</option>
+        {/each}
       </select>
       <p class="hint" id="set-lang-hint">{t('settings.general.languageHint')}</p>
     </div>

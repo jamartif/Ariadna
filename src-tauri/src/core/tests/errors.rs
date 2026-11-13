@@ -181,7 +181,7 @@ fn los_codigos_cubren_exactamente_el_contrato() {
         assert!(expected.remove(c), "{c}");
     }
     assert_eq!(mapped, expected);
-    assert_eq!(ALL_CODES.len(), 48);
+    assert_eq!(ALL_CODES.len(), 50);
 }
 
 #[test]

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { historyOf } from '$lib/stores/history.svelte';
 import { tagsOf } from '$lib/stores/tags.svelte';
 import { loadedTab, resetGlobals } from '../../test/helpers';
-import BranchesPanel from './BranchesPanel.svelte';
+import RepoDialog from './RepoDialog.svelte';
 import HistoryDetail from './HistoryDetail.svelte';
 import HistoryPanel from './HistoryPanel.svelte';
 import TagsSection from './TagsSection.svelte';
@@ -38,9 +38,9 @@ describe('Etiquetas en el panel de Ramas', () => {
     expect(within(region).getByText('Etiquetas')).toBeInTheDocument();
   });
 
-  it('el panel de Ramas incluye la sección', async () => {
+  it('el diálogo de Remotos y etiquetas incluye la sección', async () => {
     const { tab } = await loadedTab();
-    render(BranchesPanel, { props: { tab } });
+    render(RepoDialog, { props: { tab, onclose: vi.fn() } });
     expect(await screen.findByRole('region', { name: 'Etiquetas del repositorio' })).toBeInTheDocument();
   });
 

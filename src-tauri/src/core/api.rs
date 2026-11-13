@@ -494,6 +494,23 @@ pub struct AiPullRequestOptions {
     pub language: CommitLanguage,
 }
 
+/// Resolución propuesta para un archivo en conflicto (`ai_resolve_conflict`).
+///
+/// Lleva el **texto completo** propuesto y su justificación: la UI lo muestra y el usuario
+/// decide. Nada se escribe en el archivo hasta que se marque como resuelto (`resolve_conflict`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiConflictSuggestion {
+    pub path: GitPath,
+    /// Contenido completo del archivo propuesto, sin marcadores de conflicto.
+    pub content: String,
+    /// Por qué se resolvió así (párrafo corto del proveedor), si lo dio.
+    pub rationale: Option<String>,
+    pub provider: String,
+    pub command_summary: String,
+    pub repo_revision: u64,
+}
+
 /// Título y descripción propuestos para una pull request. No se crea nada en el remoto.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

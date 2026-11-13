@@ -57,7 +57,7 @@ pub struct ProfileRule {
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub version: u32,
-    /// Idioma de la interfaz (hoy solo `es`).
+    /// Idioma de la interfaz: `es`, `en` o `system` (sigue al idioma del sistema operativo).
     pub language: String,
     pub theme: Theme,
     pub diff_font_size: u8,
@@ -135,9 +135,12 @@ impl Settings {
     /// Valida y normaliza. No cambia nada si hay un error (trabaja sobre una copia).
     pub fn validate(&mut self) -> ApiResult<()> {
         self.version = SETTINGS_VERSION;
-        if self.language != "es" {
-            return Err(bad("language", "por ahora solo existe el español (es)"));
+        // El idioma llega del `<select>` de Ajustes; se normaliza para no rechazar «EN » por un espacio.
+        let language = self.language.trim().to_ascii_lowercase();
+        if !matches!(language.as_str(), "es" | "en" | "system") {
+            return Err(bad("language", "solo se admite «system», «es» o «en»"));
         }
+        self.language = language;
         if !DIFF_FONT_RANGE.contains(&self.diff_font_size) {
             return Err(bad(
                 "diffFontSize",
@@ -766,7 +769,13 @@ mod tests {
             f(&mut x);
             x
         };
-        assert_eq!(field(s(&|x| x.language = "en".into())), "language");
+        assert_eq!(field(s(&|x| x.language = "fr".into())), "language");
+        // Los tres valores del contrato son válidos (y se normalizan a minúsculas).
+        for ok in ["es", "en", "system", " EN "] {
+            let mut x = s(&|x| x.language = ok.into());
+            x.validate().unwrap();
+            assert_eq!(x.language, ok.trim().to_lowercase());
+        }
         assert_eq!(field(s(&|x| x.diff_font_size = 9)), "diffFontSize");
         assert_eq!(field(s(&|x| x.diff_font_size = 25)), "diffFontSize");
         assert_eq!(field(s(&|x| x.git_path = Some("git".into()))), "gitPath");

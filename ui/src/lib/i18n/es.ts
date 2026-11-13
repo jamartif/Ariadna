@@ -26,6 +26,11 @@ export const es = {
   'app.errorBody': 'Ocurrió un error al leer el estado de la aplicación.',
   'common.retry': 'Reintentar',
 
+  // Barra superior
+  'titlebar.branch': 'Cambiar de rama',
+  'titlebar.branchLabel': 'Rama',
+  'titlebar.branchHint': 'Cambiar de rama ({combo})',
+
   // Pestañas
   'tabs.list': 'Repositorios abiertos',
   'tabs.new': 'Nueva pestaña',
@@ -96,6 +101,7 @@ export const es = {
   'history.title': 'El historial llega en la siguiente versión',
   'history.body': 'Aquí verás los commits con búsqueda y paginación. De momento puedes revisar y confirmar cambios en la pestaña Cambios.',
   'layout.middle': 'Cambios e historial',
+  'layout.center': 'Vista del repositorio',
   'layout.diff': 'Diferencias',
   'layout.resizeSidebar': 'Redimensionar barra lateral',
   'layout.resizeMiddle': 'Redimensionar lista de cambios',
@@ -352,6 +358,10 @@ export const es = {
   'palette.gotoTab': 'Ir a la pestaña {name}',
   'palette.showChanges': 'Mostrar Cambios',
   'palette.showHistory': 'Mostrar Historial',
+  'palette.showStashes': 'Mostrar Stashes',
+  'palette.searchBranch': 'Buscar rama…',
+  'palette.toggleRail': 'Mostrar u ocultar el riel de ramas',
+  'palette.repoDialog': 'Remotos y etiquetas…',
   'palette.showIgnored': 'Mostrar archivos ignorados',
   'palette.hideIgnored': 'Ocultar archivos ignorados',
   'palette.themeSystem': 'Tema: seguir al sistema',
@@ -414,7 +424,13 @@ export const es = {
   'shortcut.unstageAll': 'Quitar todo de preparados',
   'shortcut.focusCommit': 'Ir al mensaje de commit',
   'shortcut.commit': 'Crear commit',
-  'shortcut.clone': 'Clonar repositorio…'
+  'shortcut.clone': 'Clonar repositorio…',
+  'shortcut.branchSearch': 'Buscar rama',
+  'shortcut.toggleRail': 'Mostrar u ocultar el riel de ramas',
+  // Nombres de teclas en los atajos (`Ctrl+Mayús+Intro`)
+  'shortcut.key.shift': 'Mayús',
+  'shortcut.key.enter': 'Intro',
+  'shortcut.key.tab': 'Tab'
 } as const;
 
 export type MessageKey = keyof typeof es;

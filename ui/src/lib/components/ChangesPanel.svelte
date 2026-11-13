@@ -270,7 +270,7 @@
 
   const glyph = (letter: string) => (letter === '?' ? '+' : letter);
   const stashDef = SHORTCUTS.find((x) => x.id === 'stash.push');
-  const stashCombo = stashDef ? formatCombo(stashDef.combo, isMac()) : '';
+  const stashCombo = $derived(stashDef ? formatCombo(stashDef.combo, isMac()) : '');
 </script>
 
 <div class="changes">

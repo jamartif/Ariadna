@@ -14,6 +14,11 @@ import type { TabState } from './tab.svelte';
 
 const OPTIONS_KEY = 'ariadna.ai.options.v1';
 
+/** Nombre visible del perfil de IA. Se traduce (el `name` de Rust es «Personal»/«Empresa»). */
+export function profileLabel(kind: 'personal' | 'empresa'): string {
+  return t(kind === 'empresa' ? 'ai.dialog.profile.empresa' : 'ai.dialog.profile.personal');
+}
+
 export interface AiOptions {
   language: AiLanguage;
   style: AiStyle;

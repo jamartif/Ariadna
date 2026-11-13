@@ -91,6 +91,42 @@ async fn archivo_corrupto_no_rompe_el_arranque() {
 }
 
 #[tokio::test]
+async fn idioma_se_guarda_y_los_archivos_sin_campo_quedan_en_espanol() {
+    let env = Env::new();
+    // Un `settings.json` anterior a la interfaz bilingüe no tiene `language`: se migra a `es`.
+    std::fs::create_dir_all(&env.data).unwrap();
+    std::fs::write(
+        settings_file(&env),
+        br#"{"version":1,"theme":"dark","diffFontSize":15,"gitPath":null,"pullRebase":false,"profileRules":[]}"#,
+    )
+    .unwrap();
+    let (core2, _) = env.restart();
+    let v = core2.get_settings();
+    assert_eq!(v.load.status, SettingsLoadStatus::Ok);
+    assert_eq!(v.settings.language, "es");
+    assert_eq!(v.settings.theme, Theme::Dark);
+    assert_eq!(v.settings.diff_font_size, 15);
+
+    // Inglés y «sistema» se guardan y sobreviven a un reinicio.
+    for idioma in ["en", "system"] {
+        let mut s = core2.get_settings().settings;
+        s.language = idioma.into();
+        let saved = core2.save_settings(s).await.unwrap();
+        assert_eq!(saved.settings.language, idioma);
+        let (core3, _) = env.restart();
+        assert_eq!(core3.get_settings().settings.language, idioma);
+    }
+
+    // Un idioma que no existe se rechaza sin tocar el archivo.
+    let mut s = core2.get_settings().settings;
+    s.language = "fr".into();
+    let e = core2.save_settings(s).await.unwrap_err();
+    assert_eq!(e.code, "PARSE");
+    assert_eq!(e.detail.as_deref(), Some("language"));
+    assert_eq!(core2.get_settings().settings.language, "system");
+}
+
+#[tokio::test]
 async fn detect_git_valida_y_da_la_version() {
     let env = Env::new();
     let ok = env.core.detect_git(Some(Env::s(&env.git))).await;

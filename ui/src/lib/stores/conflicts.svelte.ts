@@ -1,7 +1,7 @@
-import type { ConflictChoice, ConflictFile, MergeState } from '$lib/api/types';
+import type { ApiError, ConflictChoice, ConflictFile, GitPath, MergeState } from '$lib/api/types';
 import { toApiError } from '$lib/api/types';
 import { t, tn } from '$lib/i18n';
-import { hasMarkers, parseMarkers, resolveAllRegions, resolveRegion, type HunkChoiceSide } from '$lib/util/conflictMarkers';
+import { dominantEol, hasMarkers, parseMarkers, resolveAllRegions, resolveRegion, withEol, type HunkChoiceSide } from '$lib/util/conflictMarkers';
 import { pathKey, pathText } from '$lib/util/gitpath';
 import { toasts } from './toasts.svelte';
 import type { TabState } from './tab.svelte';
@@ -13,6 +13,21 @@ interface Draft {
 }
 
 export type FileMode = 'editor' | 'sides';
+
+/**
+ * Propuesta de la IA para un archivo en conflicto: el archivo **completo** ya resuelto y su
+ * justificación. Vive en memoria; aplicarla solo cambia el texto del editor («Usar»), nunca el
+ * disco: eso sigue siendo cosa de «Marcar como resuelto».
+ */
+export interface ConflictAiProposal {
+  /** Ruta tal como la devolvió Rust. */
+  path: GitPath;
+  content: string;
+  rationale: string | null;
+  provider: string;
+  commandSummary: string;
+  repoRevision: number;
+}
 
 const encoder = new TextEncoder();
 
@@ -36,6 +51,15 @@ export class ConflictsController {
   revealTick = $state(0);
   /** Aviso previo a abortar con ediciones sin aplicar. */
   abortWarning = $state(false);
+
+  /** Propuesta de la IA pendiente de revisar (null = ninguna). */
+  aiProposal = $state.raw<ConflictAiProposal | null>(null);
+  /** Se está pidiendo la propuesta (o regenerándola). */
+  aiLoading = $state(false);
+  aiRegenerating = $state(false);
+  /** Último error de la IA: se muestra en el editor o dentro del panel. */
+  aiError = $state.raw<ApiError | null>(null);
+  private aiRun = 0;
 
   private messageTouched = false;
   private syncSeq = 0;
@@ -132,6 +156,11 @@ export class ConflictsController {
     this.messageTouched = false;
     this.currentHunk = 0;
     this.abortWarning = false;
+    this.aiProposal = null;
+    this.aiError = null;
+    this.aiLoading = false;
+    this.aiRegenerating = false;
+    this.aiRun++;
   }
 
   /** Mantiene una selección válida y descarta borradores de archivos que ya no están. */
@@ -144,6 +173,11 @@ export class ConflictsController {
     }
     if ([...this.drafts.keys()].some((k) => !keys.has(k))) {
       this.drafts = new Map([...this.drafts].filter(([k]) => keys.has(k)));
+    }
+    // Una propuesta de un archivo que ya no está en conflicto no se puede usar.
+    if (this.aiProposal && !keys.has(pathKey(this.aiProposal.path))) {
+      this.aiProposal = null;
+      this.aiError = null;
     }
   }
 
@@ -259,6 +293,106 @@ export class ConflictsController {
   /** Aplica un lado a TODOS los bloques que queden (solo al texto; no escribe en disco). */
   resolveEverything(f: ConflictFile, side: HunkChoiceSide): void {
     this.setText(f, resolveAllRegions(this.text(f), side));
+  }
+
+  // ---- Resolución con IA ---------------------------------------------------------------
+
+  get aiBusy(): boolean {
+    return this.aiLoading || this.aiRegenerating;
+  }
+
+  /** La IA de la pestaña está activada (null = aún no se sabe; el botón funciona igual). */
+  get aiEnabled(): boolean | null {
+    const st = this.tab.ai.state;
+    return st === null ? null : st.enabled;
+  }
+
+  /**
+   * Pide a la IA el archivo entero resuelto. Solo propone: el editor no cambia hasta «Usar».
+   * Rust lee las tres versiones del índice y aplica los filtros (sensibles, binarios, tope).
+   */
+  async resolveWithAi(f: ConflictFile): Promise<boolean> {
+    if (this.aiBusy || this.busy !== null) return false;
+    const mine = ++this.aiRun;
+    this.aiLoading = true;
+    this.aiError = null;
+    this.aiProposal = null;
+    toasts.announce(t('conflicts.ai.generating'));
+    try {
+      const s = await this.tab.api.aiResolveConflict(this.tab.id, f.path);
+      if (mine !== this.aiRun) return false;
+      this.aiProposal = s;
+      return true;
+    } catch (e) {
+      if (mine !== this.aiRun) return false;
+      const err = toApiError(e);
+      if (err.code !== 'CANCELLED') this.aiError = err;
+      return false;
+    } finally {
+      if (mine === this.aiRun) this.aiLoading = false;
+    }
+  }
+
+  /** Cancela de verdad la generación en Rust (mata el proceso hijo). */
+  async cancelAi(): Promise<void> {
+    if (!this.aiBusy) return;
+    this.aiRun++; // lo que llegue después se ignora
+    this.aiLoading = false;
+    this.aiRegenerating = false;
+    toasts.announce(t('conflicts.ai.cancelled'));
+    try {
+      await this.tab.api.aiCancel(this.tab.id);
+    } catch {
+      /* ya había terminado */
+    }
+  }
+
+  /** «Regenerar»: pide otra propuesta sin cerrar el panel. La anterior sigue visible. */
+  async regenerateAi(f: ConflictFile): Promise<boolean> {
+    if (this.aiBusy) return false;
+    const mine = ++this.aiRun;
+    this.aiRegenerating = true;
+    this.aiError = null;
+    try {
+      const s = await this.tab.api.aiResolveConflict(this.tab.id, f.path);
+      if (mine !== this.aiRun) return false;
+      this.aiProposal = s;
+      return true;
+    } catch (e) {
+      if (mine !== this.aiRun) return false;
+      const err = toApiError(e);
+      if (err.code !== 'CANCELLED') this.aiError = err;
+      return false;
+    } finally {
+      if (mine === this.aiRun) this.aiRegenerating = false;
+    }
+  }
+
+  /**
+   * «Usar»: pone la propuesta en el editor como texto editable (un borrador). NO escribe en
+   * disco ni marca nada: los contadores de bloques se recalculan solos sobre el texto nuevo.
+   */
+  useAiProposal(f: ConflictFile): boolean {
+    const p = this.aiProposal;
+    if (!p) return false;
+    this.aiProposal = null;
+    this.aiError = null;
+    this.setText(f, withEol(p.content, dominantEol(f.workingTree ?? '')));
+    this.revealTick++;
+    toasts.announce(t('conflicts.ai.used'));
+    return true;
+  }
+
+  /** «Descartar»: tira la propuesta y deja el editor como estaba. */
+  discardAiProposal(): void {
+    if (!this.aiProposal && !this.aiError) return;
+    this.aiProposal = null;
+    this.aiError = null;
+    toasts.announce(t('conflicts.ai.discarded'));
+  }
+
+  dismissAiError(): void {
+    this.aiError = null;
   }
 
   // ---- Acciones contra Rust ------------------------------------------------------------

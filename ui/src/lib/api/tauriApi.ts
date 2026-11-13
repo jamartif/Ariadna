@@ -99,6 +99,7 @@ export function createTauriApi(): Api {
     aiAccounts: (request) => call('ai_accounts', { request: request ?? null }),
     aiLogin: (request) => call('ai_login', { request }),
     aiGeneratePullRequest: (tabId, options) => call('ai_generate_pull_request', { tabId, options: options ?? null }),
+    aiResolveConflict: (tabId, path) => call('ai_resolve_conflict', { tabId, path }),
 
     ...createTauriPullRequests(),
     ...createTauriTags(),

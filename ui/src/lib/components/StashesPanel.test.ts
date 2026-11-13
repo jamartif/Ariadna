@@ -9,7 +9,6 @@ import { check, stashApplyResult, stashEntry } from '$lib/api/validate';
 import { loadedTab, mockApi, resetGlobals } from '../../test/helpers';
 import { expectNoSeriousViolations } from '../../test/axe';
 import ChangesPanel from './ChangesPanel.svelte';
-import Sidebar from './Sidebar.svelte';
 import StashDetail from './StashDetail.svelte';
 import StashesPanel from './StashesPanel.svelte';
 
@@ -174,15 +173,6 @@ describe('Stashes: guardar desde Cambios', () => {
 });
 
 describe('Stashes: barra lateral, paleta y contrato', () => {
-  it('la barra lateral lista los stashes y los abre en su panel', async () => {
-    const { tab, s } = await withStash();
-    render(Sidebar, { props: { tab, snapshot: tab.snapshot, loading: false } });
-    const btn = await screen.findByRole('button', { name: /Abrir el stash «mi trabajo a medias»/ });
-    await userEvent.click(btn);
-    expect(tab.panel).toBe('stashes');
-    await waitFor(() => expect(s.selectedOid).toBe(s.list[0]!.oid));
-  });
-
   it('la paleta ofrece guardar, mostrar y sacar el último stash', async () => {
     const api = mockApi();
     const app = new AppStore(api);

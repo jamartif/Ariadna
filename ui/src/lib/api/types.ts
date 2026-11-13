@@ -10,6 +10,7 @@
  *    `MergeResult` conservan snake_case (`new_head`).
  *  - `GitPath` es `string` (UTF-8) o `number[]` (bytes no UTF-8).
  */
+import type { LanguagePref } from '$lib/i18n';
 
 export type GitPath = string | number[];
 
@@ -405,6 +406,21 @@ export interface AiCommitSuggestion {
   repoRevision: number;
 }
 
+/**
+ * Propuesta de resolución de un conflicto (`ai_resolve_conflict`): el archivo COMPLETO ya
+ * resuelto, sin marcadores, y la justificación. No se escribe nada hasta «Usar» + «Marcar como
+ * resuelto».
+ */
+export interface AiConflictSuggestion {
+  path: GitPath;
+  /** Contenido completo propuesto (sin marcadores de conflicto). */
+  content: string;
+  rationale: string | null;
+  provider: string;
+  commandSummary: string;
+  repoRevision: number;
+}
+
 /** Cuenta activa de un proveedor según su propio CLI (RF-IA12); nunca de archivos de credenciales. */
 export type AiAccountState = 'loggedIn' | 'loggedOut' | 'unavailable';
 
@@ -485,7 +501,8 @@ export interface ProfileRule {
 /** Contenido de `settings.json`. Ariadna no guarda tokens ni contraseñas. */
 export interface AppSettings {
   version: number;
-  language: 'es';
+  /** Idioma de la interfaz: `system` sigue al del sistema operativo. */
+  language: LanguagePref;
   theme: ThemePref;
   diffFontSize: number;
   /** Ruta del ejecutable de git; `null` = detección automática. */
@@ -579,6 +596,8 @@ export const API_ERROR_CODES = [
   'AI_CONSENT_REQUIRED',
   'AI_NO_STAGED_CHANGES',
   'AI_SENSITIVE_FILE',
+  'AI_CONFLICT_NOT_TEXT',
+  'AI_CONFLICT_INVALID_PROPOSAL',
   'AI_NO_BRANCH_CHANGES',
   'AI_BASE_NOT_FOUND',
   'NOT_FOUND',
@@ -611,6 +630,8 @@ export const CODES_ADDED_IN_WAVE_2: readonly ApiErrorCode[] = [
   'AI_CONSENT_REQUIRED',
   'AI_NO_STAGED_CHANGES',
   'AI_SENSITIVE_FILE',
+  'AI_CONFLICT_NOT_TEXT',
+  'AI_CONFLICT_INVALID_PROPOSAL',
   'NOT_FOUND',
   'POLICY',
   'RATE_LIMITED',

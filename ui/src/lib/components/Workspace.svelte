@@ -3,12 +3,13 @@
   import { t, tn } from '$lib/i18n';
   import { registerHandlers } from '$lib/shortcuts/registry';
   import type { TabState, Panel } from '$lib/stores/tab.svelte';
+  import { branchesOf } from '$lib/stores/branches.svelte';
   import { conflictsOf } from '$lib/stores/conflicts.svelte';
   import { prOf } from '$lib/stores/pullRequests.svelte';
   import { stashOf } from '$lib/stores/stash.svelte';
   import Banner from './Banner.svelte';
   import BranchDetail from './BranchDetail.svelte';
-  import BranchesPanel from './BranchesPanel.svelte';
+  import BranchRail from './BranchRail.svelte';
   import ChangesPanel from './ChangesPanel.svelte';
   import ConflictEditor from './ConflictEditor.svelte';
   import ConflictsPanel from './ConflictsPanel.svelte';
@@ -20,10 +21,10 @@
   import Icon from './Icon.svelte';
   import PrDetail from './PrDetail.svelte';
   import PullRequestsPanel from './PullRequestsPanel.svelte';
-  import Sidebar from './Sidebar.svelte';
+  import RepoDialog from './RepoDialog.svelte';
+  import Splitter from './Splitter.svelte';
   import StashDetail from './StashDetail.svelte';
   import StashesPanel from './StashesPanel.svelte';
-  import Splitter from './Splitter.svelte';
 
   interface Props {
     tab: TabState;
@@ -32,55 +33,86 @@
   }
   let { tab, onclose, onlocate }: Props = $props();
 
-  const KEY = 'ariadna.layout.v1';
-  const MIN_SIDE = 160;
-  const MAX_SIDE = 420;
-  const MIN_MID = 300;
-  const MAX_MID = 720;
+  /**
+   * MAQUETA v2: riel de ramas + vista central + detalle.
+   *
+   *  ┌───────────────────────────────────────────────────────────┐
+   *  │ barra superior (TitleBar): repo · rama actual · paleta     │
+   *  ├────────────┬───────────────────────────┬──────────────────┤
+   *  │ riel       │ vista (Cambios · Historial │ detalle / diff   │
+   *  │ de ramas   │ · PR · Stashes · Conflictos)│ cabecera fija    │
+   *  ├────────────┴───────────────────────────┴──────────────────┤
+   *  │ barra de estado                                           │
+   *  └───────────────────────────────────────────────────────────┘
+   *
+   * El riel sustituye la lista de ramas Y la pestaña «Ramas»: la gestión vive
+   * siempre a la vista, el centro no la duplica. «Detalle» de una rama abre
+   * `BranchDetail` en el panel derecho (modo temporal, no una vista más).
+   */
+  const KEY = 'ariadna.layout.v2';
+  const MIN_RAIL = 208;
+  const MAX_RAIL = 360;
+  const MIN_MID = 340;
+  const MAX_MID = 820;
+  const NARROW = 840;
 
-  function loadLayout(): { side: number; mid: number } {
+  function loadLayout(): { rail: number; mid: number; collapsed: boolean } {
     try {
-      const o = JSON.parse(localStorage.getItem(KEY) ?? '{}') as { side?: number; mid?: number };
+      const o = JSON.parse(localStorage.getItem(KEY) ?? '{}') as { rail?: number; mid?: number; collapsed?: boolean };
       return {
-        side: Math.max(MIN_SIDE, Math.min(MAX_SIDE, o.side ?? 220)),
-        mid: Math.max(MIN_MID, Math.min(MAX_MID, o.mid ?? 400))
+        rail: Math.max(MIN_RAIL, Math.min(MAX_RAIL, o.rail ?? 264)),
+        mid: Math.max(MIN_MID, Math.min(MAX_MID, o.mid ?? 560)),
+        collapsed: o.collapsed === true
       };
     } catch {
-      return { side: 220, mid: 400 };
+      return { rail: 264, mid: 560, collapsed: false };
     }
   }
 
   const initial = loadLayout();
-  let side = $state(initial.side);
+  let rail = $state(initial.rail);
   let mid = $state(initial.mid);
+  let collapsedPref = $state(initial.collapsed);
+  let repoOpen = $state(false);
+  let inspect = $state<string | null>(null);
+  /** Ancho real del espacio de trabajo (`bind:clientWidth`): decide el modo apilado. */
+  let width = $state(0);
+
+  const narrow = $derived(width > 0 && width < NARROW);
+  const railCollapsed = $derived(collapsedPref || narrow);
+  const railWidth = $derived(railCollapsed ? 52 : rail);
 
   function persist() {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ side, mid }));
+      localStorage.setItem(KEY, JSON.stringify({ rail, mid, collapsed: collapsedPref }));
     } catch {
       /* ignorar */
     }
   }
 
+  function toggleRail() {
+    if (narrow) return;
+    collapsedPref = !collapsedPref;
+    persist();
+  }
+
   type PanelDef = {
     id: Panel;
-    label: 'panel.changes' | 'panel.history' | 'panel.branches' | 'panel.stashes' | 'panel.conflicts' | 'panel.pullRequests';
-    icon: 'file-diff' | 'history' | 'git-branch' | 'archive' | 'git-merge' | 'git-pull-request';
+    label: 'panel.changes' | 'panel.history' | 'panel.stashes' | 'panel.conflicts' | 'panel.pullRequests';
+    icon: 'file-diff' | 'history' | 'archive' | 'git-merge' | 'git-pull-request';
   };
+  // Solo claves: el texto se traduce al pintar para que siga al idioma activo (`t` es reactivo).
   const basePanels: PanelDef[] = [
     { id: 'changes', label: 'panel.changes', icon: 'file-diff' },
     { id: 'history', label: 'panel.history', icon: 'history' },
-    { id: 'branches', label: 'panel.branches', icon: 'git-branch' },
     { id: 'stashes', label: 'panel.stashes', icon: 'archive' }
   ];
-  /** El panel «Conflictos» solo existe mientras hay un merge, rebase o cherry-pick en curso. */
   const integrating = $derived((tab.snapshot?.integration ?? 'none') !== 'none');
-  /** También hay panel de Conflictos si quedan archivos en conflicto sin integración (p. ej. tras aplicar un stash). */
   const conflictsActive = $derived(integrating || (tab.snapshot?.conflicts.length ?? 0) > 0);
   const stash = $derived(stashOf(tab));
   /**
    * «Pull requests» solo aparece si el remoto lo admite (`pull_request_support`, sin red). Si se llega
-   * por la paleta o el atajo con un remoto sin soporte, la pestaña se muestra mientras esté activa
+   * por la paleta o el atajo con un remoto sin soporte, la vista se muestra mientras esté activa
    * para explicar por qué no hay PR dentro de la app.
    */
   const prc = $derived(prOf(tab));
@@ -91,6 +123,10 @@
     ...(conflictsActive ? [{ id: 'conflicts', label: 'panel.conflicts', icon: 'git-merge' } as PanelDef] : [])
   ]);
   const cc = $derived(conflictsOf(tab));
+
+  const snap = $derived(tab.snapshot);
+  const branchName = $derived(snap?.status.isDetached ? t('status.detached') : (snap?.status.branchName ?? tab.info.branch ?? '—'));
+  const totalChanges = $derived(tab.sections.staged.length + tab.sections.unstaged.length + tab.sections.untracked.length);
 
   // El soporte de PR se pregunta a Rust (local) al abrir la pestaña y cuando cambian los remotos.
   const remoteSig = $derived((tab.snapshot?.remotes ?? []).map((r) => `${r.name}=${r.fetchUrl}`).join('|'));
@@ -105,6 +141,7 @@
 
   onMount(() =>
     registerHandlers({
+      'rail.toggle': () => (toggleRail(), true),
       'pr.open': () => {
         tab.panel = 'pullRequests';
         return true;
@@ -121,9 +158,16 @@
     })
   );
 
-  // Si la integración termina (o se aborta) con el panel abierto, se vuelve a Cambios.
+  // Si la integración termina (o se aborta) con la vista abierta, se vuelve a Cambios.
   $effect(() => {
     if (!conflictsActive && tab.panel === 'conflicts' && !tab.loading) tab.panel = 'changes';
+  });
+
+  // Al cambiar de vista, el detalle vuelve a la vista (el de rama era temporal).
+  let lastPanel: Panel | null = null;
+  $effect(() => {
+    if (lastPanel !== null && tab.panel !== lastPanel) inspect = null;
+    lastPanel = tab.panel;
   });
 
   // La lista de stashes no viaja en el snapshot: se relee con cada revisión (un `git stash list`).
@@ -146,12 +190,17 @@
     queueMicrotask(() => document.getElementById(`panel-tab-${p.id}`)?.focus());
   }
 
+  function inspectBranch(name: string): void {
+    branchesOf(tab).select(name);
+    inspect = name;
+  }
+
   const missing = $derived(tab.sessionError?.code === 'REPO_MISSING' || tab.info.missing);
-  const snap = $derived(tab.snapshot);
   const conflictCount = $derived(tab.sections.conflicts.length);
 </script>
 
-<div class="workspace">
+<div class="workspace" bind:clientWidth={width}>
+  <h1 class="sr-only">{tab.info.name} — {branchName}</h1>
   {#if tab.sessionError}
     <div class="banner-slot">
       <Banner
@@ -193,64 +242,78 @@
         </Banner>
       </div>
     {/if}
-    <div
-      class="columns"
-      style:--side="{side}px"
-      style:--mid="{mid}px"
-    >
-      <aside class="col side">
-        <Sidebar {tab} snapshot={snap} loading={tab.loading} />
-      </aside>
-      <Splitter
-        value={side}
-        min={MIN_SIDE}
-        max={MAX_SIDE}
-        label={t('layout.resizeSidebar')}
-        onchange={(v) => {
-          side = v;
-          persist();
-        }}
-      />
 
-      <section class="col middle" aria-label={t('layout.middle')}>
-        <div class="panel-tabs" role="tablist" aria-label={t('panel.list')}>
-          {#each panels as p, i (p.id)}
-            <button
-              type="button"
-              role="tab"
-              id="panel-tab-{p.id}"
-              aria-selected={tab.panel === p.id}
-              aria-controls="panel-{p.id}"
-              tabindex={tab.panel === p.id ? 0 : -1}
-              class="ptab"
-              class:on={tab.panel === p.id}
-              onclick={() => (tab.panel = p.id)}
-              onkeydown={(e) => panelKey(e, i)}
-            >
-              <Icon name={p.icon} size={14} />{t(p.label)}
-              {#if p.id === 'changes' && tab.info.changeCount > 0}<span class="chip">{tab.info.changeCount}</span>{/if}
-              {#if p.id === 'conflicts'}
-                <span class="chip conflict" title={tn('tabs.a11y.conflicts', cc.count)}>
-                  <Icon name={cc.count > 0 ? 'triangle-alert' : 'circle-check'} size={11} />{cc.count}
-                </span>
-              {/if}
-              {#if p.id === 'stashes' && stash.count > 0}<span class="chip" title={tn('stash.chip', stash.count)}>{stash.count}</span>{/if}
-              {#if p.id === 'changes' && conflictCount > 0 && !conflictsActive}
-                <span class="chip conflict" title={tn('tabs.a11y.conflicts', conflictCount)}>
-                  <Icon name="triangle-alert" size={11} />{conflictCount}
-                </span>
-              {/if}
-            </button>
-          {/each}
+    <div class="shell" class:stacked={narrow} style:--rail={railWidth + 'px'} style:--mid={mid + 'px'}>
+      <div class="railslot">
+        <BranchRail
+          {tab}
+          collapsed={railCollapsed}
+          ontoggle={toggleRail}
+          oninspect={inspectBranch}
+          onrepo={() => (repoOpen = true)}
+        />
+      </div>
+
+      {#if !railCollapsed && !narrow}
+        <div class="splitslot">
+          <Splitter
+            value={rail}
+            min={MIN_RAIL}
+            max={MAX_RAIL}
+            label={t('rail.resize')}
+            onchange={(v) => {
+              rail = v;
+              persist();
+            }}
+          />
         </div>
+      {/if}
 
-        <div
-          class="panel"
-          role="tabpanel"
-          id="panel-{tab.panel}"
-          aria-labelledby="panel-tab-{tab.panel}"
-          tabindex="-1"
-        >
+      <section class="center" aria-label={t('layout.center')}>
+        <header class="viewhead">
+          <div class="views" role="tablist" aria-label={t('panel.list')} aria-orientation="horizontal">
+            {#each panels as p, i (p.id)}
+              <button
+                type="button"
+                role="tab"
+                id="panel-tab-{p.id}"
+                aria-selected={tab.panel === p.id}
+                aria-controls="panel-{p.id}"
+                tabindex={tab.panel === p.id ? 0 : -1}
+                class="vtab"
+                class:on={tab.panel === p.id}
+                onclick={() => (tab.panel = p.id)}
+                onkeydown={(e) => panelKey(e, i)}
+              >
+                <Icon name={p.icon} size={14} />
+                <span class="vlabel">{t(p.label)}</span>
+                {#if p.id === 'changes' && totalChanges > 0}<span class="chip">{totalChanges}</span>{/if}
+                {#if p.id === 'conflicts'}
+                  <span class="chip conflict" title={tn('tabs.a11y.conflicts', cc.count)}>
+                    <Icon name={cc.count > 0 ? 'triangle-alert' : 'circle-check'} size={11} />{cc.count}
+                  </span>
+                {/if}
+                {#if p.id === 'stashes' && stash.count > 0}<span class="chip" title={tn('stash.chip', stash.count)}>{stash.count}</span>{/if}
+                {#if p.id === 'changes' && conflictCount > 0 && !conflictsActive}
+                  <span class="chip conflict" title={tn('tabs.a11y.conflicts', conflictCount)}>
+                    <Icon name="triangle-alert" size={11} />{conflictCount}
+                  </span>
+                {/if}
+              </button>
+            {/each}
+          </div>
+          <button
+            type="button"
+            class="btn btn-ghost btn-icon btn-sm refresh"
+            title={t('changes.refresh')}
+            aria-label={t('changes.refresh')}
+            onclick={() => void tab.refresh()}
+          >
+            <Icon name="refresh-cw" size={14} />
+          </button>
+        </header>
+
+        <div class="panel" role="tabpanel" id="panel-{tab.panel}" aria-labelledby="panel-tab-{tab.panel}" tabindex="-1">
           {#if tab.panel === 'changes'}
             <div class="changes-stack">
               <div class="grow"><ChangesPanel {tab} /></div>
@@ -265,27 +328,39 @@
           {:else if tab.panel === 'pullRequests'}
             <PullRequestsPanel {tab} />
           {:else}
-            <BranchesPanel {tab} />
+            <ChangesPanel {tab} />
           {/if}
         </div>
       </section>
 
-      <Splitter
-        value={mid}
-        min={MIN_MID}
-        max={MAX_MID}
-        label={t('layout.resizeMiddle')}
-        onchange={(v) => {
-          mid = v;
-          persist();
-        }}
-      />
+      {#if !narrow}
+        <div class="splitslot">
+          <Splitter
+            value={mid}
+            min={MIN_MID}
+            max={MAX_MID}
+            label={t('layout.resizeMiddle')}
+            onchange={(v) => {
+              mid = v;
+              persist();
+            }}
+          />
+        </div>
+      {/if}
 
-      <section class="col right" aria-label={t('layout.diff')}>
-        {#if tab.panel === 'history'}
+      <aside class="detail" aria-label={t('layout.diff')}>
+        {#if inspect}
+          <div class="inspectbar">
+            <Icon name="git-branch" size={14} />
+            <span class="ititle">{t('rail.detailTitle')}</span>
+            <span class="iname mono">{inspect}</span>
+            <button type="button" class="btn btn-sm btn-ghost back" onclick={() => (inspect = null)}>
+              <Icon name="x" size={13} />{t('rail.back')}
+            </button>
+          </div>
+          <div class="detailbody"><BranchDetail {tab} /></div>
+        {:else if tab.panel === 'history'}
           <HistoryDetail {tab} />
-        {:else if tab.panel === 'branches'}
-          <BranchDetail {tab} />
         {:else if tab.panel === 'stashes'}
           <StashDetail {tab} />
         {:else if tab.panel === 'conflicts'}
@@ -295,13 +370,13 @@
         {:else}
           <DiffView {tab} />
         {/if}
-      </section>
+      </aside>
     </div>
 
     <footer class="statusbar">
       <span class="item mono" title={t('status.branch')}>
         <Icon name="git-branch" size={13} />
-        {#if snap?.status.isDetached}{t('status.detached')}{:else}{snap?.status.branchName ?? tab.info.branch ?? '—'}{/if}
+        {branchName}
       </span>
       {#if snap && snap.status.upstream}
         <span class="item mono">
@@ -326,12 +401,17 @@
   {/if}
 </div>
 
+{#if repoOpen}
+  <RepoDialog {tab} onclose={() => (repoOpen = false)} />
+{/if}
+
 <style>
   .workspace {
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
+    min-width: 0;
     background: var(--bg-surface);
   }
   .banner-slot {
@@ -342,70 +422,175 @@
   .banner-slot.slim {
     padding: var(--space-2) var(--space-3);
   }
-  .columns {
+
+  /* ---- Maqueta: riel | vista | detalle --------------------------------------- */
+  .shell {
     flex: 1;
     min-height: 0;
-    display: grid;
-    grid-template-columns: var(--side) 1px var(--mid) 1px minmax(0, 1fr);
-  }
-  .col {
     min-width: 0;
+    display: flex;
+  }
+  .railslot {
+    flex: none;
+    width: var(--rail);
     min-height: 0;
-    overflow: hidden;
+    display: flex;
   }
-  .side {
-    background: var(--bg-app);
+  .railslot > :global(*) {
+    min-width: 0;
   }
-  .middle {
+  /* El divisor ocupa 8 px y se solapa ±4 px sobre las columnas. */
+  .splitslot {
+    flex: none;
+    width: 0;
+    overflow: visible;
+    z-index: 4;
+  }
+  .center {
+    flex: 0 1 var(--mid);
+    min-width: min(320px, 100%);
+    min-height: 0;
     display: flex;
     flex-direction: column;
     background: var(--bg-surface);
   }
-  .panel-tabs {
+  .detail {
+    flex: 1 1 0;
+    min-width: min(300px, 100%);
+    min-height: 0;
     display: flex;
-    gap: 0;
-    padding: var(--space-2) var(--space-2) 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-    border-bottom: 1px solid var(--border);
-    container-type: inline-size;
+    flex-direction: column;
+    border-left: 1px solid var(--border);
+    background: var(--bg-surface);
   }
-  /* Columna estrecha: sin iconos para que las cuatro pestañas quepan sin recortes ocultos. */
-  @container (max-width: 440px) {
-    .ptab {
-      padding: 0 var(--space-1);
-      gap: var(--space-1);
-    }
-    .ptab :global(svg:first-child) {
-      display: none;
-    }
+  .detailbody {
+    flex: 1;
+    min-height: 0;
   }
-  .ptab {
-    display: inline-flex;
+
+  /* Modo apilado (≈ 720 px CSS, zoom 200 %): riel de iconos a la izquierda, la vista
+     encima del detalle. Se activa desde el script (`narrow`), que también contrae el riel. */
+  .shell.stacked {
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 44%) minmax(0, 1fr);
+  }
+  .shell.stacked .railslot {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: var(--rail);
+  }
+  .shell.stacked .center {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+  .shell.stacked .detail {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .shell.stacked .splitslot {
+    display: none;
+  }
+
+  /* Cabecera del detalle de rama (modo temporal sobre el panel derecho). */
+  .inspectbar {
+    display: flex;
     align-items: center;
     gap: var(--space-2);
-    min-height: 32px;
+    min-height: 38px;
+    padding: 0 var(--space-3);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-subtle);
+    color: var(--accent);
+  }
+  .ititle {
+    font-size: var(--text-sm);
+    font-weight: 650;
+    color: var(--text);
+  }
+  .iname {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+  }
+
+  /* ---- Cabecera de vistas ------------------------------------------------------- */
+  .viewhead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 44px;
+    padding: 0 var(--space-2) 0 var(--space-3);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface);
+    container-type: inline-size;
+  }
+  .views {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-subtle);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .views::-webkit-scrollbar {
+    display: none;
+  }
+  .vtab {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 28px;
     padding: 0 var(--space-2);
     flex: none;
-    white-space: nowrap;
     border: none;
-    border-bottom: 2px solid transparent;
+    border-radius: var(--radius-sm);
     background: none;
     color: var(--text-muted);
     font-size: var(--text-sm);
-    font-weight: 550;
-    margin-bottom: -1px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease);
   }
-  .ptab:hover {
+  .vtab:hover {
     color: var(--text);
+    background: var(--bg-hover);
   }
-  .ptab.on {
+  .vtab.on {
     color: var(--text);
-    border-bottom-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent);
+  }
+  .vtab.on :global(svg) {
+    color: var(--accent);
   }
   .chip.conflict {
     background: var(--danger-soft);
     color: var(--danger);
+  }
+  .refresh {
+    flex: none;
+    margin-left: auto;
+  }
+  /* Ventana estrecha: el icono decorativo de las pestañas se sacrifica antes que la etiqueta. */
+  @container (max-width: 430px) {
+    .vtab :global(svg) {
+      display: none;
+    }
   }
   .panel {
     flex: 1;
@@ -421,9 +606,8 @@
     flex: 1;
     min-height: 0;
   }
-  .right {
-    background: var(--bg-surface);
-  }
+
+  /* ---- Barra de estado --------------------------------------------------------- */
   .statusbar {
     display: flex;
     align-items: center;
@@ -442,6 +626,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
   }
   .sync {
     display: inline-flex;
@@ -456,34 +641,13 @@
     color: var(--text-subtle);
   }
 
-  /* Zoom 200 % / ventanas estrechas (≈ 640 px CSS): la barra lateral se oculta y el diff pasa debajo. */
-  @media (max-width: 900px) {
-    .columns {
-      /* La columna central nunca se come el detalle: como mucho la mitad del ancho. */
-      grid-template-columns: 0 0 minmax(0, min(var(--mid), 50%)) 1px minmax(0, 1fr);
-    }
-    .columns > :global(.splitter:first-of-type) {
-      visibility: hidden;
-    }
-  }
-  @media (max-width: 680px) {
-    .columns {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-    }
-    .side,
-    .columns > :global(.splitter) {
-      display: none;
-    }
-    .right {
-      border-top: 1px solid var(--border);
-    }
-  }
-
-  /* Colores forzados: la selección no puede depender solo del color de fondo. */
   @media (forced-colors: active) {
-    .ptab.on {
-      border-bottom-color: Highlight;
+    .vtab.on {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+    .detail {
+      border-left-color: CanvasText;
     }
   }
 </style>

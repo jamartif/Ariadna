@@ -22,6 +22,7 @@ export const esStash = {
   'panel.stashes': 'Stashes',
   'sidebar.stashes': 'Stashes',
   'stash.region': 'Stashes del repositorio',
+  'stash.detailRegion': 'Detalle del stash',
   'stash.list': 'Lista de stashes',
   'stash.chip.one': '1 stash',
   'stash.chip.other': '{n} stashes',

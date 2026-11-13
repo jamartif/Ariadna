@@ -3,6 +3,7 @@
   import type { MessageKey } from '$lib/i18n';
   import type { AiAccount, AiChoice, AiProfileKind, CliStatus } from '$lib/api/types';
   import type { RuleProblem, SettingsPanel } from '$lib/stores/settingsPanel.svelte';
+  import { profileLabel } from '$lib/stores/ai.svelte';
   import { toasts } from '$lib/stores/toasts.svelte';
   import Icon from '../Icon.svelte';
 
@@ -12,7 +13,7 @@
   const rule = $derived(panel.effective?.profile.rule ? panel.effective.profile : null);
   const draft = $derived(panel.draft);
   const cliById = $derived(new Map((panel.cli ?? []).map((c) => [c.id, c])));
-  const profileName = (k: AiProfileKind) => (k === 'empresa' ? 'Empresa' : 'Personal');
+  const profileName = profileLabel;
 
   let loginFor = $state<string | null>(null);
   let newPattern = $state('');
@@ -109,7 +110,7 @@
                 <span class="pmeta" id="set-p-{p.id}-m">
                   <span class="state" data-state={c?.availability ?? 'pending'}>{cliText(c)}</span>
                   {#if c?.version}· {t('settings.ai.version', { version: c.version })}{/if}
-                  · {!p.enabled ? t('settings.ai.disabledByProfile', { profile: ai.profile.name }) : p.consented ? t('settings.ai.consented') : t('settings.ai.notConsented')}
+                  · {!p.enabled ? t('settings.ai.disabledByProfile', { profile: profileName(ai.profile.kind) }) : p.consented ? t('settings.ai.consented') : t('settings.ai.notConsented')}
                   {#if c?.path}<span class="path mono">{t('settings.ai.path', { path: c.path })}</span>{/if}
                   {#if c && !c.installed && c.hint}<span class="path">{c.hint}</span>{/if}
                 </span>
@@ -200,8 +201,8 @@
             <li>
               <span class="pat mono">{r.pattern}</span>
               <select class="field" aria-label={`${t('settings.ai.ruleProfile')}: ${r.pattern}`} value={r.profile} onchange={(e) => panel.setRuleProfile(i, e.currentTarget.value as AiProfileKind)}>
-                <option value="personal">Personal</option>
-                <option value="empresa">Empresa</option>
+                <option value="personal">{t('ai.dialog.profile.personal')}</option>
+                <option value="empresa">{t('ai.dialog.profile.empresa')}</option>
               </select>
               <button type="button" class="btn btn-ghost btn-icon" onclick={() => panel.removeRule(i)} aria-label={t('settings.ai.ruleRemove', { pattern: r.pattern })} title={t('settings.ai.ruleRemove', { pattern: r.pattern })}>
                 <Icon name="trash" size={14} />
@@ -232,8 +233,8 @@
         />
         <label class="sr-only" for="set-rule-profile">{t('settings.ai.ruleProfile')}</label>
         <select id="set-rule-profile" class="field prof" bind:value={newProfile}>
-          <option value="personal">Personal</option>
-          <option value="empresa">Empresa</option>
+          <option value="personal">{t('ai.dialog.profile.personal')}</option>
+          <option value="empresa">{t('ai.dialog.profile.empresa')}</option>
         </select>
         <button type="submit" class="btn"><Icon name="plus" size={14} />{t('settings.ai.ruleAdd')}</button>
       </form>

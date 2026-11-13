@@ -19,8 +19,8 @@
   const favorites = $derived(app.recents.filter((r) => r.isFavorite));
   const others = $derived(app.recents.filter((r) => !r.isFavorite).sort((a, b) => b.lastOpened.localeCompare(a.lastOpened)));
   const mac = isMac();
-  const cloneCombo = formatCombo(SHORTCUTS.find((s) => s.id === 'clone.open')?.combo ?? 'Mod+Shift+O', mac);
-  const paletteCombo = formatCombo(SHORTCUTS.find((s) => s.id === 'palette.open')?.combo ?? 'Mod+K', mac);
+  const cloneCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'clone.open')?.combo ?? 'Mod+Shift+O', mac));
+  const paletteCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'palette.open')?.combo ?? 'Mod+K', mac));
 
   /** Nº de cambios conocido solo si el repo está abierto en una pestaña. */
   function changesOf(path: string): number | null {

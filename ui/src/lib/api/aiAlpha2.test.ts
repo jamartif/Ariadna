@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMockApi } from './mockApi';
-import { aiAccounts, aiLoginInfo, aiPullRequestSuggestion, aiState, check, detect } from './validate';
+import { aiAccounts, aiConflictSuggestion, aiLoginInfo, aiPullRequestSuggestion, aiState, check, detect } from './validate';
 
 const mk = (scenario?: string) => createMockApi({ latency: 0, confirm: () => true, ...(scenario ? { scenario } : {}) });
 
@@ -89,5 +89,38 @@ describe('contrato IA alpha.2: formas', () => {
     await expect(mk('ai-consent-denied').aiGeneratePullRequest('tab-ariadna')).rejects.toMatchObject({ code: 'AI_CONSENT_REQUIRED' });
     await api.aiUpdateSettings({ enabled: false });
     await expect(api.aiGeneratePullRequest('tab-ariadna')).rejects.toMatchObject({ code: 'AI_DISABLED' });
+  });
+
+  it('ai_resolve_conflict: propone el archivo completo, sin marcadores y sin escribirlo', async () => {
+    const api = mk();
+    const s = await api.aiResolveConflict('tab-legacy', 'src/billing/invoice.ts');
+    expect(check(aiConflictSuggestion, s)).toEqual([]);
+    expect(detect(s)?.name).toBe('AiConflictSuggestion');
+    expect(s.path).toBe('src/billing/invoice.ts');
+    // Archivo completo: sin marcadores y con las dos versiones dentro.
+    expect(s.content).not.toMatch(/<<<<<<<|=======|>>>>>>>/);
+    expect(s.content).toContain('applyDiscount');
+    expect(s.content).toContain('taxFor');
+    expect(s.rationale).toMatch(/Se conservan los dos cambios/);
+
+    // Nada resuelto: el archivo sigue en conflicto con su contenido original.
+    const st = await api.mergeState('tab-legacy');
+    expect(st.conflicts).toHaveLength(4);
+    const file = (await api.getConflicts('tab-legacy')).find((f) => f.path === 'src/billing/invoice.ts')!;
+    expect(file.workingTree).toContain('<<<<<<<');
+  });
+
+  it('ai_resolve_conflict: errores tipados (binario, no existe, propuesta inválida, IA apagada)', async () => {
+    const api = mk();
+    await expect(api.aiResolveConflict('tab-legacy', 'assets/logo.png')).rejects.toMatchObject({ code: 'AI_CONFLICT_NOT_TEXT' });
+    await expect(api.aiResolveConflict('tab-legacy', 'README.md')).rejects.toMatchObject({ code: 'CONFLICT_NOT_FOUND' });
+    await expect(mk('ai-conflict-markers').aiResolveConflict('tab-legacy', 'src/billing/invoice.ts')).rejects.toMatchObject({
+      code: 'AI_CONFLICT_INVALID_PROPOSAL'
+    });
+    await expect(mk('ai-consent-denied').aiResolveConflict('tab-legacy', 'src/billing/invoice.ts')).rejects.toMatchObject({
+      code: 'AI_CONSENT_REQUIRED'
+    });
+    await api.aiUpdateSettings({ enabled: false });
+    await expect(api.aiResolveConflict('tab-legacy', 'src/billing/invoice.ts')).rejects.toMatchObject({ code: 'AI_DISABLED' });
   });
 });

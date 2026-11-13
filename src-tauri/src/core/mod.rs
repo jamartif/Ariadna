@@ -24,10 +24,10 @@ mod tests;
 
 pub use ai::{AiSettingsLoad, AiStore, StoredAi};
 pub use api::{
-    AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitSuggestion, AiContextPreview,
-    AiExcludeReason, AiExcludedFile, AiLoginInfo, AiLoginRequest, AiPreviewFile, AiProfileInfo,
-    AiProviderState, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState,
-    AmendDraft, ApiSessionEvent, ApiSessionEventKind, ApiSnapshot, AppEvent, AppState,
+    AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitSuggestion, AiConflictSuggestion,
+    AiContextPreview, AiExcludeReason, AiExcludedFile, AiLoginInfo, AiLoginRequest, AiPreviewFile,
+    AiProfileInfo, AiProviderState, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch,
+    AiState, AmendDraft, ApiSessionEvent, ApiSessionEventKind, ApiSnapshot, AppEvent, AppState,
     CloneProgressEvent, Closed, CommitResult, CredentialTest, Done, EventSink, GitInfo, HunkArg,
     NoticeEvent, OpenResult, SnapshotEvent, TabInfo,
 };
