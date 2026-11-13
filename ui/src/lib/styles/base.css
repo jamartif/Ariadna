@@ -1,0 +1,439 @@
+/* Reset mínimo, tipografía y primitivas compartidas (botones, campos, chips, menús, esqueletos). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+html {
+  font-family: var(--font-ui);
+  font-size: 100%;
+  font-feature-settings: 'cv11', 'ss03', 'calt';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background: var(--bg-app);
+  color: var(--text);
+}
+
+body {
+  font-size: var(--text-md);
+  line-height: 1.45;
+  overflow: hidden;
+  /* La app de escritorio no selecciona texto de la interfaz por accidente. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+::selection {
+  background: var(--accent-glow);
+}
+
+/* Transición de tema ≤ 150 ms (spec §7.2). */
+body,
+.surface,
+.btn,
+input,
+textarea {
+  transition:
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+code,
+kbd,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+:where(input, textarea) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Foco visible en todo (spec §7, accesibilidad). */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- Botones --------------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--control-h);
+  min-width: var(--target-min);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--elev-inset);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease),
+    filter var(--dur-fast) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-raised) 88%, var(--text));
+  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--text-muted));
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0.5px);
+  background: color-mix(in srgb, var(--bg-raised) 80%, var(--text));
+}
+
+.btn:disabled {
+  opacity: 0.5;
+}
+
+.btn-primary {
+  background: var(--grad-accent);
+  border-color: color-mix(in srgb, var(--accent-grad-to) 70%, #000);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.28),
+    var(--glow);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--grad-accent);
+  border-color: color-mix(in srgb, var(--accent-grad-to) 70%, #000);
+  filter: brightness(1.07) saturate(1.05);
+}
+
+.btn-primary:active:not(:disabled) {
+  background: var(--grad-accent);
+  filter: brightness(0.96);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.btn-ghost:active:not(:disabled) {
+  background: var(--bg-pressed);
+}
+
+.btn-danger {
+  color: var(--danger);
+}
+
+.btn-sm {
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
+}
+
+.btn-icon {
+  padding: 0;
+  width: var(--control-h);
+  min-width: var(--control-h);
+}
+
+.btn-icon.btn-sm {
+  width: 24px;
+  min-width: 24px;
+}
+
+/* ---- Campos ---------------------------------------------------------------------- */
+
+.field {
+  width: 100%;
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  background: color-mix(in srgb, var(--bg-app) 55%, var(--bg-surface));
+  border: 1px solid var(--border-field);
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+.field:hover:not(:disabled) {
+  border-color: var(--border-hover);
+}
+
+.field:focus-visible,
+.field:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.field::placeholder {
+  color: var(--text-subtle);
+}
+
+.field:disabled {
+  opacity: 0.55;
+}
+
+/* ---- Chips y teclas --------------------------------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--pill);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  justify-content: center;
+}
+
+kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid var(--border-hover);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--bg-raised) 70%, transparent);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+}
+
+/* ---- Superficies flotantes (menús, popovers, diálogos) -------------------------------- */
+
+.float {
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-lg);
+  background: var(--bg-float);
+  box-shadow: var(--elev-2);
+  animation: pop-in var(--dur-slow) var(--ease-out);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* ---- Esqueletos y animaciones ------------------------------------------------------- */
+
+.skeleton {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-muted) 0%, color-mix(in srgb, var(--bg-muted) 55%, var(--text) 9%) 45%, var(--bg-muted) 90%);
+  background-size: 220% 100%;
+  animation: shimmer 1.5s var(--ease) infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- Barras de desplazamiento discretas --------------------------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hover) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 8px;
+  background: var(--border-hover);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---- Accesibilidad: movimiento, contraste, colores forzados -------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .skeleton {
+    background: var(--bg-muted);
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --border: var(--border-strong);
+    --border-hover: var(--border-strong);
+    --border-field: var(--border-strong);
+  }
+  .btn,
+  .field {
+    border-width: 2px;
+  }
+  :focus-visible {
+    outline-width: 3px;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight;
+  }
+  .btn,
+  .field,
+  .chip,
+  kbd,
+  .float {
+    border: 1px solid ButtonText;
+    forced-color-adjust: auto;
+  }
+  .btn-primary,
+  .btn-primary:hover:not(:disabled),
+  .btn-primary:active:not(:disabled) {
+    background: Highlight;
+    /* El degradado del estado normal/hover se anula: con colores forzados el texto
+       HighlightText quedaría sobre Canvas si el degradado se aplanara. */
+    background-image: none;
+    color: HighlightText;
+    border-color: Highlight;
+    /* Sin esto el navegador fuerza el fondo a Canvas y el primario pierde su relleno. */
+    forced-color-adjust: none;
+  }
+  .btn:disabled,
+  .btn[aria-disabled='true'],
+  .btn-primary:disabled {
+    background: ButtonFace;
+    color: GrayText;
+    border-color: GrayText;
+    opacity: 1;
+  }
+  .skeleton {
+    background: GrayText;
+    opacity: 0.3;
+  }
+}

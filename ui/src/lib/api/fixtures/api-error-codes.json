@@ -1,0 +1,146 @@
+[
+  {
+    "code": "NOT_A_REPOSITORY",
+    "detail": "/x",
+    "message": "No hay un repositorio Git en /x."
+  },
+  {
+    "code": "GIT_NOT_FOUND",
+    "detail": "git",
+    "message": "No encuentro el ejecutable de git (git). Instálalo o indica la ruta en Ajustes."
+  },
+  {
+    "code": "COMMAND_FAILED",
+    "detail": "fatal: algo",
+    "message": "git terminó con código 128.\nfatal: algo"
+  },
+  {
+    "code": "NOTHING_TO_COMMIT",
+    "message": "No hay cambios preparados para el commit."
+  },
+  {
+    "code": "EMPTY_COMMIT_MESSAGE",
+    "message": "El mensaje de commit está vacío."
+  },
+  {
+    "code": "DETACHED_HEAD_COMMIT",
+    "message": "HEAD no está en una rama. El commit quedaría suelto. Confírmalo o crea una rama antes."
+  },
+  {
+    "code": "CANNOT_AMEND",
+    "detail": "ya publicado",
+    "message": "No corrijo el último commit. ya publicado"
+  },
+  {
+    "code": "LOCAL_CHANGES_BLOCK_CHECKOUT",
+    "detail": "a.txt",
+    "message": "Hay cambios locales que impedirían el cambio de rama. Haz commit, descártalos o guárdalos antes.\na.txt"
+  },
+  {
+    "code": "DIVERGED_LOCAL_BRANCH",
+    "detail": "origin/feature",
+    "message": "La rama local «feature» no coincide con origin/feature. No cambio de rama hasta que lo confirmes."
+  },
+  {
+    "code": "INVALID_REFERENCE",
+    "detail": "-rf",
+    "message": "La referencia «-rf» no es válida."
+  },
+  {
+    "code": "HUNK_NOT_FOUND",
+    "detail": "a.txt",
+    "message": "Ese hunk ya no está en a.txt. Actualiza el diff e inténtalo de nuevo."
+  },
+  {
+    "code": "PATCH_REJECTED",
+    "detail": "el parche no aplica",
+    "message": "No se pueden preparar esas líneas: el parche no aplica"
+  },
+  {
+    "code": "STASH_NOT_FOUND",
+    "detail": "abc1234",
+    "message": "Ese stash ya no existe. Actualiza la lista e inténtalo de nuevo."
+  },
+  {
+    "code": "NOTHING_TO_STASH",
+    "message": "No hay cambios que guardar en el stash."
+  },
+  {
+    "code": "INVALID_TAG_NAME",
+    "detail": "a b",
+    "message": "El nombre de etiqueta «a b» no es válido: carácter prohibido."
+  },
+  {
+    "code": "TAG_EXISTS",
+    "detail": "v1.0",
+    "message": "Ya existe una etiqueta llamada «v1.0». Elige otro nombre o bórrala antes."
+  },
+  {
+    "code": "TAG_NOT_FOUND",
+    "detail": "v1.0",
+    "message": "La etiqueta «v1.0» ya no existe. Actualiza la lista e inténtalo de nuevo."
+  },
+  {
+    "code": "NO_INTEGRATION",
+    "message": "No hay un merge, rebase o cherry-pick en curso."
+  },
+  {
+    "code": "CONFIRMATION_REQUIRED",
+    "detail": "descartar",
+    "message": "Hace falta confirmación explícita para descartar."
+  },
+  {
+    "code": "PATH_ESCAPES_REPOSITORY",
+    "detail": "../fuera",
+    "message": "La ruta ../fuera sale del repositorio. No se ha escrito nada."
+  },
+  {
+    "code": "TIMEOUT",
+    "detail": "git fetch",
+    "message": "La operación tardó demasiado y se canceló: git fetch."
+  },
+  {
+    "code": "CANCELLED",
+    "message": "Operación cancelada."
+  },
+  {
+    "code": "PARSE",
+    "detail": "raro",
+    "message": "No pude interpretar la salida de git: raro"
+  },
+  {
+    "code": "LOCKED",
+    "detail": ".git/index.lock",
+    "message": "El repositorio está bloqueado por otro proceso de git (.git/index.lock). Si no hay ninguno en marcha, borra ese archivo a mano."
+  },
+  {
+    "code": "DUBIOUS_OWNERSHIP",
+    "detail": "/otro",
+    "message": "Git no se fía de la carpeta /otro (propietario distinto). Confírmalo para añadirla a las carpetas seguras."
+  },
+  {
+    "code": "INVALID_REFERENCE",
+    "detail": "refs/pull/1/head",
+    "message": "El servidor no tiene la referencia «refs/pull/1/head» en el remoto «origin». Si la pull request viene de un fork, añade el remoto del fork y vuelve a intentarlo."
+  },
+  {
+    "code": "INVALID_REFERENCE",
+    "detail": "/otro",
+    "message": "No se puede añadir /otro a las carpetas seguras de git: no se admite «*»."
+  },
+  {
+    "code": "AUTH",
+    "detail": "dev.azure.com: El token ha caducado.",
+    "message": "No se pudo autenticar en dev.azure.com. El token ha caducado."
+  },
+  {
+    "code": "IO",
+    "detail": "disco lleno",
+    "message": "Error de entrada/salida: disco lleno"
+  },
+  {
+    "code": "REPO_MISSING",
+    "detail": "/work/demo",
+    "message": "La carpeta /work/demo ya no existe o no es un repositorio. Localízala o cierra la pestaña."
+  }
+]

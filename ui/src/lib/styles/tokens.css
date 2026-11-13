@@ -1,0 +1,312 @@
+/*
+ * TOKENS DE DISEÑO — único archivo (spec §7.1).
+ *
+ *  - Superficies en CAPAS: --bg-app (ventana) < --bg-surface (paneles) < --bg-raised
+ *    (tarjetas, campos) < --bg-float (menús, diálogos). Bordes de 1 px semitransparentes.
+ *  - Acento cian; el degradado (--grad-accent) solo en acciones primarias y estados activos.
+ *  - Semánticos de estado de archivo: nuevo, modificado, borrado, renombrado, conflicto.
+ *  - Espaciado de 4/8 px, 3 radios, elevaciones suaves, movimiento de 120–180 ms.
+ *  - Paleta con contraste verificado por `src/lib/styles/tokens.test.ts`.
+ *  - El bloque oscuro aparece DOS veces (explícito y «sistema»); el test exige que sean idénticos.
+ *  - Tema por `data-theme="light|dark"` en <html>; sin atributo, sigue al sistema.
+ */
+
+:root {
+  color-scheme: light;
+  --bg-app: #e6ebf2;
+  --bg-surface: #fbfcfe;
+  --bg-raised: #ffffff;
+  --bg-float: #ffffff;
+  --bg-subtle: #f1f4f9;
+  --bg-rail: #f2f5fa;
+  --bg-muted: #e3e9f1;
+  --bg-selected: #d8f0f6;
+  --bg-overlay: rgb(14 22 34 / 0.42);
+  --bg-hover: rgb(16 24 40 / 0.05);
+  --bg-pressed: rgb(16 24 40 / 0.09);
+
+  --text: #0f1722;
+  --text-muted: #445064;
+  --text-subtle: #566275;
+
+  --border: rgb(16 24 40 / 0.09);
+  --border-hover: rgb(16 24 40 / 0.18);
+  --border-field: rgb(16 24 40 / 0.2);
+  --border-strong: #707c8f;
+
+  --accent: #0b6e87;
+  --accent-hover: #095a70;
+  --accent-fg: #ffffff;
+  --accent-soft: #d6f0f6;
+  --accent-brand: #06b6d4;
+  --accent-glow: rgb(6 182 212 / 0.26);
+  --accent-grad-from: #0a748c;
+  --accent-grad-to: #0a6a83;
+  --focus-ring: #0b6e87;
+
+  --success: #17692e;
+  --danger: #c62828;
+  --warning: #8a5a00;
+  --info: #0b6e87;
+  --danger-soft: #fde4e1;
+  --warning-soft: #fbefd2;
+  --success-soft: #dcf3e3;
+  --info-soft: #d6f0f6;
+
+  --diff-add-bg: #e7f7ec;
+  --diff-add-gutter: #cfeedb;
+  --diff-add-strong: #a6e2ba;
+  --diff-del-bg: #fdecee;
+  --diff-del-gutter: #f8d5da;
+  --diff-del-strong: #f6b5bf;
+  --diff-hunk-bg: #eaf0f8;
+
+  --st-added-fg: #146c2e;
+  --st-added-bg: #d9f2e2;
+  --st-modified-fg: #85560a;
+  --st-modified-bg: #fbeccb;
+  --st-deleted-fg: #b42335;
+  --st-deleted-bg: #fde0e4;
+  --st-renamed-fg: #0b5ea8;
+  --st-renamed-bg: #d9eafb;
+  --st-unmerged-fg: #6d28c4;
+  --st-unmerged-bg: #ece0fb;
+  --st-untracked-fg: #0b7266;
+  --st-untracked-bg: #d5f3ee;
+
+  --tok-comment: #5b697c;
+  --tok-string: #8f5400;
+  --tok-keyword: #7433d6;
+  --tok-function: #1b4fc4;
+  --tok-number: #b53a0a;
+  --tok-type: #0a6e63;
+  --tok-property: #0b6580;
+  --tok-operator: #435165;
+  --tok-punct: #526073;
+  --tok-tag: #b3144f;
+  --tok-regex: #9a5000;
+
+  --elev-1: 0 1px 2px rgb(16 24 40 / 0.06), 0 2px 6px -1px rgb(16 24 40 / 0.07), 0 0 0 1px rgb(16 24 40 / 0.05);
+  --elev-2: 0 20px 44px -10px rgb(16 24 40 / 0.28), 0 0 0 1px rgb(16 24 40 / 0.08);
+  --elev-inset: inset 0 1px 0 rgb(255 255 255 / 0.9);
+  --glow: 0 6px 18px -6px rgb(11 110 135 / 0.5);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  /* Capas: fondo de la app → panel → elevado → flotante (menús y diálogos). */
+  --bg-app: #080b10;
+  --bg-surface: #0d1117;
+  --bg-raised: #141a22;
+  --bg-float: #19212b;
+  --bg-subtle: #121821;
+  --bg-rail: #0a0e14;
+  --bg-muted: #1b232e;
+  --bg-selected: #0e2c35;
+  --bg-overlay: rgb(2 5 9 / 0.62);
+  --bg-hover: rgb(255 255 255 / 0.045);
+  --bg-pressed: rgb(255 255 255 / 0.08);
+
+  --text: #e8edf3;
+  --text-muted: #a4afbc;
+  --text-subtle: #8f9bab;
+
+  --border: rgb(255 255 255 / 0.07);
+  --border-hover: rgb(255 255 255 / 0.14);
+  --border-field: rgb(255 255 255 / 0.13);
+  --border-strong: #6b7889;
+
+  --accent: #22d3ee;
+  --accent-hover: #67e1f3;
+  --accent-fg: #03222a;
+  --accent-soft: #0e2e38;
+  --accent-brand: #22d3ee;
+  --accent-glow: rgb(34 211 238 / 0.22);
+  --accent-grad-from: #46e1f6;
+  --accent-grad-to: #14b9d6;
+  --focus-ring: #22d3ee;
+
+  --success: #4ade80;
+  --danger: #ff8a80;
+  --warning: #e8b84a;
+  --info: #22d3ee;
+  --danger-soft: #3a1a20;
+  --warning-soft: #33290f;
+  --success-soft: #11301c;
+  --info-soft: #0e2e38;
+
+  --diff-add-bg: #0e2518;
+  --diff-add-gutter: #123220;
+  --diff-add-strong: #1a4a2c;
+  --diff-del-bg: #2a141a;
+  --diff-del-gutter: #381a21;
+  --diff-del-strong: #5a232d;
+  --diff-hunk-bg: #121a25;
+
+  --st-added-fg: #4ade80;
+  --st-added-bg: #123220;
+  --st-modified-fg: #f0bd4f;
+  --st-modified-bg: #33290f;
+  --st-deleted-fg: #ff8a95;
+  --st-deleted-bg: #3a1a21;
+  --st-renamed-fg: #7cc4ff;
+  --st-renamed-bg: #11283f;
+  --st-unmerged-fg: #e0b3ff;
+  --st-unmerged-bg: #2e1c44;
+  --st-untracked-fg: #5eead4;
+  --st-untracked-bg: #0f2f2c;
+
+  --tok-comment: #7f8c9d;
+  --tok-string: #e9b872;
+  --tok-keyword: #c79bff;
+  --tok-function: #86b4ff;
+  --tok-number: #ff9e7a;
+  --tok-type: #4fd8c6;
+  --tok-property: #70d6ea;
+  --tok-operator: #a9bbcd;
+  --tok-punct: #93a2b3;
+  --tok-tag: #ff8aa6;
+  --tok-regex: #ffcf70;
+
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.05);
+  --elev-2: 0 24px 56px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.09);
+  --elev-inset: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --glow: 0 6px 20px -6px rgb(34 211 238 / 0.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='dark']) {
+    color-scheme: dark;
+    /* Capas: fondo de la app → panel → elevado → flotante (menús y diálogos). */
+    --bg-app: #080b10;
+    --bg-surface: #0d1117;
+    --bg-raised: #141a22;
+    --bg-float: #19212b;
+    --bg-subtle: #121821;
+  --bg-rail: #0a0e14;
+    --bg-muted: #1b232e;
+    --bg-selected: #0e2c35;
+    --bg-overlay: rgb(2 5 9 / 0.62);
+    --bg-hover: rgb(255 255 255 / 0.045);
+    --bg-pressed: rgb(255 255 255 / 0.08);
+
+    --text: #e8edf3;
+    --text-muted: #a4afbc;
+    --text-subtle: #8f9bab;
+
+    --border: rgb(255 255 255 / 0.07);
+    --border-hover: rgb(255 255 255 / 0.14);
+    --border-field: rgb(255 255 255 / 0.13);
+    --border-strong: #6b7889;
+
+    --accent: #22d3ee;
+    --accent-hover: #67e1f3;
+    --accent-fg: #03222a;
+    --accent-soft: #0e2e38;
+    --accent-brand: #22d3ee;
+    --accent-glow: rgb(34 211 238 / 0.22);
+    --accent-grad-from: #46e1f6;
+    --accent-grad-to: #14b9d6;
+    --focus-ring: #22d3ee;
+
+    --success: #4ade80;
+    --danger: #ff8a80;
+    --warning: #e8b84a;
+    --info: #22d3ee;
+    --danger-soft: #3a1a20;
+    --warning-soft: #33290f;
+    --success-soft: #11301c;
+    --info-soft: #0e2e38;
+
+    --diff-add-bg: #0e2518;
+    --diff-add-gutter: #123220;
+    --diff-add-strong: #1a4a2c;
+    --diff-del-bg: #2a141a;
+    --diff-del-gutter: #381a21;
+    --diff-del-strong: #5a232d;
+    --diff-hunk-bg: #121a25;
+
+    --st-added-fg: #4ade80;
+    --st-added-bg: #123220;
+    --st-modified-fg: #f0bd4f;
+    --st-modified-bg: #33290f;
+    --st-deleted-fg: #ff8a95;
+    --st-deleted-bg: #3a1a21;
+    --st-renamed-fg: #7cc4ff;
+    --st-renamed-bg: #11283f;
+    --st-unmerged-fg: #e0b3ff;
+    --st-unmerged-bg: #2e1c44;
+    --st-untracked-fg: #5eead4;
+    --st-untracked-bg: #0f2f2c;
+
+    --tok-comment: #7f8c9d;
+    --tok-string: #e9b872;
+    --tok-keyword: #c79bff;
+    --tok-function: #86b4ff;
+    --tok-number: #ff9e7a;
+    --tok-type: #4fd8c6;
+    --tok-property: #70d6ea;
+    --tok-operator: #a9bbcd;
+    --tok-punct: #93a2b3;
+    --tok-tag: #ff8aa6;
+    --tok-regex: #ffcf70;
+
+    --elev-1: 0 1px 2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.05);
+    --elev-2: 0 24px 56px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.09);
+    --elev-inset: inset 0 1px 0 rgb(255 255 255 / 0.05);
+    --glow: 0 6px 20px -6px rgb(34 211 238 / 0.55);
+  }
+}
+
+/* Tokens independientes del tema. */
+:root {
+  --font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+
+  /* Escala tipográfica: 11 / 12 / 13 / 14 / 16 / 20 / 28. */
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.75rem;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --pill: 999px;
+
+  --dur-fast: 120ms;
+  --dur: 150ms;
+  --dur-slow: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --titlebar-h: 40px;
+  --target-min: 24px;
+
+  --grad-accent: linear-gradient(180deg, var(--accent-grad-from), var(--accent-grad-to));
+  --grad-accent-soft: linear-gradient(180deg, color-mix(in srgb, var(--accent-grad-from) 22%, transparent), color-mix(in srgb, var(--accent-grad-to) 10%, transparent));
+
+  /* Densidad cómoda (por defecto). Deben coincidir con settings.svelte.ts. */
+  --row-h: 28px;
+  --header-h: 32px;
+  --code-lh: 21px;
+  --control-h: 30px;
+}
+
+:root[data-density='compact'] {
+  --row-h: 24px;
+  --header-h: 28px;
+  --code-lh: 18px;
+  --control-h: 26px;
+}

@@ -1,0 +1,32 @@
+[package]
+name = "ariadna-hosting"
+description = "Reconocimiento de proveedores de alojamiento (Azure DevOps, GitHub, GitLab, Bitbucket) y, más adelante, sus pull requests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+url.workspace = true
+zeroize.workspace = true
+async-trait.workspace = true
+tokio = { workspace = true, features = ["process", "io-util", "time", "rt"] }
+similar = "2"
+# TLS con rustls y el proveedor criptográfico `ring` (sin aws-lc: no exige NASM/cmake en Windows).
+# Las raíces de confianza son las del sistema (rustls-platform-verifier).
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "system-proxy"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+
+[dev-dependencies]
+wiremock = "0.6"
+tempfile.workspace = true
+# Test-only: genera el certificado de prueba de `net.rs` y firma su servidor TLS.
+rcgen = { version = "0.14", default-features = false, features = ["pem", "ring"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "net", "io-util"] }
+
+[lints]
+workspace = true

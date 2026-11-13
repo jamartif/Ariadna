@@ -1,0 +1,1 @@
+Error: You are not logged in. Run `copilot login` to authenticate.

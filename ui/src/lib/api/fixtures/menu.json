@@ -1,0 +1,426 @@
+{
+  "mac": [
+    {
+      "entries": [
+        {
+          "kind": "role",
+          "role": "about"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "accelerator": "CmdOrCtrl+,",
+          "effect": {
+            "type": "shortcut",
+            "value": "settings.open"
+          },
+          "id": "settings.open",
+          "kind": "item",
+          "label": "Ajustes…"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "kind": "role",
+          "role": "hide"
+        },
+        {
+          "kind": "role",
+          "role": "hideOthers"
+        },
+        {
+          "kind": "role",
+          "role": "showAll"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "accelerator": "CmdOrCtrl+Q",
+          "effect": {
+            "type": "quit"
+          },
+          "id": "app.quit",
+          "kind": "item",
+          "label": "Salir de Ariadna"
+        }
+      ],
+      "label": "Ariadna"
+    },
+    {
+      "entries": [
+        {
+          "accelerator": "CmdOrCtrl+O",
+          "effect": {
+            "type": "shortcut",
+            "value": "repo.open"
+          },
+          "id": "repo.open",
+          "kind": "item",
+          "label": "Abrir repositorio…"
+        },
+        {
+          "accelerator": "CmdOrCtrl+Shift+O",
+          "effect": {
+            "type": "shortcut",
+            "value": "clone.open"
+          },
+          "id": "clone.open",
+          "kind": "item",
+          "label": "Clonar repositorio…"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "accelerator": "CmdOrCtrl+T",
+          "effect": {
+            "type": "shortcut",
+            "value": "tab.new"
+          },
+          "id": "tab.new",
+          "kind": "item",
+          "label": "Nueva pestaña"
+        },
+        {
+          "accelerator": "CmdOrCtrl+W",
+          "effect": {
+            "type": "shortcut",
+            "value": "tab.close"
+          },
+          "id": "tab.close",
+          "kind": "item",
+          "label": "Cerrar pestaña"
+        }
+      ],
+      "label": "Archivo"
+    },
+    {
+      "entries": [
+        {
+          "kind": "role",
+          "role": "undo"
+        },
+        {
+          "kind": "role",
+          "role": "redo"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "kind": "role",
+          "role": "cut"
+        },
+        {
+          "kind": "role",
+          "role": "copy"
+        },
+        {
+          "kind": "role",
+          "role": "paste"
+        },
+        {
+          "kind": "role",
+          "role": "selectAll"
+        }
+      ],
+      "label": "Editar"
+    },
+    {
+      "entries": [
+        {
+          "accelerator": "CmdOrCtrl+R",
+          "effect": {
+            "type": "shortcut",
+            "value": "changes.refresh"
+          },
+          "id": "changes.refresh",
+          "kind": "item",
+          "label": "Refrescar"
+        },
+        {
+          "accelerator": "CmdOrCtrl+K",
+          "effect": {
+            "type": "shortcut",
+            "value": "palette.open"
+          },
+          "id": "palette.open",
+          "kind": "item",
+          "label": "Paleta de comandos…"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "kind": "role",
+          "role": "fullscreen"
+        }
+      ],
+      "label": "Ver"
+    },
+    {
+      "entries": [
+        {
+          "kind": "role",
+          "role": "minimize"
+        },
+        {
+          "kind": "role",
+          "role": "maximize"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "accelerator": "Ctrl+Tab",
+          "effect": {
+            "type": "shortcut",
+            "value": "tab.next"
+          },
+          "id": "tab.next",
+          "kind": "item",
+          "label": "Pestaña siguiente"
+        },
+        {
+          "accelerator": "Ctrl+Shift+Tab",
+          "effect": {
+            "type": "shortcut",
+            "value": "tab.prev"
+          },
+          "id": "tab.prev",
+          "kind": "item",
+          "label": "Pestaña anterior"
+        }
+      ],
+      "label": "Ventana"
+    },
+    {
+      "entries": [
+        {
+          "accelerator": null,
+          "effect": {
+            "type": "url",
+            "value": "https://github.com/jamartif/Ariadna#readme"
+          },
+          "id": "help.docs",
+          "kind": "item",
+          "label": "Documentación de Ariadna"
+        },
+        {
+          "accelerator": null,
+          "effect": {
+            "type": "url",
+            "value": "https://github.com/jamartif/Ariadna/issues"
+          },
+          "id": "help.issues",
+          "kind": "item",
+          "label": "Notificar un problema"
+        }
+      ],
+      "label": "Ayuda"
+    }
+  ],
+  "other": [
+    {
+      "entries": [
+        {
+          "accelerator": "CmdOrCtrl+O",
+          "effect": {
+            "type": "shortcut",
+            "value": "repo.open"
+          },
+          "id": "repo.open",
+          "kind": "item",
+          "label": "Abrir repositorio…"
+        },
+        {
+          "accelerator": "CmdOrCtrl+Shift+O",
+          "effect": {
+            "type": "shortcut",
+            "value": "clone.open"
+          },
+          "id": "clone.open",
+          "kind": "item",
+          "label": "Clonar repositorio…"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "accelerator": "CmdOrCtrl+T",
+          "effect": {
+            "type": "shortcut",
+            "value": "tab.new"
+          },
+          "id": "tab.new",
+          "kind": "item",
+          "label": "Nueva pestaña"
+        },
+        {
+          "accelerator": "CmdOrCtrl+W",
+          "effect": {
+            "type": "shortcut",
+            "value": "tab.close"
+          },
+          "id": "tab.close",
+          "kind": "item",
+          "label": "Cerrar pestaña"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "accelerator": "CmdOrCtrl+,",
+          "effect": {
+            "type": "shortcut",
+            "value": "settings.open"
+          },
+          "id": "settings.open",
+          "kind": "item",
+          "label": "Ajustes…"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "accelerator": null,
+          "effect": {
+            "type": "quit"
+          },
+          "id": "app.quit",
+          "kind": "item",
+          "label": "Salir"
+        }
+      ],
+      "label": "Archivo"
+    },
+    {
+      "entries": [
+        {
+          "kind": "role",
+          "role": "undo"
+        },
+        {
+          "kind": "role",
+          "role": "redo"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "kind": "role",
+          "role": "cut"
+        },
+        {
+          "kind": "role",
+          "role": "copy"
+        },
+        {
+          "kind": "role",
+          "role": "paste"
+        },
+        {
+          "kind": "role",
+          "role": "selectAll"
+        }
+      ],
+      "label": "Editar"
+    },
+    {
+      "entries": [
+        {
+          "accelerator": "CmdOrCtrl+R",
+          "effect": {
+            "type": "shortcut",
+            "value": "changes.refresh"
+          },
+          "id": "changes.refresh",
+          "kind": "item",
+          "label": "Refrescar"
+        },
+        {
+          "accelerator": "CmdOrCtrl+K",
+          "effect": {
+            "type": "shortcut",
+            "value": "palette.open"
+          },
+          "id": "palette.open",
+          "kind": "item",
+          "label": "Paleta de comandos…"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "kind": "role",
+          "role": "fullscreen"
+        }
+      ],
+      "label": "Ver"
+    },
+    {
+      "entries": [
+        {
+          "kind": "role",
+          "role": "minimize"
+        },
+        {
+          "kind": "role",
+          "role": "maximize"
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "accelerator": "Ctrl+Tab",
+          "effect": {
+            "type": "shortcut",
+            "value": "tab.next"
+          },
+          "id": "tab.next",
+          "kind": "item",
+          "label": "Pestaña siguiente"
+        },
+        {
+          "accelerator": "Ctrl+Shift+Tab",
+          "effect": {
+            "type": "shortcut",
+            "value": "tab.prev"
+          },
+          "id": "tab.prev",
+          "kind": "item",
+          "label": "Pestaña anterior"
+        }
+      ],
+      "label": "Ventana"
+    },
+    {
+      "entries": [
+        {
+          "accelerator": null,
+          "effect": {
+            "type": "url",
+            "value": "https://github.com/jamartif/Ariadna#readme"
+          },
+          "id": "help.docs",
+          "kind": "item",
+          "label": "Documentación de Ariadna"
+        },
+        {
+          "accelerator": null,
+          "effect": {
+            "type": "url",
+            "value": "https://github.com/jamartif/Ariadna/issues"
+          },
+          "id": "help.issues",
+          "kind": "item",
+          "label": "Notificar un problema"
+        }
+      ],
+      "label": "Ayuda"
+    }
+  ]
+}

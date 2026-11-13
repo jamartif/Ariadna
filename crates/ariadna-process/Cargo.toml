@@ -1,0 +1,22 @@
+[package]
+name = "ariadna-process"
+description = "Lanzador de procesos de Ariadna: timeout, cancelación, árbol de procesos y entorno saneado"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tokio.workspace = true
+tokio-util.workspace = true
+command-group.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+
+[[bin]]
+name = "ariadna-proc-fake"
+path = "src/bin/fake.rs"
+test = false
+
+[lints]
+workspace = true

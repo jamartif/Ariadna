@@ -1,0 +1,76 @@
+{
+  "author": {
+    "displayName": "ANA",
+    "id": "id-ana",
+    "login": "ana"
+  },
+  "autoComplete": false,
+  "checkoutRef": "refs/pull/1/head",
+  "checks": null,
+  "commits": [
+    {
+      "author": "Ana",
+      "date": null,
+      "sha": "abc",
+      "subject": "feat"
+    }
+  ],
+  "createdAt": "2026-11-01T10:00:00Z",
+  "description": "Descripción **md** <script>alert(1)</script>",
+  "files": [
+    {
+      "additions": 1,
+      "binary": false,
+      "deletions": 1,
+      "oldPath": null,
+      "path": "src/a.rs",
+      "status": "modified"
+    },
+    {
+      "additions": null,
+      "binary": true,
+      "deletions": null,
+      "oldPath": "src/b_old.rs",
+      "path": "src/b.rs",
+      "status": "renamed"
+    }
+  ],
+  "id": 5,
+  "isDraft": false,
+  "isFork": false,
+  "mergeDetail": "clean",
+  "mergeStatus": "clean",
+  "policies": [
+    {
+      "blocking": true,
+      "name": "Build",
+      "status": "pending",
+      "url": null
+    }
+  ],
+  "reviewers": [
+    {
+      "required": true,
+      "user": {
+        "displayName": "BETO",
+        "id": "id-beto",
+        "login": "beto"
+      },
+      "vote": "approve"
+    }
+  ],
+  "sourceBranch": "feature/x",
+  "sourceCommit": "abc",
+  "state": "active",
+  "targetBranch": "main",
+  "targetCommit": "def",
+  "title": "Título 5",
+  "updatedAt": null,
+  "webUrl": "https://example.test/pr/5",
+  "workItems": [
+    {
+      "id": 7,
+      "url": "https://example.test/wi/7"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"abc"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"reasoning","text":"pensando"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"---FILE---\nresuelto\n---RATIONALE---\nMe quedo con ambos títulos."}}
+{"type":"evento.desconocido","x":1}
+{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":4}}

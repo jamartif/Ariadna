@@ -1,0 +1,2 @@
+{"type":"item.completed","item":{"id":"item_3","item_type":"assistant_message","text":"hola"}}
+{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}

@@ -8,6 +8,9 @@ description = "Identificadores públicos y fixtures de test, no credenciales."
 paths = [
     '''Info\.plist''',
     '''specs/.*''',
+    '''crates/ariadna-ai/tests/cli\.rs''',
+    '''src-tauri/src/core/tests/ai\.rs''',
+    '''src-tauri/src/core/tests/remotes\.rs''',
 ]
 regexes = [
     '''es\.javiermartinez\.ariadna''',

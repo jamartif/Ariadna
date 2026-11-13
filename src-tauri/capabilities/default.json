@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permisos mínimos de la ventana principal: núcleo de Tauri (eventos), diálogos nativos y los cinco controles de ventana que dibuja la interfaz. Sin shell, fs ni opener: abrir el navegador lo hacen los comandos open_external_url y open_remote_url de Rust, que validan https y el host; la interfaz no puede llamar al plugin opener.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-is-maximized"
+  ]
+}

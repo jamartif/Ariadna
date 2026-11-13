@@ -1,0 +1,30 @@
+[package]
+name = "ariadna-git"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ariadna-process.workspace = true
+ariadna-hosting = { path = "../ariadna-hosting" }
+zeroize.workspace = true
+url.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+async-trait.workspace = true
+regex.workspace = true
+dunce.workspace = true
+directories.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

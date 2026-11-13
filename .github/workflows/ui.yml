@@ -1,0 +1,70 @@
+name: ui
+
+# En pausa durante la migración: solo manual y en pull requests.
+# Para volver a activarlo en cada push, añade de nuevo `push:` con los mismos `paths`.
+on:
+  pull_request:
+    paths:
+      - 'ui/**'
+      - '.github/workflows/ui.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ui-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: ui
+
+jobs:
+  build:
+    name: check · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      - name: svelte-check (TypeScript estricto, sin avisos)
+        run: npm run check
+
+      - name: Vitest (componentes, atajos, contrato con los fixtures de Rust)
+        run: npm test
+
+      - name: Build de producción
+        run: npm run build
+
+      - name: Subir dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: ui/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  # Agregador: siempre corre y es el único check obligatorio en la protección de rama.
+  ui-ok:
+    name: ui-ok
+    if: always()
+    needs: [build]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Comprobar resultado
+        run: |
+          echo "build: ${{ needs.build.result }}"
+          test "${{ needs.build.result }}" = "success"

@@ -1,0 +1,26 @@
+{
+  "capabilities": {
+    "autoComplete": false,
+    "draft": true,
+    "provider": "github",
+    "resolveThreads": true,
+    "strategies": [
+      "merge",
+      "squash",
+      "rebase"
+    ],
+    "votes": [
+      "approve",
+      "reject",
+      "comment"
+    ],
+    "workItems": false
+  },
+  "host": "github.com",
+  "provider": "github",
+  "providerLabel": "GitHub",
+  "reason": null,
+  "remote": "origin",
+  "repoLabel": "github.com/acme/app",
+  "supported": true
+}

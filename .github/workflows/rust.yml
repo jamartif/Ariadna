@@ -1,0 +1,102 @@
+name: Rust
+
+on:
+  push:
+    paths:
+      - "crates/**"
+      - "src-tauri/**"
+      - "ui/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/rust.yml"
+  pull_request:
+    paths:
+      - "crates/**"
+      - "src-tauri/**"
+      - "ui/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/rust.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: fmt + clippy (ubuntu)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      # `ariadna-app` (Tauri) necesita WebKitGTK, que este runner no trae: se prueba en macOS y Windows.
+      - run: cargo clippy --workspace --exclude ariadna-app --all-targets -- -D warnings
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: git config para los tests
+        shell: bash
+        run: |
+          git config --global user.name "Ariadna CI"
+          git config --global user.email "ci@example.invalid"
+          git config --global init.defaultBranch main
+          git --version
+      # Linux no tiene las librerías de WebKit: ahí se excluye `ariadna-app` (Tauri).
+      - name: cargo test (Linux, sin ariadna-app)
+        if: runner.os == 'Linux'
+        run: cargo test --workspace --exclude ariadna-app --no-fail-fast
+      - name: cargo test (macOS y Windows)
+        if: runner.os != 'Linux'
+        run: cargo test --workspace --no-fail-fast
+
+  test-windows-arm64:
+    name: test (windows-11-arm, mejor esfuerzo)
+    runs-on: windows-11-arm
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: git config para los tests
+        shell: bash
+        run: |
+          git config --global user.name "Ariadna CI"
+          git config --global user.email "ci@example.invalid"
+          git config --global init.defaultBranch main
+      - run: cargo test --workspace --no-fail-fast
+
+  gitleaks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job agregador: es el único que hay que marcar como obligatorio.
+  rust-ok:
+    name: rust-ok
+    if: always()
+    needs: [lint, test, gitleaks]
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          echo "lint=${{ needs.lint.result }} test=${{ needs.test.result }} gitleaks=${{ needs.gitleaks.result }}"
+          test "${{ needs.lint.result }}" = "success" -a "${{ needs.test.result }}" = "success" -a "${{ needs.gitleaks.result }}" = "success"

@@ -1,0 +1,76 @@
+[
+  {
+    "kind": {
+      "label": "preparar",
+      "operationId": 1,
+      "type": "operationStarted"
+    },
+    "revision": 1,
+    "sessionId": "tab-1"
+  },
+  {
+    "kind": {
+      "attempt": 1,
+      "delayMs": 200,
+      "label": "preparar",
+      "operationId": 2,
+      "type": "operationRetrying"
+    },
+    "revision": 2,
+    "sessionId": "tab-1"
+  },
+  {
+    "kind": {
+      "error": null,
+      "label": "preparar",
+      "ok": true,
+      "operationId": 1,
+      "type": "operationFinished"
+    },
+    "revision": 2,
+    "sessionId": "tab-1"
+  },
+  {
+    "kind": {
+      "error": {
+        "code": "LOCKED",
+        "detail": "/work/eventos/.git/index.lock",
+        "message": "El repositorio está bloqueado por otro proceso de git (/work/eventos/.git/index.lock). Si no hay ninguno en marcha, borra ese archivo a mano."
+      },
+      "label": "preparar",
+      "ok": false,
+      "operationId": 2,
+      "type": "operationFinished"
+    },
+    "revision": 2,
+    "sessionId": "tab-1"
+  },
+  {
+    "kind": {
+      "revision": 2,
+      "type": "snapshotPublished"
+    },
+    "revision": 2,
+    "sessionId": "tab-1"
+  },
+  {
+    "kind": {
+      "state": "closing",
+      "type": "stateChanged"
+    },
+    "revision": 2,
+    "sessionId": "tab-1"
+  },
+  {
+    "kind": {
+      "error": {
+        "code": "TIMEOUT",
+        "detail": "git status",
+        "message": "La operación tardó demasiado y se canceló: git status."
+      },
+      "type": "refreshFailed"
+    },
+    "revision": 2,
+    "sessionId": "tab-1"
+  }
+]

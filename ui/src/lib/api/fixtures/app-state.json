@@ -1,0 +1,30 @@
+{
+  "activeTabId": "tab-1",
+  "git": {
+    "path": "/usr/bin/git",
+    "version": "2.50.0"
+  },
+  "gitProblem": null,
+  "recents": [
+    {
+      "isFavorite": false,
+      "lastBranch": "main",
+      "lastOpened": "2026-01-01T00:00:00Z",
+      "name": "demo",
+      "path": "/work/demo"
+    }
+  ],
+  "tabs": [
+    {
+      "branch": "main",
+      "busy": null,
+      "changeCount": 5,
+      "conflictCount": 1,
+      "detached": false,
+      "missing": false,
+      "name": "demo",
+      "path": "/work/demo",
+      "tabId": "tab-1"
+    }
+  ]
+}

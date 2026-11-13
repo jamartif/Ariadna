@@ -1,0 +1,44 @@
+[
+  {
+    "anchor": {
+      "line": 3,
+      "path": "src/a.rs",
+      "side": "new"
+    },
+    "canResolve": true,
+    "comments": [
+      {
+        "author": {
+          "displayName": "ANA",
+          "id": "id-ana",
+          "login": "ana"
+        },
+        "body": "Mira",
+        "createdAt": "2026-11-02T10:00:00Z",
+        "id": "1"
+      }
+    ],
+    "id": "t1",
+    "outdated": false,
+    "status": "active"
+  },
+  {
+    "anchor": null,
+    "canResolve": true,
+    "comments": [
+      {
+        "author": {
+          "displayName": "ANA",
+          "id": "id-ana",
+          "login": "ana"
+        },
+        "body": "Mira",
+        "createdAt": null,
+        "id": "1"
+      }
+    ],
+    "id": "issue:9",
+    "outdated": true,
+    "status": "closed"
+  }
+]
