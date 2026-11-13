@@ -25,7 +25,7 @@ on:
       - 'rust-toolchain.toml'
       - '.github/workflows/e2e.yml'
   push:
-    branches: [main, rust-migration]
+    branches: [main]
     paths:
       - 'ui/**'
       - 'src-tauri/**'
