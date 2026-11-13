@@ -204,6 +204,18 @@ cargo test -p ariadna-git --test perf -- --ignored --nocapture
 | [`specs/rust/checklist-humo-ia.md`](specs/rust/checklist-humo-ia.md) | Humo manual con CLI de IA reales |
 | [`specs/rust/ipc.md`](specs/rust/ipc.md) | Contrato IPC entre Rust y la interfaz |
 
+## Code signing policy (política de firma de código)
+
+> **Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).**
+
+- **Artefactos firmados:** instalador NSIS de Windows y su ejecutable, construidos solo en GitHub Actions desde este repositorio.
+- **Committers y revisores:** [@jamartif](https://github.com/jamartif).
+- **Aprobadores de firma:** [@jamartif](https://github.com/jamartif); cada release se aprueba a mano.
+- **Privacidad:** *This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.* Sin telemetría; la red solo se usa cuando tú lo pides (operaciones de git contra tus remotos y, si activas la IA, el CLI oficial que elijas).
+- **macOS** no entra en esta política: el `.dmg` lleva firma ad-hoc hasta que haya un certificado Developer ID.
+
+Detalle completo en [`docs/firma-de-codigo.md`](docs/firma-de-codigo.md).
+
 ## Licencia
 
 [MIT](LICENSE). Úsalo, modifícalo y redistribúyelo; si publicas una versión modificada,
