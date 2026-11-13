@@ -102,7 +102,7 @@ jobs:
       - name: E2E (9 ficheros, 13 pruebas)
         working-directory: e2e
         env:
-          ARIADNA_BINARY: ${{ github.workspace }}/src-tauri/target/debug/ariadna-app
+          ARIADNA_BINARY: ${{ github.workspace }}/target/debug/ariadna-app
           E2E_WDIO_LOG: error
         run: xvfb-run -a -s "$XVFB_ARGS" npm test
 
@@ -110,7 +110,7 @@ jobs:
         if: always()
         working-directory: e2e
         env:
-          ARIADNA_BINARY: ${{ github.workspace }}/src-tauri/target/debug/ariadna-app
+          ARIADNA_BINARY: ${{ github.workspace }}/target/debug/ariadna-app
         run: |
           if [ -d baselines/linux ]; then
             xvfb-run -a -s "$XVFB_ARGS" npm run visual
@@ -135,7 +135,7 @@ jobs:
         run: |
           {
             echo "### E2E"
-            echo "- Binario: \`src-tauri/target/debug/ariadna-app\`"
+            echo "- Binario: \`target/debug/ariadna-app\`"
             echo "- Driver: \`$(WebKitWebDriver --help 2>&1 | head -1)\`"
             echo "- Capturas y diffs en el artefacto \`e2e-artifacts-${{ github.run_attempt }}\`"
             echo "- macOS/Windows: ejecución manual (\`npm test\` sin xvfb, baselines propios)"
