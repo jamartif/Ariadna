@@ -289,7 +289,7 @@
   </span>
 {/snippet}
 
-<section class="diff" aria-label={t('diff.region')}>
+<section class="diff" aria-label={t('diff.region')} data-testid="diff-region">
   {#if !sel}
     <EmptyState icon="file-diff" title={t('diff.noneTitle')} body={t('diff.noneBody')} />
   {:else if sel.section === 'conflicts'}

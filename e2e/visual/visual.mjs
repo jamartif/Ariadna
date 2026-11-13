@@ -2,13 +2,13 @@
 //! Regresión visual: captura 8 pantallas en claro y oscuro y las compara con
 //! los baselines de `e2e/baselines/<so>/`. `--update` regenera los baselines.
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { E2E_DIR, appBinary, artifactPath, git, isolateAppState, platformTag } from '../lib/env.mjs';
 import { cleanupFixtures, createRepoFixture } from '../lib/fixture.mjs';
 import { ensureRepoOpen, normalizeStart } from '../lib/flows.mjs';
-import { assertPackaged, connect, disconnect, getBrowser, startDriver, stopDriver } from '../lib/session.mjs';
+import { assertPackaged, connect, disconnect, getBrowser, startDriver, stopDriver, waitLocale } from '../lib/session.mjs';
 import { getFixture, setFixture } from '../lib/state.mjs';
 import { MAX_DIFF_RATIO, PIXEL_THRESHOLD, comparePng, writePng } from './compare.mjs';
 import { screens } from './screens.mjs';
@@ -70,12 +70,21 @@ async function main() {
 
   const results = [];
   if (!args.update) rmSync(diffDir, { recursive: true, force: true });
+  // Al actualizar se parte de cero: si no, quedarían PNG de pantallas que ya no
+  // existen (p. ej. la antigua pestaña «Ramas») y el manifest no cuadraría.
+  if (args.update) {
+    mkdirSync(baselineDir, { recursive: true });
+    for (const f of readdirSync(baselineDir)) {
+      if (f.endsWith('.png')) rmSync(path.join(baselineDir, f), { force: true });
+    }
+  }
 
   for (const theme of THEMES) {
     // Cada tema arranca la app de cero: las pantallas que preparan archivos dejan
     // el panel de diferencias esperando contenido y contaminarían el siguiente tema.
     await connect();
     await assertPackaged();
+    await waitLocale();
     await normalizeStart();
     await ensureRepoOpen();
     await getBrowser().pause(400);

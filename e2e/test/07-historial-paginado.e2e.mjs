@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 
 import { waitInPage } from '../lib/session.mjs';
-import { showPanel } from '../lib/flows.mjs';
+import { showView } from '../lib/flows.mjs';
 import { getFixture } from '../lib/state.mjs';
 import { historyCountText, scrollHistoryToBottom } from '../lib/ui.mjs';
 import { repoState } from '../lib/fixture.mjs';
@@ -13,9 +13,10 @@ const num = (text) => Number((text.match(/\d+/g) ?? ['0'])[0]);
 describe('Flujo 7 · historial paginado', () => {
   it('carga la primera página y va pidiendo más al desplazarse', async () => {
     const fx = getFixture();
-    await showPanel('Historial');
+    await showView('history');
 
-    await waitInPage(() => /\d+ commits? cargados/.test(document.body.innerText), [], {
+    // El contador (`aria-live`) dice cuántos commits hay cargados ahora mismo.
+    await waitInPage(() => /\d+/.test(document.querySelector('[aria-live="polite"]')?.textContent ?? ''), [], {
       message: 'contador del historial'
     });
 

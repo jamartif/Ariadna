@@ -56,8 +56,8 @@ Linux / WSL necesita un servidor X; en CI y en local se usa `xvfb-run`:
 
 ```bash
 cd e2e
-xvfb-run -a -s "-screen 0 1440x900x24" npm test            # los 9 flujos
-xvfb-run -a -s "-screen 0 1440x900x24" npm test -- --grep "ramas"
+xvfb-run -a -s "-screen 0 1440x900x24" npm test            # los 9 ficheros (13 pruebas)
+xvfb-run -a -s "-screen 0 1440x900x24" npm test -- --grep "rama"
 xvfb-run -a -s "-screen 0 1440x900x24" npm run visual      # comparar con baselines
 xvfb-run -a -s "-screen 0 1440x900x24" npm run visual:update  # regenerar baselines
 ```
@@ -78,14 +78,41 @@ Si la sesión gráfica ya existe (escritorio de WSLg, macOS, Windows) no hace fa
 | Fichero | Flujo | Comprobación real |
 | --- | --- | --- |
 | `01-abrir-repositorio` | Abrir un repo por ruta | Pestaña con nombre y rama; recuento de commits de git |
-| `02-ver-cambios` | Cambios y diff | Secciones «Preparados / Sin preparar / Sin seguimiento» y diff con la línea añadida |
+| `02-ver-cambios` | Cambios y diff | Secciones «Preparados / Sin preparar / Sin seguimiento» (`data-section`) y diff con la línea añadida |
 | `03-preparar-archivo` | Preparar | `git diff --cached` contiene solo lo esperado |
 | `04-crear-commit` | Commit | `git log -1` con el asunto escrito y HEAD nuevo |
-| `05-crear-rama` | Crear rama | `refs/heads` de git y rama actual sin cambiar |
-| `06-cambiar-rama` | Cambiar de rama | Aviso por cambios sin confirmar → checkout efectivo en git |
+| `05-crear-rama` | Crear rama (riel) | `refs/heads` de git, la rama aparece en el riel y la actual no cambia |
+| `06-cambiar-rama` | Filtro + cambio de rama (riel) | Aviso por cambios sin confirmar → checkout efectivo en git |
 | `07-historial-paginado` | Historial | Paginación 100 → 200 → 240 y commit más antiguo visible |
-| `08-ajustes-tema` | Ajustes | Tema oscuro/claro en `<html data-theme>`, `localStorage` y persistencia tras guardar |
-| `09-pestana-nueva` | Pestaña nueva | Alta y cierre de pestaña, el repo sigue abierto |
+| `08-ajustes-tema` | Ajustes (`Ctrl+,`) | Tema oscuro/claro en `<html data-theme>`, `localStorage` y persistencia tras guardar |
+| `09-pestana-nueva` | Pestaña nueva | Alta y cierre por teclado (`Supr` sobre la pestaña), el repo sigue abierto |
+
+El armazón es el del rediseño: **riel de ramas** a la izquierda, **vista central con
+control segmentado** (Cambios · Historial · Stashes · Pull requests · Conflictos) y
+**panel de detalle/diff** a la derecha. Los pasos compartidos viven en `lib/flows.mjs`:
+
+| Ayuda | Qué hace |
+| --- | --- |
+| `showView('changes'\|'history'\|'stashes'\|'pullRequests'\|'conflicts')` | Cambia la vista desde el control segmentado |
+| `ensureRailOpen()` | Abre el riel si está contraído (`Ctrl+B`; si el driver no entrega la tecla, pulsa el botón) |
+| `filterBranches(texto)` | Escribe en el filtro instantáneo del riel |
+| `selectBranch(nombre)` / `checkoutBranch(nombre)` | Selecciona en el riel (inspector) y cambia de rama, aceptando el aviso de cambios sin confirmar |
+| `createBranch(nombre, { from })` | Crea la rama desde la cabecera del riel |
+
+Los localizadores son **roles, `data-testid` y atributos de datos** (`data-tab-id`,
+`data-tab-kind`, `data-brail-name`, `data-section`): el texto visible solo se usa para
+datos que no se traducen (rutas, nombres de rama, asuntos de commit). Los `data-testid`
+viven en los componentes de la interfaz (`BranchRail`, `Workspace`, `TabStrip`,
+`RepoDialog`, `ChangesPanel`, `CommitBar`, `DiffView`, `Welcome`, `SettingsDialog`).
+
+### Idioma de las pruebas
+
+La app arranca en el idioma guardado en `settings.json` (Rust es la fuente de verdad y
+la interfaz lo aplica al montar). En Linux la suite escribe ese archivo en el
+`XDG_CONFIG_HOME` aislado (`<tmp>/app-state/config/ariadna/settings.json`) con
+`language: "es"` y espera a que `<html lang>` coincida antes de la primera prueba, así
+que las aserciones no dependen del idioma del sistema operativo del runner. Se puede
+cambiar con `E2E_LOCALE` (`es` por defecto; `en` para probar el catálogo inglés).
 
 Los datos son sintéticos y deterministas (autor, fechas de 2020, mismo contenido) y se
 crean en el directorio temporal, que se borra al terminar. Cada prueba deja una captura
@@ -107,9 +134,10 @@ npm run visual          # compara; sale ≠ 0 si alguna pantalla difiere
 npm run visual:update   # escribe e2e/baselines/<so>/*.png y manifest.json
 ```
 
-- Pantallas: `bienvenida`, `cambios`, `diff`, `historial`, `ramas`, `ajustes`, `paleta`,
+- Pantallas: `bienvenida`, `cambios`, `diff`, `historial`, `riel`, `ajustes`, `paleta`,
   `commit-preparado`; en `light` y `dark` (el tema se fija con `data-theme`, la misma vía
-  que usa la app).
+  que usa la app). `riel` captura el riel de ramas con la rama actual, el árbol y el
+  inspector de la rama seleccionada (sustituye a la antigua pestaña «Ramas»).
 - Cada tema arranca la app de cero y, al terminar, se deshace el `git add` del fixture,
   para que las capturas de claro y oscuro partan del mismo estado.
 - Antes de cada captura se congelan transiciones y animaciones y se espera a que no haya
@@ -126,6 +154,21 @@ Los baselines son **por sistema operativo** porque el renderizado de fuentes y l
 métricas de ventana cambian: `e2e/baselines/linux/` se mantiene en CI; `darwin` y
 `win32` se generan en local con `npm run visual:update` en cada máquina (paso manual,
 documentado también en el workflow).
+
+Incluso dentro de Linux la **versión de WebKitGTK** cambia el suavizado de fuentes:
+las capturas hechas con WSL (2.5x) no coinciden píxel a píxel con las del runner
+(ubuntu-24.04, 2.44). Por eso los baselines de `linux` se regeneran **en el runner**:
+
+1. Actions → *E2E (tauri-driver)* → **Run workflow**, con `update_baselines` marcado.
+2. El trabajo compila igual que siempre, se salta la comparación y ejecuta
+   `npm run visual:update` sobre la imagen de CI.
+3. Descarga el artefacto **`visual-baselines-linux`** (contiene los 16 PNG y
+   `manifest.json`) y descomprímelo sobre `e2e/baselines/linux/`.
+4. Revisa un par de capturas, commitea y vuelve a lanzar el workflow **sin** la marca:
+   ahora la comparación usa los baselines de la misma imagen.
+
+En local (WSL/macOS/Windows) se puede usar `npm run visual:update` para trabajar, pero
+el resultado solo es válido para ese SO y esa versión de WebKit.
 
 Los diffs se escriben en `e2e/artifacts/visual/<so>/<tema>-<pantalla>.diff.png`.
 

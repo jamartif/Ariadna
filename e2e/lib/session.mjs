@@ -6,7 +6,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { remote } from 'webdriverio';
 
-import { ARTIFACTS, appBinary, artifactPath, nativeDriverPath, tauriDriverBin, webkitEnv } from './env.mjs';
+import { ARTIFACTS, E2E_LOCALE, appBinary, artifactPath, nativeDriverPath, tauriDriverBin, webkitEnv } from './env.mjs';
 
 const HOST = process.env.E2E_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.E2E_PORT ?? 4444);
@@ -187,4 +187,18 @@ export async function waitForSelector(selector, { timeout = 15_000 } = {}) {
     interval: 150,
     timeoutMsg: `no apareció el selector ${selector}`
   });
+}
+
+/**
+ * Espera a que la interfaz esté en el idioma de las pruebas. El idioma guardado en
+ * `settings.json` (Rust) se aplica al montar y deja `<html lang>`; hasta entonces
+ * la ventana puede estar en el idioma del sistema operativo.
+ */
+export async function waitLocale(locale = E2E_LOCALE, { timeout = 30_000 } = {}) {
+  const b = getBrowser();
+  await b.waitUntil(
+    async () =>
+      b.execute((want) => (document.documentElement.lang ?? '').toLowerCase().startsWith(want), locale.toLowerCase()),
+    { timeout, interval: 150, timeoutMsg: `la interfaz no se puso en «${locale}»` }
+  );
 }

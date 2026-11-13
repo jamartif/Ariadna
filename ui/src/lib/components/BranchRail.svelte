@@ -248,6 +248,7 @@
       class:head={br.isHead}
       class:sel={selBranch?.name === br.name && b.selected !== null}
       data-brail-name={br.name}
+      data-testid="rail-branch"
       tabindex={tabStop === br.name ? 0 : -1}
       aria-current={br.isHead ? 'true' : undefined}
       title={br.name}
@@ -275,13 +276,14 @@
 {/snippet}
 
 {#if collapsed}
-  <aside class="rail collapsed" aria-label={t('rail.label')} data-collapsed="true">
+  <aside class="rail collapsed" aria-label={t('rail.label')} data-testid="rail" data-collapsed="true">
     <button
       type="button"
       class="ico"
       aria-expanded="false"
       aria-label={t('rail.expand')}
       title={`${t('rail.expand')} (${toggleCombo})`}
+      data-testid="rail-expand"
       onclick={ontoggle}
     >
       <Icon name="panel-left" size={16} />
@@ -292,6 +294,7 @@
       class="ico"
       aria-label={t('branches.new')}
       title={t('branches.new')}
+      data-testid="rail-new-branch"
       onclick={async () => {
         expand();
         await tick();
@@ -305,6 +308,7 @@
       class="ico cur"
       aria-label={cur ? t('rail.currentA11y', { name: cur.name }) : t('rail.noCurrent')}
       title={cur ? t('rail.currentA11y', { name: cur.name }) : t('rail.noCurrent')}
+      data-testid="rail-current"
       onclick={() => { expand(); if (cur) select(cur.name); }}
     >
       <Icon name="git-branch" size={16} />
@@ -314,6 +318,7 @@
       class="ico"
       aria-label={t('rail.find')}
       title={`${t('rail.find')} (${focusCombo})`}
+      data-testid="rail-find"
       onclick={async () => {
         expand();
         await tick();
@@ -323,21 +328,35 @@
       <Icon name="search" size={16} />
     </button>
     <span class="grow"></span>
-    <button type="button" class="ico" aria-label={t('rail.repo')} title={t('rail.repo')} onclick={onrepo}>
+    <button type="button" class="ico" aria-label={t('rail.repo')} title={t('rail.repo')} data-testid="rail-repo" onclick={onrepo}>
       <Icon name="cloud" size={16} />
     </button>
   </aside>
 {:else}
-  <aside class="rail" aria-label={t('rail.label')}>
+  <aside class="rail" aria-label={t('rail.label')} data-testid="rail" data-collapsed="false">
     <header class="head">
       <Icon name="git-branch" size={14} />
       <h2>{t('rail.title')}</h2>
       <span class="chip num" title={tn('rail.count', b.locals.length + b.remotes.length)}>{b.locals.length + b.remotes.length}</span>
       <span class="grow"></span>
-      <button type="button" class="btn btn-ghost btn-icon btn-sm" aria-label={t('branches.new')} title={t('branches.new')} onclick={startCreate}>
+      <button
+        type="button"
+        class="btn btn-ghost btn-icon btn-sm"
+        aria-label={t('branches.new')}
+        title={t('branches.new')}
+        data-testid="rail-new-branch"
+        onclick={startCreate}
+      >
         <Icon name="plus" size={15} />
       </button>
-      <button type="button" class="btn btn-ghost btn-icon btn-sm" aria-label={t('rail.repo')} title={t('rail.repo')} onclick={onrepo}>
+      <button
+        type="button"
+        class="btn btn-ghost btn-icon btn-sm"
+        aria-label={t('rail.repo')}
+        title={t('rail.repo')}
+        data-testid="rail-repo"
+        onclick={onrepo}
+      >
         <Icon name="cloud" size={15} />
       </button>
       <button
@@ -346,6 +365,7 @@
         aria-expanded="true"
         aria-label={t('rail.collapse')}
         title={`${t('rail.collapse')} (${toggleCombo})`}
+        data-testid="rail-collapse"
         onclick={ontoggle}
       >
         <Icon name="panel-left" size={15} />
@@ -353,10 +373,10 @@
     </header>
 
     {#if cur}
-      <section class="current" aria-label={t('rail.current')}>
+      <section class="current" aria-label={t('rail.current')} data-testid="rail-current">
         <div class="cur-top">
           <span class="cur-dot" aria-hidden="true"></span>
-          <span class="cur-name mono" title={cur.name}>{cur.name}</span>
+          <span class="cur-name mono" title={cur.name} data-testid="rail-current-name">{cur.name}</span>
           {#if cur.ahead > 0}<span class="sync" title={t('sidebar.ahead', { n: cur.ahead })}><Icon name="arrow-up" size={11} />{cur.ahead}</span>{/if}
           {#if cur.behind > 0}<span class="sync" title={t('sidebar.behind', { n: cur.behind })}><Icon name="arrow-down" size={11} />{cur.behind}</span>{/if}
         </div>
@@ -415,28 +435,29 @@
         aria-keyshortcuts="Control+Shift+b Meta+Shift+b"
         autocomplete="off"
         spellcheck="false"
+        data-testid="rail-filter"
         onkeydown={filterKey}
       />
       {#if filter !== ''}
-        <button type="button" class="btn btn-ghost btn-icon btn-sm clear" aria-label={t('rail.clearFilter')} title={t('rail.clearFilter')} onclick={() => (filter = '')}>
+        <button type="button" class="btn btn-ghost btn-icon btn-sm clear" aria-label={t('rail.clearFilter')} title={t('rail.clearFilter')} data-testid="rail-clear-filter" onclick={() => (filter = '')}>
           <Icon name="x" size={12} />
         </button>
       {/if}
     </div>
 
     {#if b.prompt?.kind === 'checkout-dirty'}
-      <div class="notice" role="alert">
+      <div class="notice" role="alert" data-testid="rail-checkout-prompt">
         <strong>{t('branches.dirtyTitle')}</strong>
         <p>{tn('branches.dirtyBody', b.prompt.changes, { name: b.prompt.name })}</p>
         <div class="nact">
-          <button type="button" class="btn btn-sm btn-ghost" onclick={() => b.cancelPrompt()}>{t('branches.cancel')}</button>
-          <button type="button" class="btn btn-sm btn-primary" onclick={() => b.prompt && b.checkout(b.prompt.name, true)}>{t('branches.switchAnyway')}</button>
+          <button type="button" class="btn btn-sm btn-ghost" data-testid="rail-cancel-prompt" onclick={() => b.cancelPrompt()}>{t('branches.cancel')}</button>
+          <button type="button" class="btn btn-sm btn-primary" data-testid="rail-switch-anyway" onclick={() => b.prompt && b.checkout(b.prompt.name, true)}>{t('branches.switchAnyway')}</button>
         </div>
       </div>
     {/if}
 
     {#if creating}
-      <form class="create" onsubmit={submitCreate} aria-label={t('branches.new')}>
+      <form class="create" onsubmit={submitCreate} aria-label={t('branches.new')} data-testid="rail-create">
         <label class="lbl" for="rail-new-name">{t('branches.name')}</label>
         <input
           id="rail-new-name"
@@ -455,15 +476,20 @@
           {#if problem}<Icon name="circle-alert" size={12} />{t(problem)}{:else}{t('branches.nameHint')}{/if}
         </p>
         <div class="nact">
-          <button type="button" class="btn btn-sm btn-ghost" onclick={() => (creating = false)}>{t('branches.cancel')}</button>
-          <button type="submit" class="btn btn-sm btn-primary" disabled={newName === '' || problem !== null || b.busy !== null}>
+          <button type="button" class="btn btn-sm btn-ghost" data-testid="rail-create-cancel" onclick={() => (creating = false)}>{t('branches.cancel')}</button>
+          <button
+            type="submit"
+            class="btn btn-sm btn-primary"
+            data-testid="rail-create-submit"
+            disabled={newName === '' || problem !== null || b.busy !== null}
+          >
             {#if b.busy === 'create'}<Icon name="loader" size={13} spin />{/if}{t('branches.create')}
           </button>
         </div>
       </form>
     {/if}
 
-    <nav class="tree" aria-label={t('rail.branchList')}>
+    <nav class="tree" aria-label={t('rail.branchList')} data-testid="rail-tree">
       {#if empty}
         <div class="sk" aria-busy="true" aria-label={t('app.loading')}>
           {#each [80, 62, 72, 55] as w, i (i)}<span class="skeleton" style:width="{w}%" style:height="14px"></span>{/each}
@@ -518,7 +544,7 @@
     </nav>
 
     {#if showInspector && selBranch}
-      <div class="inspector" role="group" aria-label={t('rail.inspector')}>
+      <div class="inspector" role="group" aria-label={t('rail.inspector')} data-testid="rail-inspector">
         <div class="ihead">
           <Icon name={selRemote ? 'cloud' : 'git-branch'} size={13} />
           <span class="iname mono" title={selBranch.name}>{selBranch.name}</span>
@@ -530,6 +556,7 @@
             class="btn btn-ghost btn-icon btn-sm close"
             aria-label={t('rail.clearSelection')}
             title={t('rail.clearSelection')}
+            data-testid="rail-clear-selection"
             onclick={() => (b.selected = null)}
           >
             <Icon name="x" size={12} />
@@ -575,6 +602,7 @@
             <button
               type="button"
               class="btn btn-sm btn-primary wide"
+              data-testid="rail-checkout"
               disabled={selBranch.isHead || busy}
               onclick={() => void checkoutOrCreate(selBranch)}
             >

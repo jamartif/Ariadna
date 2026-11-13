@@ -1,6 +1,6 @@
 {
   "platform": "linux",
-  "generatedAt": "2026-11-13T15:11:26.577Z",
+  "generatedAt": "2026-11-13T21:07:37.650Z",
   "pixelThreshold": 0.18,
   "maxDiffRatio": 0.03,
   "screens": [
@@ -8,7 +8,7 @@
     "light-cambios",
     "light-diff",
     "light-historial",
-    "light-ramas",
+    "light-riel",
     "light-ajustes",
     "light-paleta",
     "light-commit-preparado",
@@ -16,7 +16,7 @@
     "dark-cambios",
     "dark-diff",
     "dark-historial",
-    "dark-ramas",
+    "dark-riel",
     "dark-ajustes",
     "dark-paleta",
     "dark-commit-preparado"

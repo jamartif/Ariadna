@@ -32,6 +32,7 @@
     aria-modal="true"
     aria-labelledby="repo-title"
     tabindex="-1"
+    data-testid="repo-dialog"
     use:focusTrap
     onclick={(e) => e.stopPropagation()}
     onkeydown={key}

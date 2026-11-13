@@ -1,7 +1,7 @@
 //! Rutas, binarios y utilidades de entorno compartidas por E2E y regresión visual.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -68,10 +68,21 @@ export function tmpRoot() {
 }
 
 /**
+ * Idioma con el que corren las pruebas. Se fija aquí (no se hereda del sistema)
+ * para que las aserciones no dependan del idioma del equipo ni del runner de CI.
+ */
+export const E2E_LOCALE = process.env.E2E_LOCALE ?? 'es';
+
+/**
  * Aísla el estado de la app (ajustes, recientes, sesión) en un directorio temporal
  * para que la suite no dependa de lo que el usuario tenga abierto. Solo Linux
  * respeta estas variables con Tauri; en macOS/Windows se limpian las pestañas
- * desde la propia interfaz (`flows.closeOtherTabs`).
+ * desde la propia interfaz (`flows.normalizeStart`).
+ *
+ * Además deja un `settings.json` con el idioma de las pruebas: en Linux la carpeta
+ * de datos es `$XDG_CONFIG_HOME/ariadna` y Rust es la fuente de verdad del idioma
+ * (`startSettingsSync` lo aplica al montar). Con esto la interfaz arranca siempre
+ * en el mismo idioma, sin depender de `navigator.languages`.
  */
 export function isolateAppState() {
   if (process.platform !== 'linux') return null;
@@ -87,7 +98,28 @@ export function isolateAppState() {
     mkdirSync(p, { recursive: true });
     process.env[key] = p;
   }
+  seedSettings(path.join(dir, 'config'));
   return dir;
+}
+
+/**
+ * `settings.json` inicial del entorno aislado (mismo esquema que `Settings` de Rust:
+ * versión 1, camelCase y valores por defecto salvo el idioma).
+ */
+function seedSettings(configHome) {
+  const appDir = path.join(configHome, 'ariadna');
+  mkdirSync(appDir, { recursive: true });
+  const settings = {
+    version: 1,
+    language: E2E_LOCALE,
+    theme: 'system',
+    diffFontSize: 13,
+    gitPath: null,
+    pullRebase: false,
+    profileRules: []
+  };
+  writeFileSync(path.join(appDir, 'settings.json'), `${JSON.stringify(settings, null, 2)}\n`);
+  return appDir;
 }
 
 /** Ejecuta git en un repositorio y devuelve stdout limpio. Falla con un mensaje útil. */

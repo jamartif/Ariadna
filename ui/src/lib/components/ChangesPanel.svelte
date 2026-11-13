@@ -535,7 +535,7 @@
     {/if}
   </div>
 
-  <p class="summary num" aria-live="off">{tn('changes.summary', total)}</p>
+  <p class="summary num" aria-live="off" data-testid="changes-summary">{tn('changes.summary', total)}</p>
 </div>
 
 <style>

@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 
 import { getBrowser, waitInPage } from '../lib/session.mjs';
-import { ensureRepoOpen, workspaceOpen } from '../lib/flows.mjs';
+import { ensureRepoOpen, showView, welcomeVisible, workspaceOpen } from '../lib/flows.mjs';
 import { getFixture } from '../lib/state.mjs';
-import { hasText } from '../lib/ui.mjs';
+import { fileSection, tabs } from '../lib/ui.mjs';
 import { repoState } from '../lib/fixture.mjs';
 
 describe('Flujo 1 · abrir repositorio', () => {
@@ -17,30 +17,29 @@ describe('Flujo 1 · abrir repositorio', () => {
 
     // Si ya está abierto por un flujo anterior, la bienvenida no se ve: se acepta.
     const open = await workspaceOpen();
-    if (!open) assert.ok(await hasText('Bienvenida a Ariadna'), 'falta la pantalla de bienvenida');
+    if (!open) assert.ok(await welcomeVisible(), 'falta la pantalla de bienvenida');
   });
 
   it('abre el fixture escribiendo su ruta y muestra el espacio de trabajo', async () => {
     const fx = getFixture();
+    const name = path.basename(fx.repo);
     await ensureRepoOpen();
+    await showView('changes');
 
+    // La pestaña del repositorio lleva el nombre y la rama en su propio texto.
     await waitInPage(
-      (name) =>
-        Array.from(document.querySelectorAll('[role="tab"][aria-label]')).some((el) =>
-          (el.getAttribute('aria-label') ?? '').includes(name)
+      (want) =>
+        Array.from(document.querySelectorAll('[role="tab"][data-tab-id]')).some(
+          (el) => el.getAttribute('title')?.includes(want) || (el.textContent ?? '').includes(want)
         ),
-      [path.basename(fx.repo)],
+      [name],
       { message: 'pestaña del repositorio' }
     );
 
-    // La pestaña anuncia la rama actual (dato del backend, no del DOM inventado).
-    const tabLabel = await getBrowser().execute(() =>
-      Array.from(document.querySelectorAll('[role="tab"][aria-label]'))
-        .map((el) => el.getAttribute('aria-label'))
-        .find((l) => l && l.includes('main'))
-    );
-    assert.ok(tabLabel, 'la pestaña debería indicar la rama main');
-    assert.ok(await hasText('Sin preparar'), 'el panel de cambios debería mostrar la sección «Sin preparar»');
+    const repoTab = (await tabs()).find((t) => t.kind === 'repo' && t.text.includes(name));
+    assert.ok(repoTab, 'la pestaña del repositorio debería existir');
+    assert.match(repoTab.title, /main/, 'la pestaña debería indicar la rama main');
+    assert.equal(await fileSection('docs/guia.md'), 'unstaged', 'guia.md debería estar sin preparar');
   });
 
   it('el estado que muestra la interfaz coincide con git', async () => {

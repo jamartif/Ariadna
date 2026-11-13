@@ -1,9 +1,12 @@
 //! Pantallas capturadas por la regresión visual. Cada entrada sabe dejar la
 //! interfaz en un estado reproducible a partir del fixture limpio.
+//!
+//! El armazón nuevo es: riel de ramas (izquierda) · vista central con control
+//! segmentado (Cambios · Historial · Stashes · PR · Conflictos) · panel derecho.
 
 import { getBrowser, waitInPage } from '../lib/session.mjs';
-import { showPanel } from '../lib/flows.mjs';
-import { click, fill, hasText, scrollHistoryToBottom, selectFile } from '../lib/ui.mjs';
+import { showView } from '../lib/flows.mjs';
+import { clickTestId, fill, press, selectFile, toggleStage } from '../lib/ui.mjs';
 
 const b = () => getBrowser();
 
@@ -38,17 +41,17 @@ async function settled() {
   await b().pause(250);
 }
 
+/** Cierra cualquier capa modal que quede abierta (ajustes, paleta, remotos). */
 async function closeOverlays() {
   await b().execute(() => {
-    const dialog = document.querySelector('[role="dialog"]');
-    if (!dialog) return;
-    const closeSettings = document.querySelector('[aria-label="Cerrar ajustes"]');
+    const closeSettings = document.querySelector('[data-testid="settings-close"]');
     if (closeSettings) {
       closeSettings.click();
       return;
     }
+    const dialog = document.querySelector('[role="dialog"]');
     // La paleta escucha Escape en su propio contenedor.
-    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    dialog?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   });
   await b().pause(150);
   if (await b().execute(() => !!document.querySelector('[role="dialog"]'))) {
@@ -60,31 +63,28 @@ async function closeOverlays() {
 /** Activa (o crea) la pestaña en blanco con la pantalla de bienvenida. */
 async function gotoWelcome() {
   await closeOverlays();
-  const hasBlank = await b().execute(() => {
-    const tab = Array.from(document.querySelectorAll('[role="tab"][data-tab-id]')).find((el) =>
-      /nueva pestaña/i.test((el.getAttribute('aria-label') ?? '').trim())
-    );
+  const activated = await b().execute(() => {
+    const tab = document.querySelector('[role="tab"][data-tab-kind="new"]');
     if (!tab) return false;
     tab.click();
     return true;
   });
-  if (!hasBlank) await (await b().$('button.new')).click();
-  await waitInPage(() => document.body.innerText.includes('Bienvenida a Ariadna'), [], {
-    message: 'bienvenida'
-  });
+  if (!activated) await clickTestId('tab-new');
+  await waitInPage(() => !!document.querySelector('[data-testid="welcome"]'), [], { message: 'bienvenida' });
   await settled();
 }
 
+/** Vuelve a la pestaña del repositorio abierto. */
 async function backToRepo() {
+  await closeOverlays();
   await b().execute(() => {
-    const tab = Array.from(document.querySelectorAll('[role="tab"][data-tab-id]')).find(
-      (el) => !(el.getAttribute('aria-label') ?? '').toLowerCase().includes('nueva pestaña')
-    );
+    const tab = document.querySelector('[role="tab"][data-tab-kind="repo"]');
     tab?.click();
   });
-  await waitInPage(() => !!document.querySelector('[aria-label="Secciones del repositorio"]'), [], {
+  await waitInPage(() => !!document.querySelector('[data-testid="workspace"]'), [], {
     message: 'espacio de trabajo'
   });
+  await settled();
 }
 
 export const screens = [
@@ -98,7 +98,7 @@ export const screens = [
     name: 'cambios',
     prepare: async () => {
       await backToRepo();
-      await showPanel('Cambios');
+      await showView('changes');
       await settled();
     }
   },
@@ -106,7 +106,7 @@ export const screens = [
     name: 'diff',
     prepare: async () => {
       await selectFile('src/app.js');
-      await waitInPage(() => document.body.innerText.includes('export const version = 2'), [], {
+      await waitInPage(() => (document.querySelector('[data-testid="diff-region"]')?.innerText ?? '').includes('export const version = 2'), [], {
         message: 'diff visible'
       });
       await settled();
@@ -115,45 +115,39 @@ export const screens = [
   {
     name: 'historial',
     prepare: async () => {
-      await showPanel('Historial');
-      await waitInPage(() => /\d+ commits? cargados/.test(document.body.innerText), [], {
+      await showView('history');
+      await waitInPage(() => /\d+/.test(document.querySelector('[aria-live="polite"]')?.textContent ?? ''), [], {
         message: 'historial cargado'
       });
-      await scrollHistoryToBottom();
-      await b().pause(300);
       await settled();
     }
   },
   {
-    name: 'ramas',
+    // El riel sustituye a la antigua pestaña «Ramas»: rama actual, árbol y
+    // inspector de la rama seleccionada.
+    name: 'riel',
     prepare: async () => {
-      await showPanel('Ramas');
-      await waitInPage(() => document.body.innerText.includes('Nueva rama'), [], { message: 'panel de ramas' });
+      await showView('changes');
+      await clickTestId('rail-branch').catch(() => {});
+      await b().pause(150);
       await settled();
     }
   },
   {
     name: 'ajustes',
     prepare: async () => {
-      await click('Ajustes');
-      await waitInPage(() => !!document.querySelector('[role="dialog"]'), [], { message: 'diálogo de ajustes' });
+      await press(['Control', ',']);
+      await waitInPage(() => !!document.querySelector('#settings-title'), [], { message: 'diálogo de ajustes' });
       await settled();
     }
   },
   {
     name: 'paleta',
     prepare: async () => {
-      await b().execute(() => {
-        const dlg = document.querySelector('[role="dialog"]');
-        if (dlg) {
-          const close = dlg.querySelector('[aria-label="Cerrar ajustes"]');
-          close?.click();
-        }
-      });
-      await b().pause(150);
-      await click('Abrir paleta de comandos');
-      await waitInPage(() => !!document.querySelector('[role="dialog"]'), [], { message: 'paleta de comandos' });
-      await fill('input[placeholder="Escribe un comando…"]', 'rama');
+      await closeOverlays();
+      await press(['Control', 'k']);
+      await waitInPage(() => !!document.querySelector('input[role="combobox"]'), [], { message: 'paleta de comandos' });
+      await fill('input[role="combobox"]', 'rama');
       await b().pause(200);
       await settled();
     }
@@ -162,43 +156,23 @@ export const screens = [
     name: 'commit-preparado',
     prepare: async () => {
       await closeOverlays();
-      await showPanel('Cambios');
-      // Sin selección no hay diff a medio cargar tapando la captura.
-      await b().execute(() => {
-        const btn = Array.from(document.querySelectorAll('button')).find(
-          (el) => (el.getAttribute('aria-label') ?? '') === 'Borrar selección'
-        );
-        btn?.click();
-      });
-      await b().pause(200);
-      // «Preparar todo» aparece en cada sección (sin preparar / sin seguimiento).
-      for (let i = 0; i < 3; i += 1) {
-        const clicked = await b().execute(() => {
-          const btn = Array.from(document.querySelectorAll('button')).find(
-            (el) => (el.textContent ?? '').trim() === 'Preparar todo'
-          );
-          if (!btn) return false;
-          btn.click();
-          return true;
-        });
-        if (!clicked) break;
-        await b().pause(400);
-      }
+      await showView('changes');
+      // Todo al índice con la casilla de cada fila (sin depender de textos).
+      for (const file of ['src/app.js', 'docs/guia.md', 'nuevo.txt']) await toggleStage(file);
+      await b().pause(400);
       // Al preparar, el diff seleccionado deja de existir: se pide el de un archivo
       // ya preparado para que el panel derecho no se quede «cargando».
       await selectFile('preparado.txt');
       await waitInPage(
-        () => {
-          const pane = document.querySelector('[aria-label="Diferencias"]');
-          return (pane?.innerText ?? '').includes('ya está en el índice');
-        },
+        () => (document.querySelector('[data-testid="diff-region"]')?.innerText ?? '').includes('ya está en el índice'),
         [],
         { message: 'diff del archivo preparado' }
       );
-      await fill('input[placeholder="Asunto del commit"]', 'feat: preparar cambios desde la interfaz');
+      await fill('input[id^="commit-summary-"]', 'feat: preparar cambios desde la interfaz');
       await b().pause(250);
       await settled();
-      if (!(await hasText('Crear commit'))) throw new Error('no se ve la barra de commit');
+      if (!(await b().execute(() => !!document.querySelector('[data-testid="commit-submit"]'))))
+        throw new Error('no se ve la barra de commit');
     }
   }
 ];

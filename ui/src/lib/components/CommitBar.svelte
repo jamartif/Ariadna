@@ -294,7 +294,7 @@
     {/if}
     <span class="spacer"></span>
     <span class="staged-count">{tn('commit.staged', tab.stagedCount)}</span>
-    <button type="submit" class="btn btn-primary submit" disabled={!canSubmit} aria-keyshortcuts="Control+Enter Meta+Enter">
+    <button type="submit" class="btn btn-primary submit" data-testid="commit-submit" disabled={!canSubmit} aria-keyshortcuts="Control+Enter Meta+Enter">
       {#if tab.committing}
         <Icon name="loader" size={14} spin />{t('commit.creating')}
       {:else}

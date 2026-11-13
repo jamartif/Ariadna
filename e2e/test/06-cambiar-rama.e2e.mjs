@@ -1,46 +1,44 @@
-//! Flujo 6 · cambiar de rama (con aviso por cambios sin confirmar).
+//! Flujo 6 · cambiar de rama desde el riel (con filtro y aviso por cambios sin confirmar).
 
 import assert from 'node:assert/strict';
 
-import { getBrowser, waitInPage } from '../lib/session.mjs';
-import { showPanel } from '../lib/flows.mjs';
+import { getBrowser } from '../lib/session.mjs';
+import {
+  checkoutBranch,
+  currentBranchName,
+  ensureRailOpen,
+  filterBranches,
+  selectBranch,
+  showView
+} from '../lib/flows.mjs';
 import { getFixture } from '../lib/state.mjs';
-import { click, hasText } from '../lib/ui.mjs';
+import { clickTestId, tabs } from '../lib/ui.mjs';
 import { repoState } from '../lib/fixture.mjs';
 
 const BRANCH = 'feature/e2e-rama';
 
 describe('Flujo 6 · cambiar de rama', () => {
-  it('cambia a la rama creada y confirma el aviso de cambios sin preparar', async () => {
+  it('filtra la rama en el riel, la selecciona y confirma el aviso de cambios sin preparar', async () => {
     const fx = getFixture();
-    await showPanel('Ramas');
+    await showView('changes');
+    await ensureRailOpen();
 
-    // Selección de la rama en la lista (la fila se marca como seleccionada).
-    await click(BRANCH);
-    await waitInPage(
-      (name) =>
-        Array.from(document.querySelectorAll('[role="button"], button')).some(
-          (el) => el.getAttribute('aria-pressed') === 'true' && (el.textContent ?? '').includes(name)
-        ),
-      [BRANCH],
-      { message: 'la rama nueva queda seleccionada' }
+    // El filtro del riel es instantáneo: deja la rama buscada a la vista.
+    await filterBranches('e2e-rama');
+    await selectBranch(BRANCH);
+
+    // El inspector de la rama seleccionada ofrece «cambiar» y el detalle en el panel derecho.
+    assert.ok(
+      await getBrowser().execute(() => !!document.querySelector('[data-testid="rail-inspector"]')),
+      'el inspector de la rama debería estar abierto'
     );
 
-    await click('Cambiar a esta rama');
+    // Hay cambios sin confirmar (docs/guia.md, nuevo.txt): la app pide confirmación
+    // y la prueba acepta «cambiar igualmente» (lo hace `checkoutBranch`).
+    await clickTestId('rail-clear-filter', { timeout: 2000 }).catch(() => {});
+    await checkoutBranch(BRANCH);
 
-    // Hay cambios sin confirmar (docs/guia.md, nuevo.txt): la app pide confirmación.
-    await waitInPage(() => document.body.innerText.includes('Cambiar de todos modos'), [], {
-      message: 'aviso de cambios sin confirmar'
-    });
-    await click('Cambiar de todos modos');
-
-    await waitInPage(
-      (name) => document.body.innerText.includes(`Ahora estás en «${name}»`) || document.body.innerText.includes(name),
-      [BRANCH],
-      { message: 'aviso de rama cambiada' }
-    );
-
-    // Espera a que git confirme el cambio (evita leer un estado intermedio).
+    // git confirma el cambio (se espera a que el estado del repositorio lo refleje).
     await getBrowser().waitUntil(async () => repoState(fx.repo).branch === BRANCH, {
       timeout: 15_000,
       interval: 250,
@@ -51,15 +49,11 @@ describe('Flujo 6 · cambiar de rama', () => {
     assert.equal(state.branch, BRANCH);
     // Los cambios se llevan consigo: siguen sin confirmar en la rama nueva.
     assert.ok(state.unstaged.includes('docs/guia.md'), 'los cambios deberían viajar a la rama nueva');
-    assert.ok(await hasText(BRANCH), 'la interfaz debería seguir mostrando la rama actual');
-    assert.match(
-      await getBrowser().execute(() =>
-        Array.from(document.querySelectorAll('[role="tab"][aria-label]'))
-          .map((el) => el.getAttribute('aria-label'))
-          .join(' | ')
-      ),
-      /feature\/e2e-rama/,
-      'la pestaña del repositorio debería indicar la rama nueva'
-    );
+    assert.equal(await currentBranchName(), BRANCH, 'la tarjeta del riel debería mostrar la rama nueva');
+
+    const repoTab = (await tabs()).find((t) => t.kind === 'repo');
+    assert.ok(repoTab, 'debería seguir habiendo una pestaña del repositorio');
+    assert.match(repoTab.title, /feature\/e2e-rama/, 'la pestaña del repositorio debería indicar la rama nueva');
+    assert.match(repoTab.text, /feature\/e2e-rama/, 'el texto de la pestaña debería indicar la rama nueva');
   });
 });

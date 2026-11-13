@@ -80,7 +80,7 @@
         <h2 id="settings-title">{t('settings.title')}</h2>
         <p>{t('settings.subtitle')}</p>
       </div>
-      <button type="button" class="btn btn-ghost btn-icon" onclick={close} aria-label={t('settings.close')}>
+      <button type="button" class="btn btn-ghost btn-icon" onclick={close} aria-label={t('settings.close')} data-testid="settings-close">
         <Icon name="x" size={16} />
       </button>
     </header>
@@ -155,7 +155,7 @@
       <span class="spacer"></span>
       {#if panel.dirty}
         <button type="button" class="btn" onclick={close} disabled={panel.saving}>{t('settings.cancel')}</button>
-        <button type="button" class="btn btn-primary" onclick={() => void save()} disabled={panel.saving || panel.fontProblem}>
+        <button type="button" class="btn btn-primary" data-testid="settings-save" onclick={() => void save()} disabled={panel.saving || panel.fontProblem}>
           {#if panel.saving}<Icon name="loader" size={14} spin />{t('settings.saving')}{:else}{t('settings.save')}{/if}
         </button>
       {:else}

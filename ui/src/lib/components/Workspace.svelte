@@ -269,14 +269,15 @@
         </div>
       {/if}
 
-      <section class="center" aria-label={t('layout.center')}>
+      <section class="center" aria-label={t('layout.center')} data-testid="workspace">
         <header class="viewhead">
-          <div class="views" role="tablist" aria-label={t('panel.list')} aria-orientation="horizontal">
+          <div class="views" role="tablist" aria-label={t('panel.list')} aria-orientation="horizontal" data-testid="views">
             {#each panels as p, i (p.id)}
               <button
                 type="button"
                 role="tab"
                 id="panel-tab-{p.id}"
+                data-testid="view-{p.id}"
                 aria-selected={tab.panel === p.id}
                 aria-controls="panel-{p.id}"
                 tabindex={tab.panel === p.id ? 0 : -1}

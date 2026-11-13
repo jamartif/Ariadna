@@ -3,28 +3,31 @@
 import assert from 'node:assert/strict';
 
 import { waitInPage } from '../lib/session.mjs';
-import { showPanel } from '../lib/flows.mjs';
+import { showView } from '../lib/flows.mjs';
 import { getFixture } from '../lib/state.mjs';
-import { clickSelector } from '../lib/ui.mjs';
+import { fileStaged, toggleStage } from '../lib/ui.mjs';
 import { repoState } from '../lib/fixture.mjs';
 
 describe('Flujo 3 · preparar un archivo', () => {
   it('pasa src/app.js al índice y la interfaz lo refleja', async () => {
     const fx = getFixture();
-    await showPanel('Cambios');
+    await showView('changes');
 
     assert.ok(!repoState(fx.repo).staged.includes('src/app.js'), 'el archivo no debería estar preparado de antemano');
 
-    await clickSelector('[aria-label="Preparar src/app.js"]');
+    await toggleStage('src/app.js');
 
     await waitInPage(
-      (label) =>
-        Array.from(document.querySelectorAll('[aria-label]')).some(
-          (el) => (el.getAttribute('aria-label') ?? '') === label
-        ),
-      ['Quitar de preparados src/app.js'],
+      () => {
+        const row = Array.from(document.querySelectorAll('[role="row"]')).find((r) =>
+          Array.from(r.querySelectorAll('[title]')).some((c) => c.getAttribute('title') === 'src/app.js')
+        );
+        return row?.querySelector('input[type="checkbox"]')?.checked === true;
+      },
+      [],
       { message: 'el archivo aparece como preparado' }
     );
+    assert.equal(await fileStaged('src/app.js'), true, 'la casilla del archivo debería quedar marcada');
 
     const state = repoState(fx.repo);
     assert.ok(state.staged.includes('src/app.js'), `git no ve el archivo preparado: ${state.staged}`);

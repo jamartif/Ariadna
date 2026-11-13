@@ -1,27 +1,40 @@
-//! Flujo 8 · ajustes: abrir el diálogo y cambiar el tema.
+//! Flujo 8 · ajustes con `Ctrl+,`: abrir el diálogo y cambiar el tema.
 
 import assert from 'node:assert/strict';
 
 import { getBrowser, waitInPage } from '../lib/session.mjs';
 import { ensureRepoOpen } from '../lib/flows.mjs';
-import { click, currentTheme, waitSettingsSaved } from '../lib/ui.mjs';
+import { clickSelector, clickTestId, currentTheme, press, waitSettingsSaved } from '../lib/ui.mjs';
+
+/** Abre Ajustes por su atajo (`Ctrl+,`) y espera el diálogo. */
+async function openSettings() {
+  await press(['Control', ',']);
+  await waitInPage(() => !!document.querySelector('[role="dialog"]'), [], { message: 'diálogo de ajustes' });
+}
+
+/** Guarda y cierra el diálogo; después ya no debe haber `role="dialog"`. */
+async function saveAndClose(b) {
+  await clickTestId('settings-save');
+  await waitSettingsSaved();
+  await clickTestId('settings-close');
+  await b.waitUntil(async () => !(await b.execute(() => !!document.querySelector('[role="dialog"]'))), {
+    timeout: 15_000,
+    interval: 200,
+    timeoutMsg: 'el diálogo no se cerró tras guardar'
+  });
+}
 
 describe('Flujo 8 · ajustes y tema', () => {
-  it('abre los ajustes y cambia a tema oscuro de forma persistente', async () => {
+  it('abre los ajustes con Ctrl+, y cambia a tema oscuro de forma persistente', async () => {
     const b = getBrowser();
     await ensureRepoOpen();
 
-    await click('Ajustes');
-    await waitInPage(() => !!document.querySelector('[role="dialog"]'), [], { message: 'diálogo de ajustes' });
+    await openSettings();
+    const title = await b.execute(() => document.getElementById('settings-title')?.textContent ?? '');
+    assert.ok(title.trim().length > 0, 'el diálogo debería tener título');
 
-    const title = await b.execute(() => {
-      const dlg = document.querySelector('[role="dialog"]');
-      const labelled = dlg?.getAttribute('aria-labelledby');
-      return labelled ? document.getElementById(labelled)?.textContent ?? '' : dlg?.innerText?.slice(0, 40);
-    });
-    assert.match(String(title), /Ajustes/, 'el diálogo debería titularse «Ajustes»');
-
-    await click('Oscuro');
+    // Las opciones de tema son radios con valores estables (`light`, `dark`, `system`).
+    await clickSelector('input[name="set-theme"][value="dark"]');
     await waitInPage(() => document.documentElement.getAttribute('data-theme') === 'dark', [], {
       message: 'tema oscuro aplicado'
     });
@@ -37,36 +50,20 @@ describe('Flujo 8 · ajustes y tema', () => {
     });
     assert.equal(stored, 'dark', 'el tema debería quedar guardado en localStorage');
 
-    // El cambio se confirma con «Guardar» (asíncrono: se guarda en settings.json).
-    await click('Guardar', { within: '[role="dialog"]' });
-    await waitSettingsSaved();
-    await click('Cerrar', { within: '[role="dialog"]' });
-    await b.waitUntil(async () => !(await b.execute(() => !!document.querySelector('[role="dialog"]'))), {
-      timeout: 15_000,
-      interval: 200,
-      timeoutMsg: 'el diálogo no se cerró tras guardar'
-    });
+    await saveAndClose(b);
     assert.equal(await currentTheme(), 'dark', 'el tema debe seguir aplicado tras cerrar los ajustes');
   });
 
   it('vuelve al tema claro y lo aplica sin recargar', async () => {
     const b = getBrowser();
-    await click('Ajustes');
-    await waitInPage(() => !!document.querySelector('[role="dialog"]'), [], { message: 'diálogo de ajustes' });
-    await click('Claro');
+    await openSettings();
+    await clickSelector('input[name="set-theme"][value="light"]');
     await waitInPage(() => document.documentElement.getAttribute('data-theme') === 'light', [], {
       message: 'tema claro aplicado'
     });
-    await click('Guardar', { within: '[role="dialog"]' });
-    await waitSettingsSaved();
-    await click('Cerrar', { within: '[role="dialog"]' });
-    await b.waitUntil(async () => !(await b.execute(() => !!document.querySelector('[role="dialog"]'))), {
-      timeout: 15_000,
-      interval: 200,
-      timeoutMsg: 'el diálogo no se cerró tras guardar el tema claro'
-    });
+    await saveAndClose(b);
     assert.equal(await currentTheme(), 'light');
-    const welcome = await b.execute(() => document.body.innerText.includes('Bienvenida a Ariadna'));
+    const welcome = await b.execute(() => !!document.querySelector('[data-testid="welcome"]'));
     assert.ok(!welcome, 'la app no debería volver a la bienvenida al cerrar los ajustes');
   });
 });

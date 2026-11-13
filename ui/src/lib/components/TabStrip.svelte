@@ -205,6 +205,7 @@
           role="tab"
           id="tab-{entry.id}"
           data-tab-id={entry.id}
+          data-tab-kind={entry.kind}
           aria-selected={isActive}
           aria-controls={isActive ? 'tabpanel-main' : undefined}
           title={label(entry)}
@@ -254,6 +255,7 @@
           class="close"
           tabindex="-1"
           aria-hidden="true"
+          data-testid="tab-close"
           title={`${t('tabs.closeHint')} — ${entry.kind === 'new' ? t('tabs.newTab') : entry.info.name}`}
           onclick={() => onclose(entry.id)}
         >
@@ -265,6 +267,7 @@
   <button
     type="button"
     class="new"
+    data-testid="tab-new"
     aria-label={t('tabs.new')}
     title={entries.length >= SOFT_TAB_LIMIT ? t('tabs.limitBody', { n: SOFT_TAB_LIMIT }) : t('tabs.new')}
     onclick={onnew}

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Mocha from 'mocha';
 
-import { ARTIFACTS, E2E_DIR, appBinary, artifactPath, isolateAppState, tauriDriverBin } from '../lib/env.mjs';
+import { ARTIFACTS, E2E_DIR, E2E_LOCALE, appBinary, artifactPath, isolateAppState, tauriDriverBin } from '../lib/env.mjs';
 import { cleanupFixtures, createRepoFixture } from '../lib/fixture.mjs';
 import { normalizeStart } from '../lib/flows.mjs';
 import {
@@ -36,13 +36,15 @@ async function waitForApp() {
   await assertPackaged();
   await b.waitUntil(
     async () =>
-      b.execute(() => {
+      b.execute((locale) => {
         const ready = document.readyState === 'complete';
         const shell = !!document.querySelector('header, [role="tablist"]');
         const booting = !!document.querySelector('[aria-busy="true"]');
-        return ready && shell && !booting;
-      }),
-    { timeout: 60_000, interval: 250, timeoutMsg: 'la ventana de Ariadna no llegó a estar lista' }
+        // `<html lang>` lo pone la app al aplicar el idioma guardado en `settings.json`.
+        const lang = (document.documentElement.lang ?? '').toLowerCase();
+        return ready && shell && !booting && lang.startsWith(locale);
+      }, E2E_LOCALE),
+    { timeout: 60_000, interval: 250, timeoutMsg: `la ventana de Ariadna no llegó a estar lista en «${E2E_LOCALE}»` }
   );
 }
 

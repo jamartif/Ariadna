@@ -97,7 +97,7 @@
   </li>
 {/snippet}
 
-<div class="welcome">
+<div class="welcome" data-testid="welcome">
   <div class="bg" aria-hidden="true">
     <svg class="thread" viewBox="0 0 400 400" fill="none" focusable="false">
       <defs>
