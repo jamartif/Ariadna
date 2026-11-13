@@ -6,7 +6,7 @@ on:
 
 jobs:
   gitleaks:
-    name: Secretos
+    name: Secrets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,15 +19,15 @@ jobs:
           gitleaks detect --source . --redact --config .gitleaks.toml --verbose
 
   macos:
-    name: macOS 15 build y tests
+    name: macOS 15 build and tests
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Fase 1 (sin IA)
+      - name: Phase 1 (no AI)
         run: |
           swift build
           swift test
-      - name: Capa de IA detrás del flag
+      - name: AI layer behind the flag
         run: |
           ARIADNA_AI=1 swift build
           ARIADNA_AI=1 swift test

@@ -101,6 +101,93 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(AmendDraft.messageAfterDisabling(current: "Mío", prefilled: nil), "Mío")
     }
 
+    func testAmendStatePrefillsAndClearsOnDisable() {
+        let last = Commit(sha: "a", parents: ["p"], subject: "Anterior", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
+        var state = AmendState()
+        let ticket = state.beginEnabling()
+        XCTAssertTrue(state.isEnabled)
+        let r1 = state.finishEnabling(ticket, lastCommit: last, currentMessage: "")
+        XCTAssertEqual(r1, .applied(message: "Anterior"))
+        XCTAssertEqual(state.prefilledMessage, "Anterior")
+        let r2 = state.disable(currentMessage: "Anterior")
+        XCTAssertEqual(r2, "")
+        XCTAssertFalse(state.isEnabled)
+        XCTAssertNil(state.prefilledMessage)
+    }
+
+    func testAmendStateKeepsTypedMessage() {
+        let last = Commit(sha: "a", parents: ["p"], subject: "Anterior", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
+        var state = AmendState()
+        let ticket = state.beginEnabling()
+        let r3 = state.finishEnabling(ticket, lastCommit: last, currentMessage: "Mío")
+        XCTAssertEqual(r3, .applied(message: "Mío"))
+        XCTAssertNil(state.prefilledMessage)
+        let r4 = state.disable(currentMessage: "Mío")
+        XCTAssertEqual(r4, "Mío")
+    }
+
+    /// Carrera: se desmarca la casilla antes de que vuelva `log(limit: 1)`.
+    func testAmendStateIgnoresLogThatArrivesAfterDisabling() {
+        let last = Commit(sha: "m", parents: ["p1", "p2"], subject: "Anterior", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
+        var state = AmendState()
+        let ticket = state.beginEnabling()
+        let r5 = state.disable(currentMessage: "")
+        XCTAssertEqual(r5, "")
+        let r6 = state.finishEnabling(ticket, lastCommit: last, currentMessage: "")
+        XCTAssertEqual(r6, .stale)
+        XCTAssertFalse(state.isEnabled)
+        XCTAssertNil(state.warning)
+        XCTAssertNil(state.prefilledMessage)
+    }
+
+    /// Carrera: se marca, desmarca y vuelve a marcar antes de que vuelva el primer `log(limit: 1)`.
+    func testAmendStateIgnoresLogFromEarlierActivation() {
+        let old = Commit(sha: "a", parents: ["p"], subject: "Anterior", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
+        var state = AmendState()
+        let first = state.beginEnabling()
+        _ = state.disable(currentMessage: "")
+        let second = state.beginEnabling()
+        XCTAssertNotEqual(first, second)
+        let late = state.finishEnabling(first, lastCommit: old, currentMessage: "")
+        XCTAssertEqual(late, .stale)
+        XCTAssertTrue(state.isEnabled)
+        XCTAssertNil(state.prefilledMessage)
+        XCTAssertNil(state.warning)
+        // La lectura de la activación vigente sí se aplica.
+        let current = state.finishEnabling(second, lastCommit: old, currentMessage: "")
+        XCTAssertEqual(current, .applied(message: "Anterior"))
+    }
+
+    func testAmendStateIgnoresLogFromPreviousRepository() {
+        let last = Commit(sha: "a", parents: ["p"], subject: "Otro repo", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
+        var state = AmendState()
+        let stale = state.beginEnabling()
+        state.reset()
+        _ = state.beginEnabling()
+        let r7 = state.finishEnabling(stale, lastCommit: last, currentMessage: "")
+        XCTAssertEqual(r7, .stale)
+        XCTAssertTrue(state.isEnabled)
+        XCTAssertNil(state.prefilledMessage)
+    }
+
+    func testAmendStateWithoutCommitsTurnsOff() {
+        var state = AmendState()
+        let ticket = state.beginEnabling()
+        let r8 = state.finishEnabling(ticket, lastCommit: nil, currentMessage: "")
+        XCTAssertEqual(r8, .noCommit)
+        XCTAssertFalse(state.isEnabled)
+    }
+
+    func testAmendStateWarnsOnMerge() {
+        let merge = Commit(sha: "m", parents: ["p1", "p2"], subject: "Merge", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
+        var state = AmendState()
+        let ticket = state.beginEnabling()
+        _ = state.finishEnabling(ticket, lastCommit: merge, currentMessage: "")
+        XCTAssertNotNil(state.warning)
+        _ = state.disable(currentMessage: "")
+        XCTAssertNil(state.warning)
+    }
+
     func testAmendDraftWarnsOnMergeCommit() {
         let normal = Commit(sha: "a", parents: ["p"], subject: "s", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])
         let merge = Commit(sha: "m", parents: ["p1", "p2"], subject: "Merge", body: "", authorName: "", authorEmail: "", authorDateISO: "", refs: [])

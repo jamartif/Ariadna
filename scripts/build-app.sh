@@ -1,12 +1,12 @@
 #!/bin/bash
-# Empaqueta Ariadna.app, un .dmg y un .zip en un Mac.
-# Lo usa también .github/workflows/release.yml.
-# No firma con Developer ID ni notariza salvo que estén las cinco variables
-# APPLE_CERT_P12 (base64), APPLE_CERT_PASSWORD, APPLE_ID, APPLE_TEAM_ID y APPLE_APP_PASSWORD.
+# Packages Ariadna.app, a .dmg and a .zip on a Mac.
+# Also used by .github/workflows/release.yml.
+# It only signs with Developer ID and notarizes if all five variables are set:
+# APPLE_CERT_P12 (base64), APPLE_CERT_PASSWORD, APPLE_ID, APPLE_TEAM_ID and APPLE_APP_PASSWORD.
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-    echo "scripts/build-app.sh solo funciona en macOS (hace falta codesign, hdiutil y Xcode)." >&2
+    echo "scripts/build-app.sh only works on macOS (it needs codesign, hdiutil and Xcode)." >&2
     exit 1
 fi
 
@@ -31,16 +31,16 @@ version_from_ref() {
 }
 
 VERSION="${ARIADNA_VERSION:-$(version_from_ref "${GITHUB_REF:-}")}"
-# CFBundleVersion solo admite enteros separados por puntos.
+# CFBundleVersion only accepts dot-separated integers.
 if [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
     BUILD_VERSION="$VERSION"
 else
     BUILD_VERSION="0.0.0.$(git rev-list --count HEAD)"
 fi
 
-echo "Versión de empaquetado: $VERSION (CFBundleVersion $BUILD_VERSION)"
+echo "Package version: $VERSION (CFBundleVersion $BUILD_VERSION)"
 
-echo "Compilando binario universal (arm64 + x86_64), configuración release…"
+echo "Building a universal binary (arm64 + x86_64), release configuration…"
 swift build -c release --product Ariadna --arch arm64 --arch x86_64
 
 binary=""
@@ -58,14 +58,14 @@ if [[ -z "$binary" ]]; then
     binary=$(find .build -type f -name Ariadna -perm -111 ! -path '*.dSYM/*' | head -n 1 || true)
 fi
 if [[ -z "$binary" || ! -f "$binary" ]]; then
-    echo "No encuentro el ejecutable Ariadna tras swift build." >&2
+    echo "Cannot find the Ariadna executable after swift build." >&2
     exit 1
 fi
 
 echo "Binario: $binary"
 lipo -info "$binary"
 if ! lipo -info "$binary" | grep -q "arm64" || ! lipo -info "$binary" | grep -q "x86_64"; then
-    echo "El binario no es universal (arm64 y x86_64)." >&2
+    echo "The binary is not universal (arm64 and x86_64)." >&2
     exit 1
 fi
 
@@ -87,8 +87,8 @@ plist_set CFBundleIdentifier "es.javiermartinez.ariadna"
 plist_set CFBundleExecutable "Ariadna"
 plist_set LSMinimumSystemVersion "15.0"
 
-# Sin esta firma, un Mac con Apple Silicon se niega a abrir el binario.
-echo "Firma ad-hoc (codesign -s -)…"
+# Without this signature, an Apple Silicon Mac refuses to open the binary.
+echo "Ad-hoc signing (codesign -s -)…"
 codesign --force --deep --sign - "$app"
 codesign --verify --deep --strict "$app"
 
@@ -109,7 +109,7 @@ cleanup() {
 trap cleanup EXIT
 
 if have_apple_secrets; then
-    echo "Secrets de Apple presentes: firma Developer ID y notarización."
+    echo "Apple secrets present: Developer ID signing and notarization."
     work=$(mktemp -d)
     CERT_P12="$work/cert.p12"
     KEYCHAIN="$work/ariadna.keychain-db"
@@ -123,13 +123,13 @@ if have_apple_secrets; then
     security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed 's/"//g')
     identity=$(security find-identity -v -p codesigning "$KEYCHAIN" | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -n 1)
     if [[ -z "$identity" ]]; then
-        echo "El .p12 no tiene una identidad «Developer ID Application»." >&2
+        echo "The .p12 has no \"Developer ID Application\" identity." >&2
         exit 1
     fi
     codesign --force --deep --options runtime --timestamp --sign "$identity" "$app"
     codesign --verify --deep --strict --verbose=2 "$app"
 else
-    echo "Firma Developer ID y notarización desactivadas: faltan uno o más secrets APPLE_CERT_P12, APPLE_CERT_PASSWORD, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD."
+    echo "Developer ID signing and notarization disabled: one or more of the APPLE_CERT_P12, APPLE_CERT_PASSWORD, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD secrets are missing."
 fi
 
 archive_base="Ariadna-${VERSION}"
@@ -137,7 +137,7 @@ ditto -c -k --keepParent "$app" "$dist/${archive_base}.zip"
 hdiutil create -volname "Ariadna" -srcfolder "$app" -ov -format UDZO "$dist/${archive_base}.dmg" >/dev/null
 
 if have_apple_secrets; then
-    echo "Enviando a notarización…"
+    echo "Submitting for notarization…"
     xcrun notarytool submit "$dist/${archive_base}.zip" \
         --apple-id "$APPLE_ID" \
         --team-id "$APPLE_TEAM_ID" \
@@ -155,7 +155,7 @@ if have_apple_secrets; then
     xcrun stapler staple "$dist/${archive_base}.dmg" || true
 fi
 
-echo "Listo:"
+echo "Done:"
 ls -lh "$dist/${archive_base}.zip" "$dist/${archive_base}.dmg"
 echo "VERSION=$VERSION"
 echo "BUILD_VERSION=$BUILD_VERSION"

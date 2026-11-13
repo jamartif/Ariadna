@@ -1,9 +1,9 @@
 #!/bin/bash
-# Genera los PNG de docs/screenshots en macOS, en debug y con la capa de IA.
+# Renders the docs/screenshots PNGs on macOS, in debug and with the AI layer.
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-    echo "scripts/render-snapshots.sh solo funciona en macOS." >&2
+    echo "scripts/render-snapshots.sh only works on macOS." >&2
     exit 1
 fi
 
@@ -12,7 +12,7 @@ cd "$root"
 out="${1:-$root/docs/screenshots}"
 mkdir -p "$out"
 
-echo "Compilando Ariadna en debug con SNAPSHOTS…"
+echo "Building Ariadna in debug with SNAPSHOTS…"
 ARIADNA_AI=1 swift build -Xswiftc -DSNAPSHOTS --product Ariadna
 
 binary=""
@@ -30,7 +30,7 @@ if [[ -z "$binary" ]]; then
     binary=$(find .build -type f -name Ariadna -perm -111 ! -path '*.dSYM/*' | head -n 1 || true)
 fi
 if [[ -z "$binary" || ! -f "$binary" ]]; then
-    echo "No encuentro el ejecutable Ariadna de capturas." >&2
+    echo "Cannot find the Ariadna screenshots executable." >&2
     exit 1
 fi
 
@@ -48,10 +48,10 @@ expected=(
 for name in "${expected[@]}"; do
     file="$out/$name"
     if [[ ! -s "$file" ]]; then
-        echo "Falta o está vacío: $file" >&2
+        echo "Missing or empty: $file" >&2
         exit 1
     fi
 done
 
-echo "Capturas listas en $out"
+echo "Screenshots ready in $out"
 ls -lh "$out"/*.png
