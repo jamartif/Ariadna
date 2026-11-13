@@ -1,6 +1,6 @@
 # Plan de migración a Rust
 
-Deriva de [spec.md](spec.md) v1. Estado de cada tarea en [tasks.md](tasks.md).
+Deriva de [spec.md](spec.md) (revisión 3, tras la revisión speckfish de 2026-11-13; decisiones y cambios en [revision-speckfish.md](revision-speckfish.md)). Estado de cada tarea en [tasks.md](tasks.md).
 
 ## Estructura del repo durante la migración
 ```
