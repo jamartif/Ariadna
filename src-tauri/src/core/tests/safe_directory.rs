@@ -45,7 +45,7 @@ async fn al_aceptar_se_anade_solo_esa_carpeta_y_nunca_asterisco() {
     // git escribe la ruta con el separador del sistema y escapa las barras invertidas
     // (`C:\\Users\\...`): se colapsan las secuencias de separadores en ambos lados.
     let norm = |s: &str| {
-        s.split(|c| c == '\\' || c == '/')
+        s.split(['\\', '/'])
             .filter(|p| !p.is_empty())
             .collect::<Vec<_>>()
             .join("/")
