@@ -17,7 +17,7 @@ use crate::error::{truncate, GitError, GitResult};
 use crate::listings::{parse_branches, parse_remotes};
 use crate::models::{
     Branch, ConflictFile, ConflictKind, ConflictSide, GitPath, IntegrationState, MergeFastForward,
-    MergeResult, Remote, Repository,
+    MergeResult, Remote, RemoteCheckout, Repository,
 };
 use crate::path_safety::{
     git_pathspec_args, validate_ref, validate_repo_path_components, validate_revision_arg,
@@ -42,7 +42,8 @@ fn check_rev(name: &str) -> GitResult<()> {
 }
 
 /// Error `CommandFailed` a partir de una salida con código ≠ 0 (sin interpretar el texto;
-/// solo se redactan credenciales). Respeta un `index.lock` ajeno como [`GitError::Locked`].
+/// solo se redactan credenciales). Respeta un `index.lock` ajeno como [`GitError::Locked`] y
+/// reconoce `dubious ownership` (única excepción documentada, spec §4.1).
 fn command_error(repo: &Repository, subcommand: &str, out: &ProcessOutput) -> GitError {
     let lock = repo.path.join(".git").join("index.lock");
     if lock.exists() {
@@ -50,10 +51,14 @@ fn command_error(repo: &Repository, subcommand: &str, out: &ProcessOutput) -> Gi
             lock: lock.display().to_string(),
         };
     }
+    let stderr = out.stderr_lossy();
+    if let Some(e) = crate::runner::dubious_ownership(&repo.path, out.code, &stderr) {
+        return e;
+    }
     GitError::CommandFailed {
         command: format!("git {subcommand}"),
         exit_code: out.code.unwrap_or(-1),
-        stderr: truncate(&redact_credentials(&out.stderr_lossy()), 8_000),
+        stderr: truncate(&redact_credentials(&stderr), 8_000),
     }
 }
 
@@ -368,6 +373,107 @@ impl GitCliEngine {
         self.bo_ok(repo, CommandKind::Mutate, &["checkout", reference, "--"])
             .await?;
         Ok(())
+    }
+
+    /// Baja la cabeza de `reference` desde `remote` y deja `local_branch` apuntando a ella.
+    ///
+    /// No interpreta mensajes de git: el fallo del `fetch` se clasifica como credenciales
+    /// ([`GitError::Auth`]) o, si un `ls-remote --exit-code` dice que la referencia no existe,
+    /// [`GitError::MissingRemoteRef`]. Nunca pisa la rama local sin `allow_moved`.
+    pub async fn checkout_remote_ref(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        reference: &str,
+        local_branch: &str,
+        allow_moved: bool,
+    ) -> GitResult<RemoteCheckout> {
+        check_ref(remote)?;
+        if !reference.starts_with("refs/") || check_ref(reference).is_err() {
+            return Err(GitError::InvalidReference(reference.to_owned()));
+        }
+        check_ref(local_branch)?;
+
+        let args = ["fetch", "--no-tags", "--", remote, reference];
+        let out = self.bo_raw(repo, CommandKind::Network, &args).await?;
+        if !out.success() {
+            let os_args: Vec<OsString> = args.iter().map(OsString::from).collect();
+            if let Some(e) = self.runner.auth_error(&repo.path, &os_args, &out).await {
+                return Err(e);
+            }
+            if self.bo_remote_ref_missing(repo, remote, reference).await? {
+                return Err(GitError::MissingRemoteRef {
+                    remote: remote.to_owned(),
+                    reference: reference.to_owned(),
+                });
+            }
+            return Err(command_error(repo, "fetch", &out));
+        }
+        let Some(head) = self.bo_rev(repo, "FETCH_HEAD^{commit}").await? else {
+            return Err(GitError::Parse(
+                "FETCH_HEAD no resuelve tras bajar la referencia".into(),
+            ));
+        };
+        // Con cambios locales que choquen no se toca el árbol de trabajo (git tampoco dejaría).
+        self.bo_guard_local_changes(repo, &head).await?;
+
+        let local_full = format!("refs/heads/{local_branch}");
+        let mut created = false;
+        let mut updated = false;
+        if self.bo_ref_exists(repo, &local_full).await? {
+            let local_sha = self
+                .bo_rev(repo, &format!("{local_branch}^{{commit}}"))
+                .await?;
+            if local_sha.as_deref() != Some(head.as_str()) {
+                if !allow_moved {
+                    return Err(GitError::DivergedLocalBranch {
+                        local: local_branch.to_owned(),
+                        remote: reference.to_owned(),
+                    });
+                }
+                self.bo_ok(
+                    repo,
+                    CommandKind::Mutate,
+                    &["checkout", "-B", local_branch, &head, "--"],
+                )
+                .await?;
+                updated = true;
+            } else {
+                self.bo_ok(repo, CommandKind::Mutate, &["checkout", local_branch, "--"])
+                    .await?;
+            }
+        } else {
+            self.bo_ok(
+                repo,
+                CommandKind::Mutate,
+                &["checkout", "-b", local_branch, &head, "--"],
+            )
+            .await?;
+            created = true;
+        }
+        Ok(RemoteCheckout {
+            branch: local_branch.to_owned(),
+            head,
+            created,
+            updated,
+        })
+    }
+
+    /// `ls-remote --exit-code`: `true` si el remoto **no** tiene `reference` (código 2).
+    async fn bo_remote_ref_missing(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        reference: &str,
+    ) -> GitResult<bool> {
+        let out = self
+            .bo_raw(
+                repo,
+                CommandKind::Network,
+                &["ls-remote", "--exit-code", "-q", "--", remote, reference],
+            )
+            .await?;
+        Ok(out.code == Some(2))
     }
 
     async fn bo_checkout_remote(

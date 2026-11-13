@@ -70,6 +70,13 @@ pub enum GitError {
     /// `safe.directory`: el propietario de la carpeta no coincide con el usuario.
     #[error("Git no se fía de la carpeta {path} (propietario distinto). Confírmalo para añadirla a las carpetas seguras.")]
     DubiousOwnership { path: String },
+    /// El servidor no tiene esa referencia: la PR se borró, o viene de un fork cuyo remoto no
+    /// está configurado (Azure DevOps no publica `refs/pull/N/head` en el repositorio destino).
+    #[error("El servidor no tiene la referencia «{reference}» en el remoto «{remote}». Si la pull request viene de un fork, añade el remoto del fork y vuelve a intentarlo.")]
+    MissingRemoteRef { remote: String, reference: String },
+    /// La ruta no vale para `safe.directory` (vacía, relativa, con controles o un `*`).
+    #[error("No se puede añadir {path} a las carpetas seguras de git: {reason}.")]
+    SafeDirectoryRejected { path: String, reason: String },
     #[error("Error de entrada/salida: {0}")]
     Io(String),
 }

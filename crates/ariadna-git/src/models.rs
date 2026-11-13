@@ -373,6 +373,21 @@ pub struct Remote {
     pub push_url: String,
 }
 
+/// Resultado de bajar la cabeza de una referencia remota a una rama local
+/// (`checkout_pull_request`): `git fetch <remoto> <referencia>` y `checkout`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCheckout {
+    /// Rama local que ha quedado activa.
+    pub branch: String,
+    /// Commit al que apunta (la cabeza que se bajó).
+    pub head: String,
+    /// La rama local no existía y se ha creado.
+    pub created: bool,
+    /// La rama local existía en otro commit y se ha movido al bajado (con permiso explícito).
+    pub updated: bool,
+}
+
 /// Política de avance rápido en un merge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

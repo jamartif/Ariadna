@@ -16,6 +16,7 @@ export function createTauriPullRequests(): PullRequestApi {
     pullRequestSupport: (tabId) => call('pull_request_support', { tabId }),
     listPullRequests: (tabId, filter, page) => call('list_pull_requests', { tabId, filter, page }),
     getPullRequest: (tabId, id) => call('get_pull_request', { tabId, id }),
+    checkoutPullRequest: (tabId, id) => call('checkout_pull_request', { tabId, id }),
     createPullRequest: (tabId, draft) => call('create_pull_request', { tabId, draft }),
     pullRequestTemplate: (tabId) => call('pull_request_template', { tabId }),
     pullRequestDiff: (tabId, id) => call('pull_request_diff', { tabId, id }),

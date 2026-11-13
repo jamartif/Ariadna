@@ -81,6 +81,8 @@
   }
 
   const active = $derived(d?.state === 'active');
+  /** La lista no tiene PR: el panel derecho no repite el estado vacío ni su botón. */
+  const listEmpty = $derived(pr.supported && pr.listLoaded && !pr.listLoading && !pr.listError && pr.items.length === 0);
   const generalThreads = $derived(pr.threads.filter((th) => th.anchor === null));
   const inlineThreads = $derived(pr.threads.filter((th) => th.anchor !== null));
   const webUrl = $derived(d ? safeHttpsUrl(d.webUrl) : null);
@@ -94,9 +96,14 @@
   {#if pr.creating}
     <PrCreateForm {tab} />
   {:else if pr.selectedId === null}
-    <EmptyState icon="git-merge" title={t('pr.pick.title')} body={t('pr.pick.body')}>
-      <button type="button" class="btn btn-primary" onclick={() => pr.startCreate()}><Icon name="plus" size={14} />{t('pr.new')}</button>
-    </EmptyState>
+    {#if listEmpty}
+      <!-- La lista ya explica que no hay PR y ofrece crearla: aquí solo queda el lienzo vacío. -->
+      <div class="pick-blank" aria-hidden="true"><Icon name="git-merge" size={28} /></div>
+    {:else}
+      <EmptyState icon="git-merge" title={t('pr.pick.title')} body={t('pr.pick.body')}>
+        <button type="button" class="btn btn-primary" onclick={() => pr.startCreate()}><Icon name="plus" size={14} />{t('pr.new')}</button>
+      </EmptyState>
+    {/if}
   {:else if pr.detailError && !d}
     <div class="pad"><PrError error={pr.detailError} onretry={() => pr.selectedId !== null && pr.loadDetail(pr.selectedId)} onback={() => pr.closeDetail()} /></div>
   {:else if !d}
@@ -136,6 +143,9 @@
             <Icon name="circle-check" size={14} />{t('pr.review.open')}
           </button>
         {/if}
+        <button type="button" class="btn" onclick={() => void pr.checkout()} disabled={pr.busyAny}>
+          {#if pr.busy === 'checkout'}<Icon name="loader" size={14} spin />{:else}<Icon name="download" size={14} />{/if}{t('pr.checkout')}
+        </button>
         <button type="button" class="btn btn-primary" id="pr-act-complete" aria-expanded={panelOpen === 'complete'} onclick={() => (panelOpen = panelOpen === 'complete' ? null : 'complete')} disabled={pr.busyAny}>
           <Icon name="git-merge" size={14} />{t('pr.complete.open')}
         </button>
@@ -308,6 +318,14 @@
     padding: var(--space-4);
     display: grid;
     gap: var(--space-3);
+  }
+  .pick-blank {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    min-height: 0;
+    color: var(--text-subtle);
+    opacity: 0.5;
   }
   .pad-x {
     padding: 0 var(--space-4) var(--space-3);
@@ -533,6 +551,28 @@
   @media (forced-colors: active) {
     .vtab.on {
       border-bottom-color: Highlight;
+    }
+  }
+
+  /* Ventana baja (zoom 200 %): cabecera y acciones más compactas para dejar sitio al
+     cuerpo del detalle. */
+  @media (max-height: 620px) {
+    .head {
+      padding: var(--space-2) var(--space-3) var(--space-1);
+      gap: var(--space-2);
+    }
+    h2 {
+      font-size: var(--text-md);
+    }
+    .meta {
+      margin-top: var(--space-1);
+    }
+    .actions {
+      padding: var(--space-1) var(--space-3) var(--space-2);
+      gap: var(--space-1);
+    }
+    .vtab {
+      min-height: 28px;
     }
   }
 </style>

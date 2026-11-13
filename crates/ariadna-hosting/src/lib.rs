@@ -17,6 +17,7 @@ mod error;
 mod github;
 mod http;
 mod model;
+mod net;
 mod provider;
 mod remote;
 
@@ -28,5 +29,6 @@ pub use error::{HostingError, HostingResult};
 pub use github::GitHub;
 pub use http::HttpConfig;
 pub use model::*;
+pub use net::{apply_system_networking, build_http_client, NetSettings};
 pub use provider::{provider_for, ProviderSettings, PullRequestProvider};
 pub use remote::{HostHints, PatHelp, Provider, RemoteInfo, ALLOWED_HELP_HOSTS};

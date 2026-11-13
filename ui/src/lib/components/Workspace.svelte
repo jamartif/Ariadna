@@ -459,7 +459,8 @@
   /* Zoom 200 % / ventanas estrechas (≈ 640 px CSS): la barra lateral se oculta y el diff pasa debajo. */
   @media (max-width: 900px) {
     .columns {
-      grid-template-columns: 0 0 minmax(0, var(--mid)) 1px minmax(0, 1fr);
+      /* La columna central nunca se come el detalle: como mucho la mitad del ancho. */
+      grid-template-columns: 0 0 minmax(0, min(var(--mid), 50%)) 1px minmax(0, 1fr);
     }
     .columns > :global(.splitter:first-of-type) {
       visibility: hidden;

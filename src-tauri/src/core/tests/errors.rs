@@ -121,6 +121,20 @@ pub fn every_git_error() -> Vec<(GitError, &'static str)> {
             "DUBIOUS_OWNERSHIP",
         ),
         (
+            GitError::MissingRemoteRef {
+                remote: "origin".into(),
+                reference: "refs/pull/1/head".into(),
+            },
+            "INVALID_REFERENCE",
+        ),
+        (
+            GitError::SafeDirectoryRejected {
+                path: "/otro".into(),
+                reason: "no se admite «*»".into(),
+            },
+            "INVALID_REFERENCE",
+        ),
+        (
             GitError::Auth {
                 host: "dev.azure.com".into(),
                 hint: "El token ha caducado.".into(),

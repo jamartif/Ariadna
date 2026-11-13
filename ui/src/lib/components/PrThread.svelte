@@ -182,7 +182,7 @@
     border-radius: 50%;
     background: var(--bg-muted);
     border: 1px solid var(--border-strong);
-    font-size: 8px;
+    font-size: var(--text-2xs);
     font-weight: 700;
   }
   footer,

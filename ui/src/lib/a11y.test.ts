@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, it, vi } from 'vitest';
 import { branchesOf } from '$lib/stores/branches.svelte';
@@ -24,6 +24,7 @@ import PullRequestsPanel from './components/PullRequestsPanel.svelte';
 import RemotesSection from './components/RemotesSection.svelte';
 import TagsSection from './components/TagsSection.svelte';
 import SettingsDialog from './components/SettingsDialog.svelte';
+import Sidebar from './components/Sidebar.svelte';
 import Workspace from './components/Workspace.svelte';
 
 /**
@@ -133,6 +134,14 @@ describe('axe: Ramas y remotos', () => {
     await screen.findByRole('button', { name: /Nueva rama/ });
     await expectNoSeriousViolations();
     void branchesOf(ctx.tab);
+  });
+
+  it('barra lateral con rama actual, seguimiento y remotos', async () => {
+    const ctx = await loadedTab('tab-ariadna');
+    render(Sidebar, { props: { tab: ctx.tab, snapshot: ctx.tab.snapshot, loading: false } });
+    const nav = await screen.findByRole('navigation', { name: 'Ramas y remotos' });
+    expect(within(nav).getByText('(rama actual)', { exact: false })).toBeInTheDocument();
+    await expectNoSeriousViolations();
   });
 
   it('formulario de añadir remoto', async () => {

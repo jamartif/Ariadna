@@ -53,11 +53,11 @@
 
 ## M3 — Ramas, remotos, merge
 
-> Estado: implementado y probado con remoto bare real, rebase y cherry-pick con conflicto. Pendiente: flujo de confirmación de `safe.directory` (el error `DubiousOwnership` ya se detecta).
+> Estado: implementado y probado con remoto bare real, rebase y cherry-pick con conflicto. `DubiousOwnership` se detecta y se ofrece `safe.directory` con confirmación nativa (solo la carpeta concreta).
 - [ ] `RemoteInfo::parse` (GitHub, GHE, Azure DevOps en sus tres formas, GitLab, Bitbucket, otros) con ≥ 20 URLs de prueba y redacción de credenciales (D19)
-- [ ] Error tipado `Auth` para fetch/pull/push con mensaje accionable (única excepción de parseo, aislada y con tests)
+- [x] Error tipado `Auth` para fetch/pull/push con mensaje accionable (única excepción de parseo, aislada y con tests: `ariadna-git::auth` + `tests/auth_network.rs`, incluido el `pull` que sale con 1)
 - [ ] G-16 `clone_repository`: validación de URL (`ext::`, `-`), destino vacío, cancelación que borra solo lo creado, progreso, sin submódulos; tests con remoto bare local
-- [ ] Credenciales: `credential approve / reject / ls-remote` por stdin, zeroize del secreto, sin registro ni eco en errores; tests con un credential helper falso
+- [x] Credenciales: `credential approve / reject / ls-remote` por stdin, zeroize del secreto, sin registro ni eco en errores; tests con un credential helper falso (`ariadna-git::credentials` + `tests/credentials.rs`, `Secret` sin `Clone`/`Serialize`)
 - [ ] Ayuda de PAT por proveedor (Azure DevOps, GitHub, GitLab, Bitbucket) con enlaces https y permisos mínimos
 - [x] G-10 ramas
 - [x] G-11 fetch, pull merge/rebase, push `--set-upstream`; timeouts de red y GCM
@@ -67,7 +67,7 @@
 - [x] G-05 descartar con confirmación
 - [x] Test `pull --rebase` con conflicto, abort y continue
 - [x] Test de cherry-pick con conflicto (pendiente heredado)
-- [ ] `DubiousOwnership` con confirmación para `safe.directory`
+- [x] `DubiousOwnership` con confirmación para `safe.directory`: `open_repository` pregunta, añade **solo esa carpeta** (`git config --global --add safe.directory`, nunca `*`) y reintenta una vez; `ariadna_git::safe_directory` + tests con `GIT_CONFIG_GLOBAL` temporal
 
 ## M4 — Shell de la app
 
@@ -131,16 +131,16 @@
 - [ ] Publicar `0.1.0-alpha.2`
 
 ## M8 — Pull requests (→ alpha.3)
-> Estado del backend (`crates/ariadna-hosting` + `core/pr_ops.rs`): implementado y probado **solo contra un servidor simulado** (`wiremock`, JSON reconstruido de la documentación). **Nada está verificado con un servidor real**: ver `spike-pr.md` (todo marcado «NO VERIFICADO» y checklist para el spike con PAT reales).
+> Estado del backend (`crates/ariadna-hosting` + `core/pr_ops.rs`): implementado y probado **solo contra un servidor simulado** (`wiremock`, JSON reconstruido de la documentación). **Nada está verificado con un servidor real**: ver `spike-pr.md` (todo marcado «NO VERIFICADO» y checklist para el spike con PAT reales). Excepción: el `fetch` de `refs/pull/N/head` (bajar la rama de una PR) se ha ejecutado contra GitHub real con `crates/ariadna-git/tests/pr_checkout.rs` (`#[ignore]`, PR #23 de `jamartif/ariadna-spike-pr`).
 - [ ] Spike con PAT real: endpoints y permisos mínimos de Azure DevOps REST y GitHub REST para listar, crear, hilos, voto y completar (PR-02…PR-08); documentar versiones de API — *documentado desde la documentación pública en `spike-pr.md`; falta el humo con PAT reales (checklist al final del documento)*
 - [x] Crate `ariadna-hosting`: `RemoteInfo`, `trait PullRequestProvider`, `AuthMethod`, cliente `reqwest` con `rustls` (proveedor `ring`), límites de seguridad de red (§4.4)
 - [x] Obtención del secreto con `git credential fill` no interactivo, `zeroize`, sin registro ni eco (D22) — probado con un `git` falso; GCM real sin verificar
 - [x] Azure DevOps: listar, detalle (revisores, políticas, work items), crear, abandonar/reabrir *(simulado)*
 - [x] Azure DevOps: diff de la PR, hilos (ver, crear, responder, resolver), voto, completar con estrategia y *auto-complete* *(simulado)*
 - [x] GitHub: listar, detalle, crear, reviews, comentarios en línea, merge/squash/rebase, cerrar/reabrir *(simulado; incluye GHE por host)*
-- [ ] Bajar la rama de una PR (incluido `refs/pull/N/head` de forks) — `checkoutRef` ya viaja en el detalle; falta el comando
+- [x] Bajar la rama de una PR (incluido `refs/pull/N/head` de forks): `checkout_pull_request` → `GitServing::checkout_remote_ref` (fetch del ref del remoto de la PR, rama local `pr-<id>-<autor>-<rama>`, confirmación si la rama existe con otra base o hay cambios sin confirmar —se guardan en el stash—; `MissingRemoteRef` si el remoto no la tiene). Tests con bare local que publica `refs/pull/1/head` y `#[ignore]` contra GitHub real
 - [x] Plantillas de PR del repo (`pull_request_template.md`) — `pull_request_template`
-- [ ] Push previo si la rama no está publicada
+- [x] Push previo si la rama no está publicada: `create_pull_request` pregunta y hace `git push --set-upstream <remoto> <rama>` antes de crear; cancelar devuelve `CANCELLED`
 - [x] Errores tipados `AUTH` (con el permiso que falta), `NOT_FOUND`, `POLICY`, `CONFLICT`, `RATE_LIMITED`, `NETWORK`
 - [x] Comandos IPC de PR (ipc.md) y confirmaciones nativas para completar, abandonar y votar con rechazo; contrato, tipos TS y backend simulado de la UI
 - [ ] UI: panel de PR (lista con filtros, detalle con Markdown sin `{@html}`, pestaña de archivos con comentarios en línea, votar, completar, crear)
@@ -153,8 +153,8 @@
 - [ ] Accesibilidad: ARIA, `forced-colors`, zoom 200 %, axe en E2E; revisión NVDA y VoiceOver
   - [x] axe-core (vitest-axe) en jsdom: una prueba por pantalla principal (PR, conflictos, ajustes, ramas/remotos, historial, paleta, espacio de trabajo) sin violaciones serias/críticas (`ui/src/lib/a11y.test.ts`; jsdom no calcula contraste)
   - [x] Primera pasada visual en navegador (1440×900 y 1000×700, claro/oscuro, `forced-colors` y `prefers-reduced-motion` emulados): ver `specs/rust/qa-alpha2.md`
-  - [ ] Contraste AA medido en navegador solo de forma aproximada (script propio); falta herramienta de referencia
-  - [ ] Zoom 200 % y reflujo
+  - [x] Contraste AA medido con `ui/scripts/contrast.mjs` (48 pares, sin dependencias); informe en `specs/rust/contraste.md`
+  - [x] Zoom 200 % y reflujo (720×450 CSS: sidebar oculta, diff con altura útil y scroll, conflictos con paneles de 220 px y scroll propio)
   - [ ] axe en E2E contra la app real (`tauri-driver`)
   - [ ] Revisión manual con NVDA y VoiceOver (no realizada)
 - [ ] Rendimiento contra NF-1…NF-6 con fixtures sintéticos — hecho el motor (NF-3, NF-4, NF-5 en `rendimiento.md`); faltan NF-1, NF-2, NF-6 y la interfaz (requieren ventana real)

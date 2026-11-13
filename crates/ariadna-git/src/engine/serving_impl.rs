@@ -10,7 +10,7 @@ use super::GitCliEngine;
 use crate::error::GitResult;
 use crate::models::{
     Branch, Commit, ConflictFile, DiffHunk, DiffScope, FileDiff, GitPath, GitStatus,
-    IntegrationState, MergeFastForward, MergeResult, Remote, Repository,
+    IntegrationState, MergeFastForward, MergeResult, Remote, RemoteCheckout, Repository,
 };
 use crate::serving::{Confirmation, GitServing};
 use crate::stash::{StashApplyResult, StashEntry, StashPushOptions};
@@ -194,6 +194,17 @@ impl GitServing for GitCliEngine {
         allow_diverged_local: bool,
     ) -> GitResult<()> {
         self.checkout(repo, reference, allow_diverged_local).await
+    }
+    async fn checkout_remote_ref(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        reference: &str,
+        local_branch: &str,
+        allow_moved: bool,
+    ) -> GitResult<RemoteCheckout> {
+        self.checkout_remote_ref(repo, remote, reference, local_branch, allow_moved)
+            .await
     }
     async fn delete_branch(&self, repo: &Repository, name: &str, force: bool) -> GitResult<()> {
         self.delete_branch(repo, name, force).await

@@ -346,5 +346,11 @@
       outline: 2px solid Highlight;
       outline-offset: -2px;
     }
+    /* Punto de «editado»: sin color de fondo no se vería; se dibuja con el color del texto. */
+    .dot {
+      forced-color-adjust: none;
+      background: CanvasText;
+      border: 1px solid Canvas;
+    }
   }
 </style>

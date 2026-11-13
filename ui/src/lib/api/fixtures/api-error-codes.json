@@ -119,6 +119,16 @@
     "message": "Git no se fía de la carpeta /otro (propietario distinto). Confírmalo para añadirla a las carpetas seguras."
   },
   {
+    "code": "INVALID_REFERENCE",
+    "detail": "refs/pull/1/head",
+    "message": "El servidor no tiene la referencia «refs/pull/1/head» en el remoto «origin». Si la pull request viene de un fork, añade el remoto del fork y vuelve a intentarlo."
+  },
+  {
+    "code": "INVALID_REFERENCE",
+    "detail": "/otro",
+    "message": "No se puede añadir /otro a las carpetas seguras de git: no se admite «*»."
+  },
+  {
     "code": "AUTH",
     "detail": "dev.azure.com: El token ha caducado.",
     "message": "No se pudo autenticar en dev.azure.com. El token ha caducado."

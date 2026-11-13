@@ -333,17 +333,27 @@ fn classify_failure(cwd: &Path, args: &[OsString], out: &ProcessOutput) -> GitEr
             lock: lock.display().to_string(),
         };
     }
-    let stderr = redact_credentials(&out.stderr_lossy());
-    if out.code == Some(128) && stderr.contains("dubious ownership") {
-        return GitError::DubiousOwnership {
-            path: cwd.display().to_string(),
-        };
+    if let Some(e) = dubious_ownership(cwd, out.code, &out.stderr_lossy()) {
+        return e;
     }
+    let stderr = redact_credentials(&out.stderr_lossy());
     GitError::CommandFailed {
         command: describe(args),
         exit_code: out.code.unwrap_or(-1),
         stderr: truncate(&stderr, 8_000),
     }
+}
+
+/// `DubiousOwnership` si `git` salió con 128 quejándose del propietario de la carpeta.
+///
+/// EXCEPCIÓN documentada (spec §4.1): git no da otra señal para este caso. `LC_ALL=C` fija el
+/// texto en inglés.
+pub(crate) fn dubious_ownership(cwd: &Path, code: Option<i32>, stderr: &str) -> Option<GitError> {
+    (code == Some(128) && stderr.contains("dubious ownership")).then(|| {
+        GitError::DubiousOwnership {
+            path: cwd.display().to_string(),
+        }
+    })
 }
 
 /// Quita usuario y contraseña de las URLs (`https://user:pass@host` → `https://***@host`).

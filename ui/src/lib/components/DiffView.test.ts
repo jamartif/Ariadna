@@ -147,3 +147,32 @@ describe('DiffView', () => {
     expect(tab.panel).toBe('conflicts');
   });
 });
+
+describe('DiffView al preparar el archivo seleccionado', () => {
+  it('pasa a mostrar el diff preparado y no se queda cargando', async () => {
+    const { tab } = await loadedTab();
+    const entry = pick(tab, 'unstaged', 'src/lib/api/types.ts');
+    render(DiffView, { props: { tab } });
+    expect(await screen.findByText(/^@@ -14,\d+ \+14,\d+ @@$/)).toBeInTheDocument();
+
+    await tab.stage('unstaged', [entry]);
+
+    await waitFor(() => expect(tab.selected?.section).toBe('staged'));
+    // Debe acabar mostrando contenido (el diff preparado), nunca el esqueleto de carga.
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Cargando diff')).toBeNull()
+    );
+    expect(screen.getByText('Preparado')).toBeInTheDocument();
+  });
+});
+
+describe('DiffView sin hunks', () => {
+  it('si el backend devuelve un diff vacío muestra «sin diferencias» y no se queda cargando', async () => {
+    const { tab, api } = await loadedTab();
+    pick(tab, 'unstaged', 'src/lib/api/types.ts');
+    vi.spyOn(api, 'diff').mockResolvedValue([]);
+    render(DiffView, { props: { tab } });
+    expect(await screen.findByText('Sin diferencias que mostrar')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Cargando diff')).toBeNull();
+  });
+});

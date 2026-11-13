@@ -38,7 +38,9 @@ pub use merge_ops::{
     ConflictResolution, ConflictSummary, ContinueResult, HunkChoice, HunkSide, MergeStartResult,
     MergeState,
 };
-pub use pr_ops::{CommentInput, PrAction, PrDiff, PrOmitted, PrProviderFactory, PrSupport};
+pub use pr_ops::{
+    CommentInput, PrAction, PrCheckout, PrDiff, PrOmitted, PrProviderFactory, PrSupport,
+};
 pub use prompter::Prompter;
 pub use remote_ops::{RemoteView, WebTarget};
 pub use session_file::{SavedTab, SessionData, SessionLoad, SessionStore};

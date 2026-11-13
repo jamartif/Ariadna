@@ -162,6 +162,13 @@
     background: var(--bg-selected);
     border-color: var(--border-hover);
   }
+  /* Colores forzados: el stash seleccionado no puede depender del fondo. */
+  @media (forced-colors: active) {
+    .item.sel {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
   .item:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: -2px;

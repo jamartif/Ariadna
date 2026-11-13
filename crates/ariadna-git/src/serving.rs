@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use crate::error::{GitError, GitResult};
 use crate::models::{
     Branch, Commit, ConflictFile, DiffHunk, DiffScope, FileDiff, GitPath, GitStatus,
-    IntegrationState, MergeFastForward, MergeResult, Remote, Repository,
+    IntegrationState, MergeFastForward, MergeResult, Remote, RemoteCheckout, Repository,
 };
 use crate::stash::{StashApplyResult, StashEntry, StashPushOptions};
 use crate::tag::Tag;
@@ -155,6 +155,28 @@ pub trait GitServing: Send + Sync {
         reference: &str,
         allow_diverged_local: bool,
     ) -> GitResult<()>;
+    /// `git fetch <remoto> <referencia>` y deja la rama local `local_branch` en esa cabeza
+    /// (bajar la rama de una pull request: `refs/pull/N/head` o `refs/heads/x`).
+    ///
+    /// * Si la rama local no existe, se crea (`created`).
+    /// * Si existe en otro commit y `allow_moved` es `false`, devuelve
+    ///   [`GitError::DivergedLocalBranch`] **sin tocar nada**; con `true` se mueve (`updated`).
+    /// * Con cambios sin confirmar que choquen, [`GitError::LocalChangesBlockCheckout`].
+    /// * Si el remoto no tiene la referencia, [`GitError::MissingRemoteRef`].
+    ///
+    /// Por defecto no está soportado: lo implementa el motor real.
+    async fn checkout_remote_ref(
+        &self,
+        _repo: &Repository,
+        _remote: &str,
+        _reference: &str,
+        _local_branch: &str,
+        _allow_moved: bool,
+    ) -> GitResult<RemoteCheckout> {
+        Err(GitError::Io(
+            "bajar una referencia remota no está soportado por este motor".into(),
+        ))
+    }
     async fn delete_branch(&self, repo: &Repository, name: &str, force: bool) -> GitResult<()>;
     async fn merge(
         &self,

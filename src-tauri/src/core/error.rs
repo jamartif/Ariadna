@@ -165,6 +165,10 @@ impl From<GitError> for ApiError {
             GitError::Parse(d) => ("PARSE", non_empty(d)),
             GitError::Locked { lock } => ("LOCKED", non_empty(lock)),
             GitError::DubiousOwnership { path } => ("DUBIOUS_OWNERSHIP", non_empty(path)),
+            GitError::MissingRemoteRef { reference, .. } => {
+                ("INVALID_REFERENCE", non_empty(reference))
+            }
+            GitError::SafeDirectoryRejected { path, .. } => ("INVALID_REFERENCE", non_empty(path)),
             GitError::Auth { host, hint } => ("AUTH", non_empty(&format!("{host}: {hint}"))),
             GitError::Io(d) => ("IO", non_empty(d)),
         };

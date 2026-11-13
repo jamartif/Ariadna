@@ -37,13 +37,32 @@ Capturas en `specs/rust/qa-alpha2/`.
 ## Pendiente / no verificado
 
 - **NVDA y VoiceOver: no se han probado.** axe en jsdom no sustituye a un lector de pantalla.
-- Contraste AA: el script marca los botones primarios y las marcas de proveedor (`Az`, `GH`…) con ratio ≈ 1; son falsos positivos (fondo en degradado, no calculable con `background-color`). Visualmente legibles; falta medirlos con una herramienta de referencia.
-- Zoom 200 % y reflujo: sin revisar.
+- Contraste AA: medido con `ui/scripts/contrast.mjs` y documentado en `specs/rust/contraste.md` (48 pares, 0 por debajo de AA).
 - axe contra la app real (E2E con `tauri-driver`): sin hacer.
-- `forced-colors`: la rama actual de la barra lateral y varios indicadores de estado (puntos de borrador, avatares de voto) no tienen indicador no cromático; revisar con un tema de alto contraste real de Windows.
-- Texto muy pequeño: iniciales de avatar (9 px) y etiquetas de estado de archivo (10 px); son decorativas para lectores de pantalla (hay texto oculto equivalente), pero son difíciles de leer a 1×.
-- Lista de PR vacía: la columna derecha repite «Elige una pull request» y un segundo botón «Nueva pull request»; es redundante.
-- A 1000×700 el visor de diff de «Archivos» queda muy bajo; considerar apilar la lista de archivos.
 - «Cerrar pull request» no pide confirmación (es reversible con «Reabrir»); decisión de producto.
 - Orden de tabulación: correcto en PR (crear/revisar/completar), conflictos y ajustes. El editor de conflictos tiene paneles de solo lectura focusables con nombre propio (intencional).
 - Con `prefers-reduced-motion` los iconos de carga no giran (regla global de `base.css`); queda un icono estático. Aceptable, pero conviene un indicador textual donde la carga dure.
+
+## Segunda pasada (accesibilidad y pulido)
+
+Recorrido a 1440×900, 1000×700 y 720×450 CSS (zoom 200 % equivalente), claro y oscuro, y
+`forced-colors: active` emulado por CDP. Capturas 15–21.
+
+| # | Defecto | Arreglo | Captura |
+|---|---------|---------|---------|
+| 15 | `forced-colors`: la rama actual del sidebar y varias selecciones (ramas, commits, stashes) dependían del fondo | Contorno `Highlight` en la rama actual y las filas pulsadas (`Sidebar`, `BranchesPanel`, `HistoryPanel`, `StashesPanel`) | 15, 20 |
+| 16 | `forced-colors`: el degradado del botón primario se aplanaba y el relleno desaparecía | `background: Highlight` + `background-image: none` + `forced-color-adjust: none` para los estados normal, hover y activo | 20 |
+| 17 | `forced-colors`: marcas de proveedor con degradado ilegibles | Recuadro con `ButtonFace`/`ButtonText` y `forced-color-adjust: none`; puntos de estado con `CanvasText` | 21 |
+| 18 | Iniciales de avatar a 8–9 px y etiquetas de estado a 10 px | Mínimo 11 px (`--text-2xs`) en avatares de revisores e hilos, iniciales de proveedor y cajas de estado de 20 px en `PrFiles` y `ChangesPanel` | — |
+| 19 | Lista de PR vacía: el panel derecho repetía «Elige una pull request» y un segundo botón | Con la lista cargada y vacía el detalle muestra solo el lienzo vacío, sin texto ni acción | 17 |
+| 20 | A 1000×700 el visor de diff quedaba en 160 px y no había scroll | `PrFiles`: cabecera fija (lista + barra), panel desplazable y diff con `min-height: clamp(280px, 40vh, 480px)` | 18 |
+| 21 | Zoom 200 % (720×450 CSS): diff recortado, SHA del commit desbordando y paneles de conflicto de 110 px | Lista de archivos en tira horizontal y cabecera/acciones compactas con poca altura; SHA con `word-break`; paneles de conflicto de 220 px con scroll horizontal propio; columna central ≤ 50 % | 19 |
+
+Contraste: además de los pares de `tokens.test.ts`, se midieron el primario (plano, degradado y
+hover) y las marcas de proveedor. Se corrigieron `--accent-grad-from` en claro (`#0b7f9a` →
+`#0a748c`, porque el hover bajaba a 4,13:1) y los degradados de Azure/GitLab/Bitbucket; informe
+completo en `specs/rust/contraste.md`.
+
+Pruebas añadidas: axe de la barra lateral; estado vacío de PR sin duplicado; estructura de la
+cabecera fija de «Archivos» y reglas CSS de altura/scroll del diff (+4 pruebas).
+

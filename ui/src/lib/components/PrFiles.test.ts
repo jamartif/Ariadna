@@ -1,5 +1,6 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetGlobals } from '../../test/helpers';
 import { prTab } from '../../test/prHelpers';
@@ -109,6 +110,24 @@ describe('Archivos: diff con comentarios en línea (PR-06)', () => {
     expect(await screen.findByRole('region', { name: /nuevo.ts/ })).toBeInTheDocument();
     expect(within(threadsRegion()).queryByText('Buen punto, lo cubro.')).toBeNull();
     expect(within(threadsRegion()).getByText(/no tiene comentarios/)).toBeInTheDocument();
+  });
+
+  it('la cabecera de archivos agrupa lista y barra sobre el diff', async () => {
+    await openFiles();
+    const files = document.querySelector('.files') as HTMLElement;
+    const head = files.querySelector('.fhead') as HTMLElement;
+    expect(head).not.toBeNull();
+    expect(files.firstElementChild).toBe(head);
+    expect(head).toContainElement(screen.getByRole('list', { name: 'Archivos cambiados' }));
+    expect(head).toContainElement(screen.getByRole('heading', { name: 'src/lib/api/api.ts' }));
+    expect(head.nextElementSibling?.classList.contains('diffbox')).toBe(true);
+  });
+
+  it('la cabecera es fija y el diff tiene altura mínima (CSS del componente)', () => {
+    const src = readFileSync('src/lib/components/PrFiles.svelte', 'utf8');
+    expect(src).toMatch(/\.fhead\s*\{[^}]*position:\s*sticky/);
+    expect(src).toMatch(/\.diffbox\s*\{[^}]*min-height:\s*clamp\(280px/);
+    expect(src).toMatch(/\.files\s*\{[^}]*overflow-y:\s*auto/);
   });
 
   it('las flechas recorren la lista de archivos', async () => {

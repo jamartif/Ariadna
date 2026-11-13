@@ -9,6 +9,7 @@ mod fixtures;
 mod merge;
 mod pull_requests;
 mod remotes;
+mod safe_directory;
 mod session;
 mod settings;
 mod stash;

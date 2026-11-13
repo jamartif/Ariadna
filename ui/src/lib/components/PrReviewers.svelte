@@ -75,7 +75,8 @@
     border-radius: 50%;
     background: var(--bg-muted);
     color: var(--text);
-    font-size: 9px;
+    /* Iniciales legibles a 1×: 11 px es el mínimo de la escala (--text-2xs). */
+    font-size: var(--text-2xs);
     font-weight: 700;
     border: 1px solid var(--border-strong);
   }
@@ -130,7 +131,18 @@
     border-radius: var(--pill);
     background: var(--bg-muted);
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 650;
+  }
+
+  /* Colores forzados: el avatar y el globo del voto mantienen su forma y borde. */
+  @media (forced-colors: active) {
+    .avatar {
+      border-color: CanvasText;
+    }
+    .vote {
+      background: Canvas;
+      border: 1px solid CanvasText;
+    }
   }
 </style>

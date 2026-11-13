@@ -200,6 +200,22 @@ export interface PrAction {
   detail: PullRequestDetail | null;
 }
 
+/**
+ * `checkout_pull_request`: rama local en la que ha quedado la pestaña tras bajar la rama de la
+ * PR (también desde un fork). `done: false` si se cancela alguna confirmación nativa.
+ */
+export interface PrCheckout {
+  done: boolean;
+  /** Nombre de la rama local (`pr-123-autor-rama`); `null` si se canceló. */
+  branch: string | null;
+  /** Commit de la cabeza de la PR que se ha bajado. */
+  head: string | null;
+  /** La rama local no existía y se ha creado. */
+  created: boolean;
+  /** La rama local existía en otro commit y se ha movido (con confirmación). */
+  updated: boolean;
+}
+
 export interface PrOmitted {
   path: string;
   reason: string;

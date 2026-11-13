@@ -339,8 +339,15 @@ pub fn find_git(opts: &LocatorOptions) -> Result<GitInstall, GitLocateError> {
             continue;
         }
         searched.push(candidate.clone());
-        let Some(raw) = run_version(&candidate, opts) else {
-            continue;
+        // Bajo carga (CI, muchos procesos a la vez) el arranque puede fallar de forma
+        // transitoria (`EAGAIN`, `ETXTBSY` al escribir el binario). Se reintenta una vez antes
+        // de descartar el candidato; si de verdad está roto, el segundo intento vuelve a fallar.
+        let raw = match run_version(&candidate, opts) {
+            Some(raw) => raw,
+            None => match run_version(&candidate, opts) {
+                Some(raw) => raw,
+                None => continue,
+            },
         };
         let Some(version) = parse_git_version(&raw) else {
             unparseable.get_or_insert(GitLocateError::UnparseableVersion {

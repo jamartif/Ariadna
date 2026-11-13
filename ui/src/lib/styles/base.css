@@ -412,10 +412,17 @@ kbd {
     border: 1px solid ButtonText;
     forced-color-adjust: auto;
   }
-  .btn-primary {
+  .btn-primary,
+  .btn-primary:hover:not(:disabled),
+  .btn-primary:active:not(:disabled) {
     background: Highlight;
+    /* El degradado del estado normal/hover se anula: con colores forzados el texto
+       HighlightText quedaría sobre Canvas si el degradado se aplanara. */
+    background-image: none;
     color: HighlightText;
     border-color: Highlight;
+    /* Sin esto el navegador fuerza el fondo a Canvas y el primario pierde su relleno. */
+    forced-color-adjust: none;
   }
   .btn:disabled,
   .btn[aria-disabled='true'],

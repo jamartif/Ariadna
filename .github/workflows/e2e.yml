@@ -1,0 +1,142 @@
+name: E2E (tauri-driver)
+
+# Suite E2E real (app empaquetada en depuración) y regresión visual en Linux.
+# macOS y Windows no se pueden ejecutar aquí con WebKitWebView/WebView2 y sus
+# baselines son por SO: quedan como paso manual documentado en e2e/README.md.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'ui/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'e2e/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/e2e.yml'
+  push:
+    branches: [main, rust-migration]
+    paths:
+      - 'ui/**'
+      - 'src-tauri/**'
+      - 'e2e/**'
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # La ventana virtual tiene que caber la ventana de 1280×800 de la app.
+  XVFB_ARGS: '-screen 0 1440x900x24'
+
+jobs:
+  e2e:
+    name: E2E y visual (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencias del sistema (WebKitGTK, driver, Xvfb)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libssl-dev \
+            libayatana-appindicator3-dev patchelf build-essential \
+            xvfb xauth dbus-x11 fonts-dejavu-core
+          # El nombre del paquete del driver cambió: 24.04 usa webkit2gtk-driver,
+          # 25.10+ usa webkitgtk-webdriver.
+          sudo apt-get install -y webkit2gtk-driver || sudo apt-get install -y webkitgtk-webdriver
+          which WebKitWebDriver
+          WebKitWebDriver --help | head -3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            e2e/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: e2e-linux
+          cache-on-failure: true
+
+      - name: Instalar ui/
+        working-directory: ui
+        run: npm ci
+
+      - name: Instalar e2e/
+        working-directory: e2e
+        run: npm ci
+
+      - name: Cache de tauri-driver
+        id: cache-tauri-driver
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-driver
+          key: tauri-driver-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: tauri-driver
+        run: |
+          if ! command -v tauri-driver >/dev/null; then
+            cargo install tauri-driver --locked
+          fi
+          tauri-driver --help | head -3
+
+      - name: Compilar interfaz y app (debug, interfaz incrustada)
+        run: |
+          npm --prefix ui run build
+          cargo build -p ariadna-app --features tauri/custom-protocol
+
+      - name: E2E (9 ficheros, 13 pruebas)
+        working-directory: e2e
+        env:
+          ARIADNA_BINARY: ${{ github.workspace }}/src-tauri/target/debug/ariadna-app
+          E2E_WDIO_LOG: error
+        run: xvfb-run -a -s "$XVFB_ARGS" npm test
+
+      - name: Regresión visual (baselines de Linux)
+        if: always()
+        working-directory: e2e
+        env:
+          ARIADNA_BINARY: ${{ github.workspace }}/src-tauri/target/debug/ariadna-app
+        run: |
+          if [ -d baselines/linux ]; then
+            xvfb-run -a -s "$XVFB_ARGS" npm run visual
+          else
+            echo "::warning::No hay baselines/linux; se generan solo como artefacto"
+            xvfb-run -a -s "$XVFB_ARGS" npm run visual:update
+          fi
+
+      - name: Subir capturas, diffs y logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts-${{ github.run_attempt }}
+          path: |
+            e2e/artifacts
+            e2e/baselines
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "### E2E"
+            echo "- Binario: \`src-tauri/target/debug/ariadna-app\`"
+            echo "- Driver: \`$(WebKitWebDriver --help 2>&1 | head -1)\`"
+            echo "- Capturas y diffs en el artefacto \`e2e-artifacts-${{ github.run_attempt }}\`"
+            echo "- macOS/Windows: ejecución manual (\`npm test\` sin xvfb, baselines propios)"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -96,31 +96,34 @@
   {:else if files.length === 0}
     <EmptyState compact icon="file-diff" title={t('pr.files.emptyTitle')} body={t('pr.files.emptyBody')} />
   {:else}
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <ul class="filelist" aria-label={t('pr.files.list')} onkeydown={fileKey}>
-      {#each files as f (f.path)}
-        {@const n = perFile.get(f.path) ?? 0}
-        <li>
-          <button type="button" class="file" class:sel={f.path === path} aria-current={f.path === path ? 'true' : undefined} onclick={() => pick(f.path)}>
-            <span class="st mono" data-status={f.status} title={t(FILE_STATUS_LABEL[f.status])}>{FILE_STATUS_LETTER[f.status]}<span class="sr-only">{t(FILE_STATUS_LABEL[f.status])}</span></span>
-            <span class="fp mono" title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}>{f.path}</span>
-            {#if f.additions !== null || f.deletions !== null}
-              <span class="stat mono"><span class="add">+{f.additions ?? 0}</span> <span class="del">−{f.deletions ?? 0}</span></span>
-            {/if}
-            {#if n > 0}<span class="chip" title={tn('pr.files.threads', n)}><Icon name="info" size={10} />{n}<span class="sr-only"> {tn('pr.files.threads', n)}</span></span>{/if}
-          </button>
-        </li>
-      {/each}
-    </ul>
-    {#if pr.diff && pr.diff.omitted.length > 0}
-      <p class="omitted"><Icon name="info" size={12} />{tn('pr.files.omitted', pr.diff.omitted.length)}</p>
-    {/if}
+    <!-- Cabecera fija: lista de archivos y barra del archivo actual no se van al desplazar. -->
+    <div class="fhead">
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <ul class="filelist" aria-label={t('pr.files.list')} onkeydown={fileKey}>
+        {#each files as f (f.path)}
+          {@const n = perFile.get(f.path) ?? 0}
+          <li>
+            <button type="button" class="file" class:sel={f.path === path} aria-current={f.path === path ? 'true' : undefined} onclick={() => pick(f.path)}>
+              <span class="st mono" data-status={f.status} title={t(FILE_STATUS_LABEL[f.status])}>{FILE_STATUS_LETTER[f.status]}<span class="sr-only">{t(FILE_STATUS_LABEL[f.status])}</span></span>
+              <span class="fp mono" title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}>{f.path}</span>
+              {#if f.additions !== null || f.deletions !== null}
+                <span class="stat mono"><span class="add">+{f.additions ?? 0}</span> <span class="del">−{f.deletions ?? 0}</span></span>
+              {/if}
+              {#if n > 0}<span class="chip" title={tn('pr.files.threads', n)}><Icon name="info" size={10} />{n}<span class="sr-only"> {tn('pr.files.threads', n)}</span></span>{/if}
+            </button>
+          </li>
+        {/each}
+      </ul>
+      {#if pr.diff && pr.diff.omitted.length > 0}
+        <p class="omitted"><Icon name="info" size={12} />{tn('pr.files.omitted', pr.diff.omitted.length)}</p>
+      {/if}
 
-    <div class="bar">
-      <h3 class="cur mono" title={path ?? ''}>{path}</h3>
-      {#if file}<span class="badge">{t(FILE_STATUS_LABEL[file.status])}</span>{/if}
-      <span class="grow"></span>
-      <button type="button" class="btn btn-sm" onclick={startManual} disabled={path === null || pr.busyAny}><Icon name="plus" size={12} />{t('pr.files.comment')}</button>
+      <div class="bar">
+        <h3 class="cur mono" title={path ?? ''}>{path}</h3>
+        {#if file}<span class="badge">{t(FILE_STATUS_LABEL[file.status])}</span>{/if}
+        <span class="grow"></span>
+        <button type="button" class="btn btn-sm" onclick={startManual} disabled={path === null || pr.busyAny}><Icon name="plus" size={12} />{t('pr.files.comment')}</button>
+      </div>
     </div>
 
     <div class="diffbox">
@@ -156,6 +159,10 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
+    /* Con poca altura (zoom 200 %, 1000×700) el panel se desplaza en vez de aplastar
+       el diff; la cabecera de archivos se queda fija arriba. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .pad {
     padding: var(--space-3);
@@ -168,14 +175,21 @@
     color: var(--text-muted);
     font-size: var(--text-sm);
   }
+  .fhead {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    flex: none;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+  }
   .filelist {
     flex: none;
-    max-height: 28%;
+    max-height: clamp(96px, 22vh, 200px);
     overflow: auto;
     margin: 0;
     padding: var(--space-1) var(--space-2);
     list-style: none;
-    border-bottom: 1px solid var(--border);
   }
   .file {
     display: flex;
@@ -199,12 +213,12 @@
   }
   .st {
     flex: none;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     display: grid;
     place-items: center;
     border-radius: var(--radius-sm);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     background: var(--st-modified-bg);
     color: var(--st-modified-fg);
@@ -280,8 +294,9 @@
     flex: 1;
   }
   .diffbox {
-    flex: 1 1 240px;
-    min-height: 160px;
+    /* Altura útil mínima: a 1000×700 o con zoom 200 % el diff no puede quedar en 160 px. */
+    flex: 1 0 auto;
+    min-height: clamp(280px, 40vh, 480px);
     overflow: hidden;
   }
   .threads {
@@ -300,6 +315,26 @@
     margin: 0;
     font-size: var(--text-sm);
     color: var(--text-subtle);
+  }
+
+  /* Ventana baja (zoom 200 %): la lista de archivos pasa a tira horizontal para no
+     comerse la altura del diff. */
+  @media (max-height: 620px) {
+    .filelist {
+      display: flex;
+      gap: 2px;
+      max-height: none;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 2px var(--space-2);
+    }
+    .filelist li {
+      flex: 0 0 auto;
+      max-width: min(260px, 60%);
+    }
+    .file {
+      width: auto;
+    }
   }
 
   /* Colores forzados: la selección no puede depender solo del color de fondo. */

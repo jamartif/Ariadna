@@ -1,6 +1,7 @@
 import type {
   NewPullRequest,
   PrAction,
+  PrCheckout,
   PrCommentInput,
   PrCompleteOptions,
   PrDiff,
@@ -25,6 +26,12 @@ export interface PullRequestApi {
   listPullRequests(tabId: string, filter: PrFilter, page: number): Promise<PullRequestPage>;
   /** PR-03. */
   getPullRequest(tabId: string, id: number): Promise<PullRequestDetail>;
+  /**
+   * PR-09: baja la rama de la PR y se cambia a ella (también desde un fork). Confirmación nativa
+   * si la rama local ya existe con otro commit o si hay cambios sin confirmar; `done: false` si
+   * se cancela.
+   */
+  checkoutPullRequest(tabId: string, id: number): Promise<PrCheckout>;
   /** PR-04. */
   createPullRequest(tabId: string, draft: NewPullRequest): Promise<PullRequestDetail>;
   /** PR-04: plantilla de descripción del repo, o `null`. */

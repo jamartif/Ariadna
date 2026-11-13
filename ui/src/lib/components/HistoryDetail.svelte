@@ -74,7 +74,7 @@
         <div>
           <dt>{t('history.commit')}</dt>
           <dd>
-            <code class="mono">{c.sha}</code>
+            <code class="mono sha">{c.sha}</code>
             <button type="button" class="btn btn-ghost btn-icon btn-sm" onclick={copySha} aria-label={t('history.copySha')} title={t('history.copySha')}>
               <Icon name="copy" size={13} />
             </button>
@@ -212,6 +212,12 @@
   }
   .mail {
     color: var(--text-subtle);
+  }
+  /* SHA completa: en paneles estrechos (zoom 200 %) se parte en vez de desbordar. */
+  .sha {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-all;
   }
   .p + .p {
     margin-left: var(--space-2);

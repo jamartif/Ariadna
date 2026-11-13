@@ -8,7 +8,7 @@
 </script>
 
 <!-- Marca neutra por proveedor (sin logotipos de terceros): color + iniciales. -->
-<span class="mark" data-provider={provider} style:width="{size}px" style:height="{size}px" style:font-size="{Math.round(size * 0.42)}px" aria-hidden="true">
+<span class="mark" data-provider={provider} style:width="{size}px" style:height="{size}px" style:font-size="{Math.max(11, Math.round(size * 0.5))}px" aria-hidden="true">
   {#if provider === 'other'}<Icon name="git-fork" size={Math.round(size * 0.6)} />{:else}{LABEL[provider]}{/if}
 </span>
 
@@ -24,21 +24,37 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
   }
   [data-provider='azure'] {
-    background: linear-gradient(180deg, #2b95e8, #0a64b8);
+    background: linear-gradient(180deg, #1c6fb0, #0a64b8);
   }
   [data-provider='github'] {
     background: linear-gradient(180deg, #4a5565, #1f2733);
   }
   [data-provider='gitlab'] {
-    background: linear-gradient(180deg, #ff8a4c, #d9531a);
+    background: linear-gradient(180deg, #c2410c, #9a3412);
   }
   [data-provider='bitbucket'] {
-    background: linear-gradient(180deg, #4b95ff, #1d5fd6);
+    background: linear-gradient(180deg, #1f66c9, #1d5fd6);
   }
   [data-provider='other'] {
     background: var(--bg-muted);
     color: var(--text-muted);
     box-shadow: none;
     border: 1px solid var(--border-hover);
+  }
+
+  /* Colores forzados: el degradado de la marca desaparece; el recuadro y las iniciales no. */
+  @media (forced-colors: active) {
+    .mark {
+      forced-color-adjust: none;
+      background: ButtonFace;
+      color: ButtonText;
+      border: 1px solid ButtonText;
+      box-shadow: none;
+    }
+    [data-provider='other'] {
+      background: Canvas;
+      color: CanvasText;
+      border-color: CanvasText;
+    }
   }
 </style>

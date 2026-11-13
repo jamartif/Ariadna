@@ -485,5 +485,10 @@
     .tab.active {
       border-color: Highlight;
     }
+    .dot {
+      forced-color-adjust: none;
+      background: CanvasText;
+      box-shadow: none;
+    }
   }
 </style>

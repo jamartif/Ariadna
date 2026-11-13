@@ -249,6 +249,7 @@
     height: 100%;
     min-height: 0;
     background: var(--bg-surface);
+    container-type: inline-size;
   }
   .bar {
     display: flex;
@@ -524,6 +525,20 @@
     .ln.hl {
       outline: 1px solid Highlight;
       outline-offset: -1px;
+    }
+  }
+
+  /* Panel estrecho (zoom 200 %): los tres lados conservan un ancho legible (220 px) y
+     la fila se desplaza en horizontal dentro de su propio marco. */
+  @container (max-width: 560px) {
+    .panes,
+    .panes.two {
+      grid-template-columns: repeat(3, minmax(220px, 1fr));
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+    }
+    .panes.two {
+      grid-template-columns: repeat(2, minmax(220px, 1fr));
     }
   }
 </style>

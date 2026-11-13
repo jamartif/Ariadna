@@ -1,0 +1,23 @@
+{
+  "name": "ariadna-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pruebas de extremo a extremo y regresión visual de Ariadna con tauri-driver y WebKitWebDriver",
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/run-e2e.mjs",
+    "test:file": "node scripts/run-e2e.mjs --grep",
+    "visual": "node visual/visual.mjs",
+    "visual:update": "node visual/visual.mjs --update",
+    "doctor": "node scripts/doctor.mjs"
+  },
+  "devDependencies": {
+    "mocha": "11.7.5",
+    "pixelmatch": "7.1.0",
+    "pngjs": "7.0.0",
+    "webdriverio": "9.24.0"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

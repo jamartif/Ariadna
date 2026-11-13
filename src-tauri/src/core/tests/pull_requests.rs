@@ -122,6 +122,8 @@ struct Fake {
     calls: Mutex<Vec<String>>,
     state: Mutex<PrState>,
     fail: Mutex<Option<HostingError>>,
+    /// `checkout_ref` distinto del de siempre (para probar referencias que no existen).
+    checkout_ref: Mutex<Option<String>>,
 }
 
 impl Fake {
@@ -131,7 +133,11 @@ impl Fake {
             calls: Mutex::new(Vec::new()),
             state: Mutex::new(PrState::Active),
             fail: Mutex::new(None),
+            checkout_ref: Mutex::new(None),
         })
+    }
+    fn set_checkout_ref(&self, reference: &str) {
+        *self.checkout_ref.lock().unwrap() = Some(reference.to_owned());
     }
     fn calls(&self) -> Vec<String> {
         self.calls.lock().unwrap().clone()
@@ -206,7 +212,11 @@ impl PullRequestProvider for Fake {
     }
     async fn detail(&self, id: u64) -> HostingResult<PullRequestDetail> {
         self.rec(&format!("detail {id}"))?;
-        Ok(detail(id, self.state()))
+        let mut d = detail(id, self.state());
+        if let Some(r) = self.checkout_ref.lock().unwrap().clone() {
+            d.checkout_ref = r;
+        }
+        Ok(d)
     }
     async fn create(&self, new: &NewPullRequest) -> HostingResult<PullRequestDetail> {
         self.rec(&format!(
@@ -287,6 +297,13 @@ struct FakeFactory {
 }
 
 impl PrProviderFactory for FakeFactory {
+    /// El doble acepta también un remoto local (bare + `url.insteadOf`), que es como se prueba
+    /// el `fetch`/`push` de verdad sin salir a la red; los proveedores sin soporte siguen sin
+    /// admitirse (`GitLab`, `Bitbucket`…).
+    fn supports(&self, info: &RemoteInfo) -> bool {
+        info.provider.supports_in_app_pull_requests() || !info.is_complete()
+    }
+
     fn provider(
         &self,
         info: &RemoteInfo,
@@ -1007,5 +1024,262 @@ impl PrFixtures {
              `ui/src/lib/api/fixtures-pr/`.",
             self.problems
         );
+    }
+}
+
+// --- bajar la rama de la PR (PR-09) y push previo -----------------------------------------
+
+/// `origin` que es GitHub para Rust y un bare local para git: la URL real se reescribe con
+/// `url.<bare>.insteadOf`, así el `fetch`/`push` no sale a la red pero el motor recorre el
+/// camino de verdad (un remoto local no pide credenciales).
+fn rewired_origin(env: &Env, repo: &Path, bare: &Path) {
+    env.git(
+        repo,
+        &["remote", "add", "origin", "https://github.com/acme/app.git"],
+    );
+    let key = format!("url.{}.insteadOf", Env::s(bare));
+    env.git(repo, &["config", &key, "https://github.com/acme/app.git"]);
+}
+
+/// Publica en `bare` un `refs/pull/1/head` con un commit que cambia `README.md` y añade
+/// `pr.txt`, como hace GitHub con las PR de forks, y deja el repo de trabajo en `main` limpio.
+fn publish_pull_head(env: &Env, repo: &Path, bare: &Path) -> String {
+    env.write(repo, "README.md", b"hola desde el fork\n");
+    env.write(repo, "pr.txt", b"nuevo\n");
+    env.git(repo, &["add", "-A"]);
+    env.git(repo, &["commit", "-q", "-m", "cambio de la PR"]);
+    let sha = env.git(repo, &["rev-parse", "HEAD"]).trim().to_owned();
+    env.git(repo, &["push", "-q", "origin", "HEAD:refs/heads/fork/x"]);
+    env.git(bare, &["update-ref", "refs/pull/1/head", &sha]);
+    env.git(repo, &["reset", "-q", "--hard", "HEAD~1"]);
+    sha
+}
+
+struct LocalPr {
+    env: Env,
+    tab: String,
+    repo: std::path::PathBuf,
+    bare: std::path::PathBuf,
+    fake: Arc<Fake>,
+}
+
+async fn local_pr(provider: Provider) -> LocalPr {
+    let env = Env::new();
+    let repo = env.repo("r");
+    let bare = env.bare("origin.git");
+    rewired_origin(&env, &repo, &bare);
+    env.git(&repo, &["push", "-q", "origin", "main"]);
+    publish_pull_head(&env, &repo, &bare);
+    let tab = env.open(&repo).await;
+    let fake = Fake::new(provider);
+    env.core.set_pr_factory(Arc::new(FakeFactory {
+        fake: fake.clone(),
+        seen: Mutex::new(Vec::new()),
+    }));
+    LocalPr {
+        env,
+        tab,
+        repo,
+        bare,
+        fake,
+    }
+}
+
+#[test]
+fn el_nombre_de_la_rama_local_sale_de_la_pr_y_es_valido() {
+    use crate::core::pr_ops::pr_branch_name;
+    assert_eq!(pr_branch_name(123, "ana", "feature/x"), "pr-123-ana-x");
+    assert_eq!(
+        pr_branch_name(7, "Beto Ruiz", "fix/precio final"),
+        "pr-7-Beto-Ruiz-precio-final"
+    );
+    // Sin autor ni rama utilizables sigue habiendo un nombre válido.
+    assert_eq!(pr_branch_name(9, "", ""), "pr-9");
+    for (id, author, source) in [
+        (1, "a/b", "../.lock"),
+        (2, "ñ", "a~b^c:d"),
+        (3, "-x", ".hidden"),
+    ] {
+        let name = pr_branch_name(id, author, source);
+        assert!(ariadna_git::validate_ref(&name).is_ok(), "{name}");
+    }
+}
+
+#[tokio::test]
+async fn bajar_la_pr_de_un_fork_crea_la_rama_local_y_se_cambia_a_ella() {
+    let p = local_pr(Provider::GitHub).await;
+    let head = p
+        .env
+        .git(&p.bare, &["rev-parse", "refs/pull/1/head"])
+        .trim()
+        .to_owned();
+    let out = p.env.core.checkout_pull_request(&p.tab, 1).await.unwrap();
+    assert!(out.done && out.created && !out.updated, "{out:?}");
+    assert_eq!(out.branch.as_deref(), Some("pr-1-ana-x"));
+    assert_eq!(out.head.as_deref(), Some(head.as_str()));
+    assert_eq!(p.env.prompter.count(), 0, "sin choques no se pregunta");
+    let snap = p.env.core.get_snapshot(&p.tab).await.unwrap();
+    assert_eq!(snap.0.status.branch_name.as_deref(), Some("pr-1-ana-x"));
+    assert_eq!(std::fs::read(p.repo.join("pr.txt")).unwrap(), b"nuevo\n");
+    // Solo habló con el proveedor para leer el detalle.
+    assert_eq!(p.fake.calls(), ["detail 1"]);
+}
+
+#[tokio::test]
+async fn si_la_rama_local_ya_existe_con_otra_base_se_pide_confirmacion() {
+    let p = local_pr(Provider::GitHub).await;
+    p.env.git(&p.repo, &["branch", "pr-1-ana-x", "main"]);
+    // Cancelar: no se mueve nada y no hay error.
+    p.env.prompter.reject_all();
+    let out = p.env.core.checkout_pull_request(&p.tab, 1).await.unwrap();
+    assert!(!out.done && out.branch.is_none());
+    assert_eq!(p.env.prompter.count(), 1);
+    assert_eq!(
+        p.env.git(&p.repo, &["rev-parse", "pr-1-ana-x"]).trim(),
+        p.env.git(&p.repo, &["rev-parse", "main"]).trim()
+    );
+    // Aceptar: la rama se mueve a la cabeza de la PR.
+    p.env.prompter.accept_all();
+    let out = p.env.core.checkout_pull_request(&p.tab, 1).await.unwrap();
+    assert!(out.done && out.updated && !out.created);
+    assert_eq!(
+        p.env.git(&p.repo, &["rev-parse", "HEAD"]).trim(),
+        out.head.as_deref().unwrap()
+    );
+    let asked = p.env.prompter.last();
+    assert!(asked.message.contains("pr-1-ana-x"), "{}", asked.message);
+    assert!(
+        asked.detail.contains("refs/pull/1/head"),
+        "{}",
+        asked.detail
+    );
+}
+
+#[tokio::test]
+async fn con_cambios_sin_confirmar_se_ofrecen_guardar_en_el_stash() {
+    let p = local_pr(Provider::GitHub).await;
+    p.env.write(&p.repo, "README.md", b"cambio local\n");
+    let out = p.env.core.checkout_pull_request(&p.tab, 1).await.unwrap();
+    assert!(out.done && out.created);
+    // El cambio local está en el stash y el archivo trae el de la PR.
+    let stashes = p.env.core.stash_list(&p.tab).await.unwrap();
+    assert_eq!(stashes.len(), 1);
+    assert!(
+        stashes[0].message.contains("bajar la PR #1"),
+        "{}",
+        stashes[0].message
+    );
+    assert_eq!(
+        std::fs::read(p.repo.join("README.md")).unwrap(),
+        b"hola desde el fork\n"
+    );
+}
+
+#[tokio::test]
+async fn si_el_remoto_no_tiene_el_ref_lo_dice_sin_crear_rama() {
+    let p = local_pr(Provider::GitHub).await;
+    // Un `checkout_ref` que el remoto no publica (PR de un fork de Azure DevOps).
+    p.fake.set_checkout_ref("refs/pull/404/head");
+    let e = p
+        .env
+        .core
+        .checkout_pull_request(&p.tab, 1)
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "INVALID_REFERENCE");
+    assert!(e.message.contains("fork"), "{}", e.message);
+    assert!(p
+        .env
+        .git(&p.repo, &["branch", "--list", "pr-1-ana-x"])
+        .trim()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn crear_la_pr_publica_antes_la_rama_sin_upstream() {
+    let p = local_pr(Provider::GitHub).await;
+    p.env
+        .git(&p.repo, &["checkout", "-q", "-b", "feature/y", "main"]);
+    p.env.write(&p.repo, "y.txt", b"y\n");
+    p.env.git(&p.repo, &["add", "-A"]);
+    p.env.git(&p.repo, &["commit", "-q", "-m", "y"]);
+    // El snapshot de la pestaña se tomó antes del checkout: se refresca como haría el vigilante.
+    p.env.core.refresh(&p.tab).await.unwrap();
+
+    let created = p
+        .env
+        .core
+        .create_pull_request(&p.tab, draft("feature/y"))
+        .await
+        .unwrap();
+    assert_eq!(created.summary.id, 10);
+    // Se preguntó una vez y antes de crear.
+    assert_eq!(p.env.prompter.count(), 1);
+    let asked = p.env.prompter.last();
+    assert!(
+        asked.message.contains("no está publicada"),
+        "{}",
+        asked.message
+    );
+    assert!(asked.detail.contains("--set-upstream"), "{}", asked.detail);
+    // La rama está en el remoto y con upstream.
+    assert_eq!(
+        p.env
+            .git(&p.bare, &["rev-parse", "--verify", "refs/heads/feature/y"])
+            .trim(),
+        p.env.git(&p.repo, &["rev-parse", "HEAD"]).trim()
+    );
+    assert_eq!(
+        p.env
+            .git(
+                &p.repo,
+                &[
+                    "for-each-ref",
+                    "--format=%(upstream:short)",
+                    "refs/heads/feature/y"
+                ]
+            )
+            .trim(),
+        "origin/feature/y"
+    );
+    assert!(p.fake.calls().iter().any(|c| c == "create feature/y→main"));
+}
+
+#[tokio::test]
+async fn si_se_cancela_la_publicacion_no_se_crea_la_pr() {
+    let p = local_pr(Provider::GitHub).await;
+    p.env
+        .git(&p.repo, &["checkout", "-q", "-b", "feature/y", "main"]);
+    p.env.write(&p.repo, "y.txt", b"y\n");
+    p.env.git(&p.repo, &["add", "-A"]);
+    p.env.git(&p.repo, &["commit", "-q", "-m", "y"]);
+    p.env.core.refresh(&p.tab).await.unwrap();
+    p.env.prompter.reject_all();
+
+    let e = p
+        .env
+        .core
+        .create_pull_request(&p.tab, draft("feature/y"))
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "CANCELLED");
+    assert!(e.message.contains("no se ha creado"), "{}", e.message);
+    assert!(p.fake.calls().is_empty(), "el proveedor no se llamó");
+    assert!(p
+        .env
+        .git(&p.bare, &["branch", "--list", "feature/y"])
+        .trim()
+        .is_empty());
+}
+
+fn draft(source: &str) -> NewPullRequest {
+    NewPullRequest {
+        title: "t".into(),
+        description: String::new(),
+        source_branch: source.into(),
+        target_branch: "main".into(),
+        draft: false,
+        reviewers: vec![],
+        work_item_ids: vec![],
     }
 }

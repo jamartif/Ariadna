@@ -20,7 +20,7 @@ import { toasts } from './toasts.svelte';
 import type { TabState } from './tab.svelte';
 
 export type PrDetailView = 'overview' | 'files' | 'conversation';
-export type PrBusy = 'vote' | 'complete' | 'abandon' | 'reopen' | 'comment' | 'resolve' | 'create' | 'push' | 'ai';
+export type PrBusy = 'vote' | 'complete' | 'abandon' | 'reopen' | 'comment' | 'resolve' | 'create' | 'push' | 'ai' | 'checkout';
 
 const AUTO_KEY = 'ariadna.pr.autorefresh.v1';
 /** PR-09: refresco automático opcional, apagado por defecto, mínimo 60 s y solo con el panel abierto. */
@@ -384,6 +384,26 @@ export class PullRequestsController {
     if (id === null) return false;
     const res = await this.act('reopen', () => this.api.reopenPullRequest(this.tab.id, id));
     return this.finish(res, t('pr.toast.reopened'));
+  }
+
+  /** Baja la rama de la PR y se cambia a ella (crea o actualiza la local `pr-N-…`). */
+  async checkout(): Promise<boolean> {
+    const id = this.selectedId;
+    if (id === null) return false;
+    const res = await this.act('checkout', () => this.api.checkoutPullRequest(this.tab.id, id));
+    if (!res) return false;
+    if (!res.done) {
+      // El usuario ha rechazado la confirmación nativa: no es un error.
+      this.busy = null;
+      return false;
+    }
+    const branch = res.branch ?? '';
+    toasts.announce(
+      t(res.created ? 'pr.toast.checkedOutNew' : 'pr.toast.checkedOut', { branch })
+    );
+    this.busy = null;
+    await this.tab.refresh();
+    return true;
   }
 
   /** Crea un hilo (general o anclado) o una respuesta. Devuelve el hilo resultante. */

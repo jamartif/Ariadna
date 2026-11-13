@@ -899,11 +899,11 @@
   .st {
     display: inline-grid;
     place-items: center;
-    width: 17px;
-    height: 17px;
+    width: 20px;
+    height: 20px;
     border-radius: 5px;
     font-family: var(--font-mono);
-    font-size: 0.625rem;
+    font-size: var(--text-2xs);
     font-weight: 700;
   }
   .st-added {

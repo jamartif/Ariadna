@@ -27,7 +27,7 @@ use crate::core::{
     SettingsView, WebTarget,
 };
 
-use crate::core::{CommentInput, PrAction, PrDiff, PrSupport};
+use crate::core::{CommentInput, PrAction, PrCheckout, PrDiff, PrSupport};
 use ariadna_hosting::{
     CompleteOptions, NewPullRequest, PrFilter, PullRequestDetail, PullRequestPage, ReviewThread,
     Vote,
@@ -283,6 +283,17 @@ async fn get_pull_request(
     id: u64,
 ) -> Cmd<PullRequestDetail> {
     core.get_pull_request(&tab_id, id).await
+}
+
+/// Baja la rama de la PR y se cambia a ella (también desde un fork). Confirmación nativa si la
+/// rama local ya existe con otro commit o si hay cambios sin confirmar.
+#[tauri::command]
+async fn checkout_pull_request(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    id: u64,
+) -> Cmd<PrCheckout> {
+    core.checkout_pull_request(&tab_id, id).await
 }
 
 #[tauri::command]
@@ -979,6 +990,7 @@ pub fn run() {
             pull_request_support,
             list_pull_requests,
             get_pull_request,
+            checkout_pull_request,
             create_pull_request,
             pull_request_template,
             pull_request_diff,

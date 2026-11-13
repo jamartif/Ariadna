@@ -163,6 +163,8 @@ impl Http {
         if cfg.allow_insecure_loopback {
             builder = builder.no_proxy();
         }
+        // Proxy y CA del sistema (`HTTPS_PROXY`/`NO_PROXY`, `SSL_CERT_FILE`…).
+        let builder = crate::net::apply_system_networking(builder)?;
         let client = builder
             .build()
             .map_err(|_| HostingError::network("No se pudo preparar la conexión segura."))?;

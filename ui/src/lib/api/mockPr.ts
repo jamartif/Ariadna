@@ -303,6 +303,20 @@ export function createMockPullRequests(deps: MockPrDeps): PullRequestApi {
       return clone(find(s, id).detail);
     },
 
+    async checkoutPullRequest(tabId, id) {
+      const s = await store(tabId);
+      const d = find(s, id).detail;
+      const branch = `pr-${id}-${String(d.author.login).replace(/[^A-Za-z0-9_]+/g, '-')}-${
+        d.sourceBranch.split('/').pop() || ''
+      }`.replace(/-+$/, '');
+      // La confirmación nativa solo hace falta si la rama local ya existía con otro commit; el
+      // mock no tiene repositorio, así que se pregunta siempre para que el flujo sea visible.
+      if (!confirm('Bajar la rama de la pull request', d, ` Rama local: ${branch}.`)) {
+        return { done: false, branch: null, head: null, created: false, updated: false };
+      }
+      return { done: true, branch, head: d.sourceCommit, created: true, updated: false };
+    },
+
     async createPullRequest(tabId, draft: NewPullRequest) {
       const s = await store(tabId);
       if (draft.title.trim() === '') throw err('INVALID_REFERENCE', 'El título no puede estar vacío.');

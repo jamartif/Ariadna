@@ -244,6 +244,14 @@
   .item.sel {
     background: var(--bg-selected);
   }
+  /* Colores forzados: la rama actual y la fila seleccionada necesitan un contorno. */
+  @media (forced-colors: active) {
+    .item.sel,
+    .item.head {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
   .item.head .name {
     font-weight: 700;
   }

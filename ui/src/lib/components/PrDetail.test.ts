@@ -35,6 +35,16 @@ describe('Detalle: resumen (PR-03)', () => {
     expect(await screen.findByRole('form', { name: 'Nueva pull request' })).toBeInTheDocument();
   });
 
+  it('con la lista cargada y vacía no repite el estado vacío ni el botón de crear', async () => {
+    const ctx = await prTab({ scenario: 'pr-empty' });
+    await ctx.pr.loadList();
+    expect(ctx.pr.items).toHaveLength(0);
+    const { container } = render(PrDetail, { props: { tab: ctx.tab } });
+    expect(screen.queryByRole('heading', { name: 'Elige una pull request' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Nueva pull request' })).toBeNull();
+    expect(container.querySelector('.pick-blank')).not.toBeNull();
+  });
+
   it('muestra título, ramas, estado, revisores, políticas y commits; la descripción es texto', async () => {
     await open(101);
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('#101 Añade validación de formularios');

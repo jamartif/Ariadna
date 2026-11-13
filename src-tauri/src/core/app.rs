@@ -417,7 +417,59 @@ impl AppCore {
 
     /// Abre un repo (o su carpeta de trabajo, o una subcarpeta) en una pestaña nueva; si ya
     /// está abierto (misma clave de repo), activa la existente.
+    ///
+    /// Si git rechaza la carpeta por `dubious ownership` (propietario distinto: discos de red,
+    /// carpetas de un contenedor…), se ofrece añadirla a `safe.directory` con una confirmación
+    /// nativa y se reintenta. Solo esa carpeta, nunca `*`.
     pub async fn open_repository(&self, path: &str) -> ApiResult<OpenResult> {
+        match self.open_repository_once(path).await {
+            Err(e) if e.code == "DUBIOUS_OWNERSHIP" => {
+                let folder = e.detail.clone().unwrap_or_else(|| path.to_owned());
+                if !self.confirm_safe_directory(&folder, None).await {
+                    return Err(e);
+                }
+                self.open_repository_once(path).await
+            }
+            other => other,
+        }
+    }
+
+    /// Confirmación nativa + `git config --global --add safe.directory <carpeta>`.
+    ///
+    /// `config_file` solo lo usan las pruebas: apunta `GIT_CONFIG_GLOBAL` a un fichero temporal
+    /// para no tocar la configuración global real de quien ejecuta los tests.
+    pub(crate) async fn confirm_safe_directory(
+        &self,
+        path: &str,
+        config_file: Option<&Path>,
+    ) -> bool {
+        let shown = path.trim();
+        let ok = self
+            .inner
+            .prompter
+            .confirm(
+                "Carpeta de otro propietario",
+                &format!(
+                    "Git no se fía de «{shown}» porque la carpeta pertenece a otro usuario. Ariadna puede añadirla a las carpetas seguras de git para poder abrirla."
+                ),
+                &format!(
+                    "Se añadirá solo esa carpeta (safe.directory), nunca «*».\nCarpeta: {shown}\nEs normal en discos de red, unidades montadas y carpetas de contenedores o WSL."
+                ),
+            )
+            .await;
+        if !ok {
+            return false;
+        }
+        let Ok(runner) = self.runner() else {
+            return false;
+        };
+        GitCliEngine::new(runner)
+            .allow_safe_directory(shown, config_file)
+            .await
+            .is_ok()
+    }
+
+    async fn open_repository_once(&self, path: &str) -> ApiResult<OpenResult> {
         let _guard = self.inner.open_lock.lock().await;
         let runner = self.runner()?;
         let requested = PathBuf::from(path);

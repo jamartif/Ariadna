@@ -211,6 +211,13 @@
   .row.sel {
     background: var(--bg-selected);
   }
+  /* Colores forzados: el commit seleccionado no puede depender del fondo. */
+  @media (forced-colors: active) {
+    .row.sel {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
   .row:focus-visible {
     box-shadow: inset 0 0 0 2px var(--focus-ring);
   }

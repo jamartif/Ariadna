@@ -225,4 +225,16 @@
     gap: var(--space-3);
     padding: var(--space-2);
   }
+
+  /* Colores forzados: la rama actual y la fila pulsada no pueden depender del fondo. */
+  @media (forced-colors: active) {
+    .item.head,
+    .item[aria-pressed='true'] {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+    .item.head :global(svg) {
+      color: CanvasText;
+    }
+  }
 </style>

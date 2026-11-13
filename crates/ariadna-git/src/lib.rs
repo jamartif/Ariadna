@@ -15,6 +15,7 @@
 //! * [`auth`], [`credentials`] y [`clone`]: error de autenticación, credenciales por PAT
 //!   (credential helper de git) y clonado desde URL con progreso (spec §4.3).
 //! * [`recents`]: recientes y favoritos en JSON compatible con el Swift.
+//! * [`safe_directory`]: añadir **una** carpeta concreta a `safe.directory` (propietario distinto).
 //!
 //! * [`runner`], [`engine`], [`serving`] y [`error`]: motor git por CLI (M2/M3).
 
@@ -37,6 +38,7 @@ pub mod porcelain;
 pub mod recents;
 mod remote_url;
 pub mod runner;
+pub mod safe_directory;
 pub mod serving;
 pub mod session;
 pub mod stash;

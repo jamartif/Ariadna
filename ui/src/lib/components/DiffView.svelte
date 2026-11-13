@@ -308,12 +308,14 @@
         {/snippet}
       </Banner>
     </div>
-  {:else if !file}
+  {:else if !file && loading}
     <div class="skeleton-wrap" aria-busy="true" aria-label={t('diff.loading')}>
       {#each [90, 70, 82, 40, 76, 64, 88, 55] as w, i (i)}
         <span class="skeleton" style:width="{w}%" style:height="14px"></span>
       {/each}
     </div>
+  {:else if !file}
+    <EmptyState icon="file" title={t('diff.emptyTitle')} body={t('diff.emptyBody')} />
   {:else}
     <header class="file-head">
       <Icon name="file" size={16} />
