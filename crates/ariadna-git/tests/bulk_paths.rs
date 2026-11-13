@@ -9,10 +9,19 @@ use ariadna_git::GitPath;
 use common::TestRepo;
 
 fn name(i: usize) -> String {
+    // Windows no admite `*`, `?`, `"`, `<`, `>` ni `|` en un nombre de archivo.
+    const RAROS: &[char] = &['*', '?'];
+    let gl = |c: char| {
+        if cfg!(windows) && RAROS.contains(&c) {
+            'x'
+        } else {
+            c
+        }
+    };
     match i % 5 {
         0 => format!("d{}/archivo con espacio {i}.txt", i % 7),
         1 => format!("-guion {i}.txt"),
-        2 => format!("ñandú/[glob]*?{i}.txt"),
+        2 => format!("ñandú/[glob]{}{}{i}.txt", gl('*'), gl('?')),
         3 => format!("a/b/c{i}.rs"),
         _ => format!("raiz{i}.md"),
     }

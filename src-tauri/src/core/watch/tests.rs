@@ -333,10 +333,11 @@ impl Fake {
             !w.is_polling(),
             "en un tempdir local debe vigilar de forma nativa"
         );
-        // FSEvents (macOS) reentrega eventos de justo antes de arrancar el flujo, es decir, la
-        // creación del propio repo de prueba. Se espera a que se asienten (más que el
-        // debounce de `fast()`) y se parte de cero: solo interesa lo que ocurra después.
-        if cfg!(target_os = "macos") {
+        // FSEvents (macOS) y ReadDirectoryChangesW (Windows) pueden entregar eventos de cambios
+        // ocurridos justo antes de arrancar el flujo, es decir, de la creación del propio repo
+        // de prueba. Se espera a que se asienten (más que el debounce de `fast()`) y se parte
+        // de cero: solo interesa lo que ocurra después.
+        if cfg!(any(target_os = "macos", windows)) {
             std::thread::sleep(Duration::from_millis(1500));
             c.reset();
         }
