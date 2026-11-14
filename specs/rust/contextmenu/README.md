@@ -17,3 +17,7 @@ reposicionamiento, «Comparar con…», portapapeles, enlaces web y axe con el m
 `ui/src/lib/stores/branchesMenu.test.ts` (comandos nuevos del store) y
 `src-tauri/src/core/tests/branch_menu.rs` (repos temporales reales: push con upstream, rebase con y
 sin conflictos, borrado en el remoto con cancelación y diff entre ramas con binarios y renombrados).
+Además, el flujo E2E `e2e/test/10-menu-contextual-rama.e2e.mjs` repite en la app empaquetada las
+dos vías de apertura, las acciones deshabilitadas, «Copiar el nombre» (portapapeles interceptado),
+el diff en el panel derecho y el `Esc` con el foco de vuelta. Tabla de acciones y requisitos:
+[`docs/menu-ramas.md`](../../docs/menu-ramas.md).

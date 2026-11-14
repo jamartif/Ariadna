@@ -32,7 +32,8 @@ service, it says "not verified" here:
 | **GitHub** pull requests | **VERIFIED against the real API** (2026-11-11) on a disposable private repo: 72 checks OK, 5 limits of GitHub itself, 0 failures | [`specs/rust/spike-pr.md`](specs/rust/spike-pr.md) |
 | **Azure DevOps** pull requests | **NOT VERIFIED**: no account or PAT available; tested only against a simulated server (`wiremock`) | [`specs/rust/spike-pr.md`](specs/rust/spike-pr.md) |
 | AI with **Claude** | **Verified** with `claude 2.1.319` (flags, `claude auth status --json`, `CLAUDE_CONFIG_DIR`) | [`specs/rust/checklist-humo-ia.md`](specs/rust/checklist-humo-ia.md) |
-| AI with **Codex** and **Copilot** | **NOT TESTED** with the real CLI; flags and output formats are still experimental | [`specs/rust/tasks.md`](specs/rust/tasks.md) §M6 |
+| AI with **GitHub Copilot** | **Verified** with `GitHub Copilot CLI 1.0.112` (2026-11-14): flags, prompt over stdin, JSONL, tools denied, detection | [`docs/ia-copilot.md`](docs/ia-copilot.md) (Spanish) |
+| AI with **Codex** | **NOT TESTED**: the CLI is not installed on the development machine, so its flags and output format are still experimental | [`specs/rust/tasks.md`](specs/rust/tasks.md) §M6 |
 | Installers | They build (NSIS x64 and universal `.dmg`) but are **unsigned** | [Installing without a signature](docs/instalacion-sin-firma.md) (Spanish) |
 
 ## What it does
@@ -48,6 +49,12 @@ service, it says "not verified" here:
 - **Branches** in a persistent rail on the left, always visible: switch, create, rename,
   delete (second confirmation when unmerged) and merge, with upstream and ahead/behind
   counters; remote checkout warns when it would diverge.
+- **Context menu per branch** (right click, or the Menu key / `Shift+F10` with the row
+  focused): switch, create from it, merge into the current one, rebase, fetch, push, pull,
+  rename, delete locally or on the remote, copy name/SHA, diff against the current branch,
+  compare with any other branch, open on the web and create a pull request. Actions that do
+  not apply stay visible but disabled, with the reason in the tooltip. Full table:
+  [`docs/menu-ramas.md`](docs/menu-ramas.md) (Spanish).
 - **Remotes**: list with the provider recognised, add, rename, remove, fetch, pull and push
   the current branch, plus "Open in browser" / "Create pull request".
 - **Conflicts** in a three-way panel (ours/base/theirs) with an editable result; mark as
@@ -56,7 +63,9 @@ service, it says "not verified" here:
 - **Tags**: list (lightweight and annotated), create on HEAD or on a commit, delete locally
   and publish/delete on the remote.
 - **Clone from a URL** (GitHub, Azure DevOps, GitLab, Bitbucket or generic) with an
-  **optional PAT**, used once and forgotten, never stored (see *Security*).
+  **optional PAT**, a **GitHub CLI (`gh`) or GitLab CLI (`glab`) session you already have**,
+  or an OAuth device flow (ready but off until a `client_id` is configured). Secrets are used
+  once and forgotten, never stored (see *Security*).
 - **Pull requests** for GitHub and Azure DevOps: list, detail with safe Markdown, create,
   check out the branch, review with inline comments, vote and complete/abandon.
 - **Settings** (General, Git, AI, Accounts), light/dark/system theme, command palette, native
@@ -101,9 +110,14 @@ with the session you already have on the machine, and the prompt travels over **
 | Provider | CLI | Status |
 |---|---|---|
 | Claude (Pro/Max/Ultra or Team/Enterprise) | `claude` | Verified with `claude 2.1.319` |
-| Codex (ChatGPT Free/Go/Plus/Pro/Business/Enterprise) | `codex` | Experimental, untested |
-| GitHub Copilot (any plan) | `copilot` | Experimental, untested |
+| GitHub Copilot (any plan) | `copilot` | Verified with `GitHub Copilot CLI 1.0.112` (2026-11-14) |
+| Codex (ChatGPT Free/Go/Plus/Pro/Business/Enterprise) | `codex` | Experimental: not tested with the real CLI |
 
+- **Copying a repository that needs credentials** never asks for a token you already have:
+  if `gh` (GitHub) or `glab` (GitLab) **are installed and signed in**, Ariadna offers that
+  session and reads nothing else; the token stays in memory in Rust, never crosses the IPC and
+  is never stored. A PAT is only needed when there is no session (or for Azure DevOps and
+  Bitbucket, which have no supported CLI here).
 - **Auto mode**: Claude → Codex → Copilot, skipping only the ones not installed and only
   among the providers you have consented to.
 - **Personal and Company profiles**: each repo is bound to a profile; the profile decides
@@ -209,6 +223,9 @@ cargo test -p ariadna-git --test perf -- --ignored --nocapture
 | Document | Contents |
 |---|---|
 | [`docs/instalacion-sin-firma.md`](docs/instalacion-sin-firma.md) | Opening unsigned alphas on Windows (SmartScreen, Smart App Control) and macOS (Gatekeeper) |
+| [`docs/menu-ramas.md`](docs/menu-ramas.md) | Branch rail context menu: every action, shortcuts, what each one requires |
+| [`docs/ia-copilot.md`](docs/ia-copilot.md) | What is verified about GitHub Copilot CLI (flags, stdin, tools denied) and what is not |
+| [`docs/oauth-cli.md`](docs/oauth-cli.md) | OAuth device flow for cloning: GitHub/GitLab app registration and scopes |
 | [`docs/windows-sin-instalar.md`](docs/windows-sin-instalar.md) | Testing on Windows without installing (Windows Sandbox, portable ZIP) |
 | [`specs/rust/spec.md`](specs/rust/spec.md) | Migration specification (requirements G-xx, PR-xx, RF-IAx, NF-x) |
 | [`specs/rust/revision-speckfish.md`](specs/rust/revision-speckfish.md) | Formal spec review: blockers, majors and decisions taken |

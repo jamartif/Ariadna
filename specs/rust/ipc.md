@@ -296,6 +296,7 @@ Reglas:
 - `AI_NOT_LOGGED_IN` y `AI_NOT_INSTALLED` llevan en `detail` el comando que hay que ejecutar (`claude auth login`, `codex login`, `copilot login`).
 - La sugerencia lleva `repoRevision`: si el repo cambió mientras la IA pensaba, la UI debe avisar de que puede estar obsoleta.
 - El resultado **rellena** los campos de la UI; el usuario siempre revisa y pulsa «Crear commit».
+- **Estado de verificación de los proveedores**: `ProviderId::verified_with()` devuelve la versión del CLI con la que se verificaron flags, transporte del prompt y formato de salida (`claude 2.1.319`, `GitHub Copilot CLI 1.0.112`, 2026-11-14) y `is_experimental()` es `true` **solo** para Codex. `ProviderStatus` expone `experimental` y `verified_with` para que ningún texto de la UI publique Copilot como experimental (`docs/ia-copilot.md`).
 
 Comportamiento de `ai_generate_commit_message` (el comando que genera asunto y descripción; no existe un `propose_commit_message` aparte):
 - **Contexto**: Rust lee `diff --staged` y hasta 20 asuntos recientes (`git log`); excluye sensibles, binarios y archivos que por sí solos superan el tope (`max_context_bytes`, 100 000 por defecto); redacta secretos. Si lo que queda supera el tope: `AI_CONTEXT_TOO_LARGE` sin lanzar el CLI. El prompt viaja por **stdin**, nunca por argv.

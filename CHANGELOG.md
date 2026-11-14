@@ -7,14 +7,22 @@ usa [versionado semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+Lo que hay encima de `v0.1.0-alpha.3`.
+
 ### Añadido
-- Interfaz bilingüe español/inglés: catálogos `en.ts`/`en.*.ts` con exactamente las mismas claves
-  que los `es*` (incluidos plurales y parámetros), ajuste `language` (`system` | `es` | `en`) en
-  `settings.json` y selector «Idioma» en Ajustes › General que se aplica **al momento** (también
-  en el arranque, sin parpadeo, con `<html lang>` actualizado). Las fechas y números usan el
-  idioma activo. Tests de paridad de claves, de detección y persistencia del idioma, de cambio de
-  idioma en Ajustes y axe de la pantalla en inglés.
-- Resolver conflictos con IA: comando `ai_resolve_conflict(tabId, path)` que propone el
+- Rediseño de la ventana alrededor de un **riel de ramas persistente** a la izquierda (visible
+  en todas las vistas: cambiar, crear, renombrar, borrar, fusionar y traer/subir con
+  contadores), vista central con control segmentado (Cambios · Historial · Stashes ·
+  Pull requests · Conflictos) y panel derecho con el detalle o el diff. La gestión de ramas
+  deja de ser una pestaña del centro.
+- **Menú contextual de cada rama del riel**: se abre con clic derecho o con la tecla
+  Menú / `Mayús+F10` (navegación con ↑/↓/Inicio/Fin, `Esc` cierra y devuelve el foco a la
+  fila), se voltea si no cabe en la ventana y deshabilita con motivo las acciones que no
+  aplican. Acciones: cambiar, crear desde esa, fusionar, rebasar, traer, subir, bajar,
+  renombrar, borrar en local y en el remoto, copiar nombre y SHA, ver el diff contra la
+  actual, comparar con otra rama, abrir en el navegador y crear pull request
+  ([`docs/menu-ramas.md`](docs/menu-ramas.md)).
+- **Resolver conflictos con IA**: comando `ai_resolve_conflict(tabId, path)` que propone el
   archivo **completo** ya resuelto a partir de las tres versiones (base, nuestra y suya), con
   los mismos filtros y garantías que el resto de la IA (sensibles, binarios, tope de contexto,
   consentimiento por perfil, cancelación) y validación de la propuesta (sin marcadores y sin
@@ -33,6 +41,37 @@ usa [versionado semántico](https://semver.org/lang/es/).
   remoto (con confirmación nativa), validación del nombre con las reglas de `git
   check-ref-format` y errores tipados. Sección «Etiquetas» en el panel de Ramas y «Crear
   etiqueta aquí» en el detalle de un commit.
+- **Interfaz bilingüe español/inglés**: catálogos `en.ts`/`en.*.ts` con exactamente las mismas
+  claves que los `es*` (incluidos plurales y parámetros), ajuste `language` (`system` | `es` |
+  `en`) en `settings.json` y selector «Idioma» en Ajustes › General que se aplica **al
+  momento** (también en el arranque, sin parpadeo, con `<html lang>` actualizado). Las fechas
+  y números usan el idioma activo. Tests de paridad de claves, de detección y persistencia del
+  idioma, de cambio de idioma en Ajustes y axe de la pantalla en inglés.
+- **GitHub Copilot deja de ser experimental**: verificado con `GitHub Copilot CLI 1.0.112`
+  (2026-11-14) en Windows 11 x64: argumentos finales (`--output-format json --no-ask-user
+  --disable-builtin-mcps --disable-client-telemetry --no-auto-update`), prompt por **stdin sin
+  `-p`**, salida **JSONL** capturada como fixture real, herramientas denegadas
+  (`--available-tools` con un catálogo vacío + `--deny-tool`) y detección del binario. Codex
+  sigue marcado como no verificado. Detalle y límites en
+  [`docs/ia-copilot.md`](docs/ia-copilot.md).
+- **Clonar con la sesión que ya tienes**: además del PAT, el formulario de clonado ofrece la
+  sesión iniciada de **GitHub CLI (`gh`)** y **GitLab CLI (`glab`)** —el token se lee del CLI
+  en Rust, se usa en memoria con `zeroize` y no cruza el IPC— y el flujo **OAuth por código de
+  dispositivo** (RFC 8628) listo pero inactivo mientras no haya `client_id` configurado. Un
+  token de GitLab no se manda nunca a GitHub ni al revés (`POLICY`), y `clone_auth_options`
+  dice qué métodos hay sin pedir secretos ([`docs/oauth-cli.md`](docs/oauth-cli.md)).
+- **E2E y regresión visual en CI**: flujos de extremo a extremo con `tauri-driver` y
+  WebKitWebDriver sobre la app empaquetada, incluido el riel y su menú contextual, 16 capturas
+  por sistema operativo con `pixelmatch`, job `e2e` en Linux (con modo `update_baselines` que
+  publica los baselines como artefacto) y baselines de Linux versionados.
+- **Política de firma de código**: README y [`docs/firma-de-codigo.md`](docs/firma-de-codigo.md)
+  con la política de SignPath (artefactos, aprobadores y privacidad) y la
+  [`docs/solicitud-signpath.md`](docs/solicitud-signpath.md) lista para enviar.
+- Documentación nueva: [`docs/menu-ramas.md`](docs/menu-ramas.md) (tabla de acciones del
+  menú), [`docs/ia-copilot.md`](docs/ia-copilot.md) (qué está verificado de Copilot),
+  [`docs/oauth-cli.md`](docs/oauth-cli.md) (registro de la app OAuth),
+  [`docs/privacidad.md`](docs/privacidad.md) y [`docs/windows-sin-instalar.md`](docs/windows-sin-instalar.md);
+  el README pasa a estar en inglés y estrena la tabla de verificación.
 
 ### Cambiado
 - Preparar o quitar de preparados más de 2 000 rutas usa órdenes de índice lineales
@@ -84,6 +123,6 @@ Primera versión alfa de la reescritura en Rust + Tauri 2 + Svelte (multiplatafo
   de texto.
 - La barra lateral abre el panel de Ramas y la IA devuelve siempre una descripción.
 
-[Sin publicar]: https://github.com/jamartif/Ariadna/compare/408b0fb...HEAD
+[Sin publicar]: https://github.com/jamartif/Ariadna/compare/v0.1.0-alpha.3...HEAD
 [0.1.0-alpha.2]: https://github.com/jamartif/Ariadna/compare/v0.1.0-alpha.1...408b0fb
 [0.1.0-alpha.1]: https://github.com/jamartif/Ariadna/commit/1ecdd35
