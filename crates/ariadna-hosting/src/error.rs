@@ -100,4 +100,10 @@ impl HostingError {
             message: message.into(),
         }
     }
+
+    pub(crate) fn policy(message: impl Into<String>) -> Self {
+        HostingError::Policy {
+            message: message.into(),
+        }
+    }
 }

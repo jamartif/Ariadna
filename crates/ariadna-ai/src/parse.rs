@@ -217,21 +217,147 @@ pub fn parse_codex(stdout: &str) -> Result<ParsedReply, AiError> {
     }
 }
 
-/// Copilot `-s`: texto plano. Quita secuencias ANSI. **NO VERIFICADO**.
-pub fn parse_copilot(stdout: &str) -> Result<ParsedReply, AiError> {
-    let clean = regexes().2.replace_all(stdout, "");
-    let text = clean.trim();
-    if text.is_empty() {
-        return Err(AiError::BadOutput("respuesta vacía".into()));
+/// Texto del mensaje del asistente en un evento `assistant.message` de Copilot.
+fn copilot_message_text(event: &Value) -> Option<String> {
+    let text = event.get("data")?.get("content")?.as_str()?;
+    (!text.trim().is_empty()).then(|| text.to_string())
+}
+
+/// Nota de transparencia: peticiones premium (`result.usage`) y tokens
+/// (`session.usage_checkpoint.accountingSnapshot.tokenDetails`), si vienen.
+fn copilot_note(usage: Option<&Value>, tokens: Option<CopilotTokens>) -> Option<String> {
+    let premium = usage
+        .and_then(|u| u.get("premiumRequests"))
+        .and_then(Value::as_u64);
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(p) = premium {
+        parts.push(if p == 1 {
+            "1 petición premium".to_string()
+        } else {
+            format!("{p} peticiones premium")
+        });
     }
-    // Un error con código 0 suele ser corto y empezar por «Error»: no es una respuesta.
-    if text.len() < 400 && text.to_ascii_lowercase().starts_with("error") {
-        return Err(failure_error(ProviderId::Copilot, None, text));
+    if let Some(t) = tokens {
+        // El CLI separa el input cobrado del que sale de caché: se informa tal cual.
+        let cached = match t.cached {
+            Some(c) if c > 0 => format!(" ({c} en caché)"),
+            _ => String::new(),
+        };
+        parts.push(format!(
+            "{} tokens de entrada{cached}, {} de salida",
+            t.input, t.output
+        ));
     }
-    Ok(ParsedReply {
-        text: text.to_string(),
-        note: None,
+    (!parts.is_empty()).then(|| format!("Copilot: {}.", parts.join(", ")))
+}
+
+/// Tokens que declara el CLI al cerrar la sesión.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CopilotTokens {
+    input: u64,
+    cached: Option<u64>,
+    output: u64,
+}
+
+fn copilot_tokens(event: &Value) -> Option<CopilotTokens> {
+    let details = event
+        .get("data")?
+        .get("accountingSnapshot")?
+        .get("tokenDetails")?;
+    let pick = |k: &str| {
+        details
+            .get(k)
+            .and_then(|v| v.get("tokenCount"))
+            .and_then(Value::as_u64)
+    };
+    Some(CopilotTokens {
+        input: pick("input")?,
+        cached: pick("cache_read"),
+        output: pick("output")?,
     })
+}
+
+/// Copilot `--output-format json`: **JSONL**, un objeto por línea.
+///
+/// El texto final está en `{"type":"assistant.message","data":{"content":"…"}}` (los
+/// intermedios llevan `content` vacío y `toolRequests`). El cierre es
+/// `{"type":"result",…,"exitCode":N}`; los errores llegan en
+/// `{"type":"session.error","data":{"message":"…"}}`. Todo lo demás (`session.start`,
+/// `assistant.idle`, `assistant.reasoning*`, `assistant.message_delta`,
+/// `session.usage_checkpoint`…) se ignora. Verificado con copilot 1.0.112 (2026-11-14).
+pub fn parse_copilot(stdout: &str) -> Result<ParsedReply, AiError> {
+    let mut messages: Vec<String> = Vec::new();
+    let mut failure: Option<String> = None;
+    let mut exit_code: Option<i32> = None;
+    let mut usage: Option<Value> = None;
+    let mut tokens: Option<CopilotTokens> = None;
+    let mut saw_json = false;
+
+    for line in stdout.lines() {
+        // Un CLI con color podría colar secuencias ANSI dentro del JSONL.
+        let raw = regexes().2.replace_all(line, "");
+        let trimmed = raw.trim();
+        if !trimmed.starts_with('{') {
+            continue;
+        }
+        let Ok(ev) = serde_json::from_str::<Value>(trimmed) else {
+            continue;
+        };
+        if !ev.is_object() {
+            continue;
+        }
+        saw_json = true;
+        match ev.get("type").and_then(Value::as_str).unwrap_or_default() {
+            "assistant.message" => {
+                if let Some(t) = copilot_message_text(&ev) {
+                    messages.push(t);
+                }
+            }
+            "session.error" => {
+                failure = ev
+                    .get("data")
+                    .and_then(|d| d.get("message"))
+                    .and_then(Value::as_str)
+                    .map(String::from)
+                    .or(failure);
+            }
+            "result" => {
+                exit_code = ev
+                    .get("exitCode")
+                    .and_then(Value::as_i64)
+                    .and_then(|n| i32::try_from(n).ok());
+                usage = ev.get("usage").cloned();
+            }
+            "session.usage_checkpoint" => {
+                tokens = copilot_tokens(&ev).or(tokens);
+            }
+            _ => {}
+        }
+    }
+    let note = copilot_note(usage.as_ref(), tokens);
+
+    // El código de salida manda: un `session.error` de un subagente no invalida una
+    // respuesta final correcta (visto en 1.0.112).
+    if exit_code.is_some_and(|c| c != 0) {
+        return Err(failure_error(
+            ProviderId::Copilot,
+            exit_code,
+            failure.as_deref().unwrap_or("el turno terminó con error"),
+        ));
+    }
+    if !saw_json {
+        return Err(bad());
+    }
+    if let Some(text) = messages.last() {
+        return Ok(ParsedReply {
+            text: text.clone(),
+            note,
+        });
+    }
+    if let Some(f) = failure {
+        return Err(failure_error(ProviderId::Copilot, exit_code, &f));
+    }
+    Err(AiError::BadOutput("respuesta vacía".into()))
 }
 
 /// Despacha al parser del proveedor.
@@ -479,8 +605,8 @@ mod tests {
     const CODEX_LEGACY: &str = include_str!("../tests/fixtures/codex_legacy.jsonl");
     const CODEX_QUOTA: &str = include_str!("../tests/fixtures/codex_quota.jsonl");
     const CODEX_LOGIN: &str = include_str!("../tests/fixtures/codex_login.jsonl");
-    const COPILOT_OK: &str = include_str!("../tests/fixtures/copilot_ok.txt");
-    const COPILOT_LOGIN: &str = include_str!("../tests/fixtures/copilot_login.txt");
+    const COPILOT_OK: &str = include_str!("../tests/fixtures/copilot_ok.jsonl");
+    const COPILOT_ERROR: &str = include_str!("../tests/fixtures/copilot_error.jsonl");
 
     #[test]
     fn claude_golden_con_banner_y_campos_extra() {
@@ -591,29 +717,101 @@ mod tests {
     }
 
     #[test]
-    fn copilot_texto_plano_y_ansi() {
+    fn copilot_golden_jsonl_real() {
+        let r = parse_copilot(COPILOT_OK).unwrap();
+        // Texto real del modelo para un prompt de mensaje de commit (asunto + cuerpo, sin vallas).
         assert_eq!(
-            parse_copilot(COPILOT_OK).unwrap().text,
-            "feat: parsear status\n\nUsa porcelain v2."
+            r.text,
+            "Añade un analizador para el formato porcelain v2\n\nProcesa la salida línea por línea y conserva únicamente las entradas válidas."
         );
-        assert_eq!(parse_copilot("\x1b[32mhola\x1b[0m\n").unwrap().text, "hola");
-        assert!(parse_copilot("  \n").is_err());
+        let (subject, body) = split_commit_message(&r.text);
+        assert_eq!(subject, "Añade un analizador para el formato porcelain v2");
+        assert!(body.starts_with("Procesa la salida"));
+        // Nota con peticiones premium y tokens del checkpoint real (recortado).
+        assert_eq!(
+            r.note.as_deref(),
+            Some("Copilot: 1 petición premium, 3 tokens de entrada (1337 en caché), 88 de salida.")
+        );
     }
 
     #[test]
-    fn copilot_error_con_codigo_cero_se_clasifica() {
-        match parse_copilot(COPILOT_LOGIN) {
-            Err(AiError::NotLoggedIn { login_command, .. }) => {
+    fn copilot_ignora_eventos_de_ruido_y_toma_el_ultimo_mensaje() {
+        // `session.info` de la captura real: el catálogo de herramientas quedó vacío.
+        assert!(COPILOT_OK.contains("Unknown tool name in the tool allowlist"));
+        let ruido = [
+            r#"{"type":"session.start","data":{"sessionId":"x"}}"#,
+            r#"{"type":"assistant.message_delta","data":{"deltaContent":"OK"}}"#,
+            r#"{"type":"assistant.idle","data":{}}"#,
+            r#"{"type":"result","exitCode":0,"usage":{"premiumRequests":2}}"#,
+        ]
+        .join("\n");
+        let con_texto = format!(
+            "{ruido}\n{}\n",
+            r#"{"type":"assistant.message","data":{"content":"hola"}}"#
+        );
+        let r = parse_copilot(&con_texto).unwrap();
+        assert_eq!(r.text, "hola");
+        assert_eq!(r.note.as_deref(), Some("Copilot: 2 peticiones premium."));
+        // Sin mensaje del asistente no hay respuesta que dar.
+        assert!(matches!(parse_copilot(&ruido), Err(AiError::BadOutput(_))));
+    }
+
+    #[test]
+    fn copilot_sin_json_o_vacio_es_formato_no_reconocido() {
+        for s in ["", "  \n", "texto plano", "\u{1b}[31mno json\u{1b}[0m"] {
+            assert_eq!(
+                parse_copilot(s),
+                Err(AiError::BadOutput(UNRECOGNIZED.into())),
+                "{s}"
+            );
+        }
+        // JSONL válido pero sin mensaje: respuesta vacía, nunca texto crudo.
+        assert_eq!(
+            parse_copilot(r#"{"type":"session.start","data":{}}"#),
+            Err(AiError::BadOutput("respuesta vacía".into()))
+        );
+    }
+
+    #[test]
+    fn copilot_error_real_del_cli() {
+        // Capturado: `--model` inexistente → `session.error` + `exitCode: 1`.
+        match parse_copilot(COPILOT_ERROR) {
+            Err(AiError::ProviderFailed {
+                provider,
+                exit_code,
+                detail,
+            }) => {
+                assert_eq!(provider, ProviderId::Copilot);
+                assert_eq!(exit_code, Some(1));
+                assert!(detail.contains("is not available"), "{detail}");
+            }
+            other => panic!("{other:?}"),
+        }
+        let e = error_from_failed_run(ProviderId::Copilot, Some(1), COPILOT_ERROR, "");
+        assert!(matches!(e, AiError::ProviderFailed { .. }));
+    }
+
+    /// Texto de error **no capturado** (no se puede cerrar sesión sin tocar las credenciales
+    /// del usuario): se comprueba solo que el clasificador lo reconoce.
+    #[test]
+    fn copilot_login_y_cuota_por_patron() {
+        match classify_failure(
+            ProviderId::Copilot,
+            "Error: not logged in. Run `copilot login`",
+        ) {
+            Some(AiError::NotLoggedIn { login_command, .. }) => {
                 assert_eq!(login_command, "copilot login")
             }
             other => panic!("{other:?}"),
         }
-    }
-
-    #[test]
-    fn un_diff_que_dice_unauthorized_no_es_un_error() {
-        let r = parse_copilot("fix: devuelve 401 unauthorized correctamente").unwrap();
-        assert!(r.text.contains("unauthorized"));
+        assert!(matches!(
+            classify_failure(ProviderId::Copilot, "HTTP 429 Too Many Requests"),
+            Some(AiError::Quota { .. })
+        ));
+        // Un mensaje del asistente que mencione «unauthorized» no se clasifica: solo se
+        // miran salidas de fallo.
+        let ok = r#"{"type":"assistant.message","data":{"content":"fix: devuelve 401 unauthorized correctamente"}}"#;
+        assert!(parse_copilot(ok).unwrap().text.contains("unauthorized"));
     }
 
     #[test]

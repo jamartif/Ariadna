@@ -257,6 +257,28 @@ async fn timeout_duro() {
     assert!(t.elapsed() < Duration::from_secs(10));
 }
 
+/// Copilot: si el CLI se cuelga sin escribir `assistant.message`, no se espera para siempre.
+#[tokio::test]
+async fn copilot_colgado_termina_en_timeout_tipado() {
+    for behavior in ["sleep", "empty"] {
+        let (mut cfg, _fx) = config(ProviderId::Copilot, behavior, None);
+        cfg.timeout = Duration::from_millis(400);
+        let p = CliProvider::new(cfg);
+        let t = Instant::now();
+        let r = p.suggest_commit_message(&ctx(), DIFF, None).await;
+        assert!(
+            matches!(
+                r,
+                Err(AiError::Timeout {
+                    provider: ProviderId::Copilot
+                }) | Err(AiError::BadOutput(_))
+            ),
+            "{behavior}: {r:?}"
+        );
+        assert!(t.elapsed() < Duration::from_secs(10));
+    }
+}
+
 #[tokio::test]
 async fn cancelacion_mata_al_hijo() {
     let (p, _fx) = provider(ProviderId::Codex, "sleep");
@@ -387,9 +409,14 @@ async fn copilot_mensaje_de_commit_sin_git_ni_escritura() {
     assert_eq!(s.subject.as_deref(), Some("feat: parsear status"));
     assert_eq!(s.body, "Usa porcelain v2.");
     assert!(s.proposed_content.is_none());
-    assert!(s.command_summary.contains("copilot -p"));
+    assert!(s.command_summary.contains("copilot --output-format json"));
     assert!(!s.command_summary.contains("+hola"));
     assert_eq!(s.repo_revision, "rev-1");
+    // JSONL real: la nota sale de `result.usage` y del checkpoint de tokens.
+    assert_eq!(
+        s.transparency_note.as_deref(),
+        Some("Copilot: 1 petición premium, 7 tokens de entrada, 5 de salida.")
+    );
 
     let d = dumps(&fx);
     assert_eq!(d.len(), 1);
@@ -399,13 +426,79 @@ async fn copilot_mensaje_de_commit_sin_git_ni_escritura() {
         .iter()
         .map(|v| v.as_str().unwrap())
         .collect();
-    for needed in ["-p", "-s", "--no-ask-user", "--deny-tool", "shell", "write"] {
+    for needed in [
+        "--output-format",
+        "json",
+        "--no-ask-user",
+        "--disable-builtin-mcps",
+        "--disable-client-telemetry",
+        "--deny-tool",
+        "--available-tools",
+        "--no-auto-update",
+    ] {
         assert!(argv.contains(&needed), "{needed}");
     }
     assert!(!argv.contains(&"git"));
     assert!(!argv.iter().any(|a| a.contains("allow-tool")));
     let stdin = d[0]["stdin"].as_str().unwrap();
     assert!(stdin.contains("Do not run tools") && stdin.contains("+hola"));
+}
+
+/// Prueba opcional contra el CLI **real** (no entra en CI: `#[ignore]`).
+///
+/// `ARIADNA_REAL_COPILOT=1 cargo test -p ariadna-ai -- --ignored copilot_real`
+///
+/// Comprueba la cadena completa con la configuración de producción: detección → `--version`
+/// → args → prompt por stdin → JSONL. Necesita el CLI instalado y la sesión iniciada; gasta
+/// una petición premium.
+#[tokio::test]
+#[ignore = "habla con el CLI real: requiere copilot instalado y con sesión"]
+async fn copilot_real_instalado_responde_por_stdin_y_sin_herramientas() {
+    if std::env::var_os("ARIADNA_REAL_COPILOT").is_none() {
+        return;
+    }
+    let sandbox = std::env::temp_dir().join("ariadna-ai-real-copilot");
+    let mut cfg = CliProviderConfig::new(ProviderId::Copilot, &sandbox);
+    cfg.search = ariadna_ai::resolve::SearchEnv::from_process();
+    cfg.timeout = Duration::from_secs(180);
+    let p = CliProvider::new(cfg);
+
+    match p.availability().await {
+        Availability::Available { version, binary } => {
+            assert!(
+                version.chars().any(|c| c.is_ascii_digit()),
+                "sin versión: {version} ({binary:?})"
+            );
+        }
+        other => panic!("Copilot debería estar instalado: {other:?}"),
+    }
+
+    let s = p
+        .suggest_commit_message(&ctx(), "diff --git a/a.rs b/a.rs\n+let x = 1;\n", None)
+        .await
+        .unwrap();
+    assert_eq!(s.provider, ProviderId::Copilot);
+    assert!(s.subject.as_deref().is_some_and(|t| !t.trim().is_empty()));
+    let _ = std::fs::remove_dir_all(&sandbox);
+}
+
+/// Regresión: `-p -` **no** lee stdin en copilot 1.0.112; el modelo recibe el guion «-» como
+/// prompt y se pone a explorar el directorio con herramientas (se le vio leer el propio
+/// fichero del prompt). El prompt va por stdin a secas: sin `-p`, sin `--prompt` y sin `-`.
+#[test]
+fn copilot_nunca_recibe_p_ni_el_marcador_de_stdin() {
+    let args: Vec<String> = build_args(ProviderId::Copilot)
+        .into_iter()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    for prohibido in ["-p", "--prompt", "-", "-s"] {
+        assert!(
+            !args.iter().any(|a| a == prohibido),
+            "`{prohibido}` no debe estar en los argumentos de Copilot: {args:?}"
+        );
+    }
+    // La única fuente del prompt es stdin, y el CLI lo confirma como prompt.
+    assert!(ariadna_ai::commands::prompt_via_stdin(ProviderId::Copilot));
 }
 
 const CONFLICT_ORIGINAL: &str =

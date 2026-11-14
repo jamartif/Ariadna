@@ -6,16 +6,23 @@ Regla del checklist: lo que no se pueda comprobar se marca **NO VERIFICADO** con
 
 ## 0. Qué está verificado y qué no
 
+Verificación hecha el **2026-11-14** en Windows 11 x64 con `GitHub Copilot CLI 1.0.112`
+(`@github/copilot 1.0.110` de npm + binario nativo `1.0.112`; también con el lanzador de WSL).
+Copilot pasa a **verificado** en flags, prompt por stdin, JSONL, denegación de herramientas y
+detección; lo que sigue sin verificar se marca con su motivo.
+
 | Tema | Claude Code | Codex CLI | GitHub Copilot CLI |
 |---|---|---|---|
-| Binario y `--version` | ✅ `claude 2.1.319` (Windows) | ❌ NO VERIFICADO: CLI no instalado en la máquina de desarrollo | ❌ NO VERIFICADO: ídem |
-| Flags de `build_args` | ✅ `-p --output-format json --tools "" --strict-mcp-config --disable-slash-commands --no-session-persistence --permission-mode plan` | ❌ NO VERIFICADO (`exec --json --sandbox read-only --skip-git-repo-check -`) | ❌ NO VERIFICADO (`-p - -s --no-ask-user --disable-builtin-mcps --disable-client-telemetry --deny-tool … --excluded-tools …`) |
-| Prompt por stdin | ✅ | ❌ NO VERIFICADO (`-` como marcador de stdin) | ❌ NO VERIFICADO (`COPILOT_READS_STDIN` es una hipótesis) |
-| Formato de salida / golden files | ⚠️ fixtures reconstruidos, no capturados | ❌ reconstruidos | ❌ reconstruidos |
-| Cuenta activa (RF-IA12) | ✅ `claude auth status --json` (`loggedIn`, `email`, `orgName`, `subscriptionType`, `authMethod`, `configDirectory`; sale con 1 sin sesión) | ❌ NO VERIFICADO: no se ejecuta ningún subcomando de estado; la UI dice «Cuenta no disponible» | ❌ NO VERIFICADO: ídem |
-| Aislamiento de sesión | ✅ `CLAUDE_CONFIG_DIR` (directorio vacío → `loggedIn: false`; `configDirectory` refleja el directorio) | ⚠️ `CODEX_HOME` según la documentación, **no probado** | ❌ sin mecanismo confirmado (`COPILOT_HOME`, `--config-dir` o `XDG_CONFIG_HOME` son candidatas sin usar) → **comparte login** y la UI lo avisa |
-| Comando de login | ✅ `claude auth login` (opciones `--claudeai`, `--console`, `--sso`, `--email`) | ❌ NO VERIFICADO: `codex login` | ❌ NO VERIFICADO: `copilot login` |
+| Binario y `--version` | ✅ `claude 2.1.319` (Windows) | ❌ NO VERIFICADO: CLI no instalado en la máquina de desarrollo | ✅ `1.0.112` → `GitHub Copilot CLI 1.0.112.` (Windows 11 x64). Detectado como `.exe` nativo del paquete de plataforma; si falta, el cargador `npm-loader.js` con `node.exe` |
+| Flags de `build_args` | ✅ `-p --output-format json --tools "" --strict-mcp-config --disable-slash-commands --no-session-persistence --permission-mode plan` | ❌ NO VERIFICADO (`exec --json --sandbox read-only --skip-git-repo-check -`) | ✅ `--output-format json --no-ask-user --disable-builtin-mcps --disable-client-telemetry --deny-tool shell write read url memory task --available-tools ariadna-no-tools --no-auto-update` (**sin `-p`**: ver abajo) |
+| Prompt por stdin | ✅ | ❌ NO VERIFICADO (`-` como marcador de stdin) | ✅ **sin `-p`**: con stdin canalizado el CLI lo usa como prompt (el evento `user.message` del JSONL lleva el texto exacto). `-p -` **NO** lee stdin: manda el literal «-» al modelo |
+| Uso de herramientas | ✅ `--tools ""` | ❌ NO VERIFICADO (`--sandbox read-only`) | ✅ catálogo vacío + `--deny-tool`; verificado pidiéndole shell y escritura: cero `tool.execution_start`, fichero no creado |
+| Formato de salida / golden files | ⚠️ fixtures reconstruidos, no capturados | ❌ reconstruidos | ✅ JSONL capturado (`copilot_ok.jsonl`, `copilot_error.jsonl`) |
+| Cuenta activa (RF-IA12) | ✅ `claude auth status --json` (`loggedIn`, `email`, `orgName`, `subscriptionType`, `authMethod`, `configDirectory`; sale con 1 sin sesión) | ❌ NO VERIFICADO: no se ejecuta ningún subcomando de estado; la UI dice «Cuenta no disponible» | ❌ NO EXISTE: `copilot help` no tiene subcomando de cuenta ni de estado (app, login, init, config, update, version, workflow, sessions, memories, plugin, mcp, skill, instruction, lsp, sandbox, completion). La UI dice «Cuenta no disponible» |
+| Aislamiento de sesión | ✅ `CLAUDE_CONFIG_DIR` (directorio vacío → `loggedIn: false`; `configDirectory` refleja el directorio) | ⚠️ `CODEX_HOME` según la documentación, **no probado** | ❌ **verificado que no se puede**: `COPILOT_HOME` con un directorio vacío mueve configuración y estado, pero el token OAuth está en el llavero del sistema y la sesión **sigue activa** → **comparte login** y la UI lo avisa |
+| Comando de login | ✅ `claude auth login` (opciones `--claudeai`, `--console`, `--sso`, `--email`) | ❌ NO VERIFICADO: `codex login` | ⚠️ `copilot login` **existe** y `copilot login --with-token` procesa el token (probado con un PAT clásico: «Login failed: … not supported»); el flujo OAuth del navegador **NO VERIFICADO** → `verified = false` |
 | Apertura de terminal (`ai_login`) | Windows: `cmd /c start` y macOS: `open` — compilado, **no ejecutado a mano**; solo probado con una terminal falsa | | |
+
 
 Pendiente de la propia spec: RF-IA10 (términos de uso de Anthropic, OpenAI y GitHub citados con fecha antes de `alpha.2`).
 
@@ -35,6 +42,23 @@ Para cada CLI, en cada plataforma:
 - [ ] **macOS**: instalado con Homebrew (`/opt/homebrew/bin`) y con npm; Ariadna se abre desde el Finder (el `PATH` de una app gráfica no es el de la terminal) y aun así lo encuentra, o lo indica con claridad.
 - [ ] Desinstalado: «No encontrado» con el comando para instalarlo, sin error técnico.
 
+## 2.1 Copilot: mediciones reales del 2026-11-14 (`copilot 1.0.112`, Windows 11 x64)
+
+Se ejecutaron estos comandos desde una carpeta **vacía** (git-bash y binario nativo). Las
+capturas se guardaron en `crates/ariadna-ai/tests/fixtures/copilot_*.jsonl`.
+
+| Qué se probó | Resultado |
+|---|---|
+| `copilot --version` | `GitHub Copilot CLI 1.0.112.` (exit 0) |
+| `printf '…' \| copilot -p - --output-format json` | **Falla la premisa**: el evento `user.message` lleva `"content": "-"`. El modelo no ve el texto de stdin; para «resolverlo» **usa herramientas** y lee ficheros del directorio (se le vio `view` sobre el propio `prompt.txt`). Se descarta. |
+| `printf '…' \| copilot --output-format json …` (sin `-p`) | ✅ `user.message.data.content` = el prompt exacto y respuesta correcta en ~5 s. **Es la forma que usa Ariadna.** |
+| `--available-tools` sin valores | El CLI lo ignora (catálogo completo). Hace falta un nombre inexistente: `--available-tools ariadna-no-tools`. |
+| `--deny-tool shell --deny-tool write` + `--disable-builtin-mcps` | `session.info` confirma «Disabled tools: create, edit, glob, grep, powershell, task, view, web_fetch, …» y los MCP integrados en `disabled`. |
+| Prompt que pide ejecutar `echo PWNED > marker.txt` | Cero `tool.execution_start`, `marker.txt` no existe, respuesta «NO-TOOLS». |
+| `--model modelo-que-no-existe` | `session.error` + `result` con `exitCode: 1` (fixture `copilot_error.jsonl`): el parser devuelve error tipado. |
+| `COPILOT_HOME` vacío | El CLI crea allí `settings.json`, sesiones, logs y plugins… y **sigue autenticado** (token en el llavero). |
+| Lanzador de WSL `/usr/local/bin/copilot` | Script que hace `exec node.exe npm-loader.js "$@"`: se resuelve como nativo y funciona. Ojo: al pasar por `node.exe` de Windows una tubería de Linux puede no llegar bien por stdin; Ariadna no depende de ello (en WSL se lanza el propio lanzador con stdin del hijo). |
+
 ## 3. Sesiones aisladas por perfil e inicio de sesión (D16, RF-IA12)
 
 **Claude (verificable)**
@@ -51,10 +75,13 @@ Para cada CLI, en cada plataforma:
 - [ ] ¿`CODEX_HOME` aísla de verdad la sesión? Con un directorio vacío, `codex login status` debe dar «sin sesión»; tras login en Empresa, la sesión normal no cambia. Si no, marcar `isolationVerified` y el aviso de «comparte sesión» para Codex.
 - [ ] `codex login` abre el flujo oficial desde «Abrir terminal»; ¿pide algo por la propia terminal?
 
-**Copilot — NO VERIFICADO (comprobar y anotar)**
-- [ ] `copilot login` (¿existe con ese nombre?). ¿Dónde guarda la sesión? Probar `COPILOT_HOME`, `--config-dir` y `XDG_CONFIG_HOME`/`APPDATA` con un directorio vacío. Si alguno aísla, añadirlo a `isolation()` en `env.rs` y activar el aislamiento; si no, **confirmar** que comparte login y que el aviso de Ajustes y del login se ve en Personal y en Empresa.
-- [ ] ¿Expone la cuenta (p. ej. `copilot` → estado, `gh auth status`)? Anotar; Ariadna no lee `~/.copilot` ni el llavero.
-- [ ] Política de la organización: ¿el CLI de Copilot está permitido para la cuenta de empresa? ¿Hay que declarar un token (`GH_TOKEN`) en Ajustes? Anotar cómo falla si no.
+**Copilot — verificado el 2026-11-14 con `GitHub Copilot CLI 1.0.112` (lo que queda, aparte)**
+- [x] `copilot login` existe (`copilot login --help`) y `copilot login --with-token` procesa el token que recibe por stdin (con un PAT clásico responde «Login failed: Error: Classic personal access tokens (ghp_) are not supported…»).
+- [ ] **NO VERIFICADO**: el flujo OAuth del navegador desde «Abrir terminal» (no se ha recorrido a mano). Mientras no se pruebe, `ai_login` devuelve `verified = false` y la UI avisa.
+- [x] ¿Dónde guarda la sesión? En el **llavero/almacén de credenciales del sistema**; `~/.copilot` (o `COPILOT_HOME`) solo tiene configuración, sesiones, plugins y logs. Con `COPILOT_HOME` apuntando a un directorio vacío el CLI **sigue autenticado** → **no se puede aislar el login**; se queda `sharesLogin = true`, `config_dir_var(None)` y el aviso en Ajustes. NO usar `COPILOT_HOME` para fingir aislamiento.
+- [x] ¿Expone la cuenta? **No**: `copilot help` lista app, login, init, config, update, version, workflow, sessions, memories, plugin, mcp, skill, instruction, lsp, sandbox y completion, ninguno de cuenta o estado de sesión. Ariadna no lee `~/.copilot` ni el llavero: la UI dice «Cuenta no disponible».
+- [ ] **NO VERIFICADO**: política de la organización (¿permite el CLI? ¿bloquea el modelo?), cuota agotada y sesión caducada con textos reales (`classify_failure` los reconoce por patrón, sin captura), y macOS.
+
 
 ## 4. Mensaje de commit (RF-IA1/3/5/6/7/8/9)
 
@@ -70,7 +97,7 @@ Por cada CLI y plataforma, con el repo de prueba:
 - [ ] Modo Auto: salta de proveedor solo si el anterior no está instalado, y solo entre habilitados y con consentimiento.
 - [ ] Empresa: Claude desactivado por defecto; Auto recorre solo Codex → Copilot.
 - [ ] Con el diff por encima del tope (100 000 bytes) no se lanza el CLI.
-- [ ] Windows `.cmd`: un prompt grande (> 8 191 caracteres) llega íntegro por stdin; Copilot: si no lee stdin, documentar el tope propio (RF-IA1).
+- [ ] Windows `.cmd`: un prompt grande (> 8 191 caracteres) llega íntegro por stdin. Copilot: **verificado que lee stdin sin `-p`**; el tope propio no hace falta, el de contexto (100 000 bytes) ya bloquea antes de lanzar.
 
 ## 5. Hoja de propuesta
 
@@ -101,6 +128,7 @@ No hay interfaz de PR (M8). Se prueba invocando el comando desde las herramienta
 
 | Fecha | Plataforma | CLI y versión | Cuenta (tipo, sin datos personales) | Apartado | Resultado | Notas / cambios necesarios |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 2026-11-14 | Windows 11 x64 | `GitHub Copilot CLI 1.0.112` | cuenta de desarrollo (personal) | §2, §2.1, §4 (flags, stdin, JSONL, herramientas) | **OK** | `commands.rs`: args reescritos y verificados (sin `-p`); `parse.rs`: JSONL real; `resolve.rs`: `.exe` del paquete de plataforma; fixtures `copilot_ok.jsonl` y `copilot_error.jsonl` capturados |
+| 2026-11-14 | Windows 11 x64 | `GitHub Copilot CLI 1.0.112` | ídem | §3 (sesión, cuenta, login) | **PARCIAL** | Comparte login (`COPILOT_HOME` no aísla el token); sin subcomando de cuenta; flujo OAuth del navegador **NO VERIFICADO** |
 
 Al terminar: actualizar la tabla de §0, `tasks.md` (M6) y los `SPIKE` de `commands.rs`; capturar los golden files reales; cerrar RF-IA10.

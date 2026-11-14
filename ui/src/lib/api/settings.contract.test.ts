@@ -15,7 +15,7 @@ describe('contrato: Ajustes (mock = formas de ipc.md)', () => {
   });
 
   it('los validadores detectan claves inventadas y valores fuera de rango', () => {
-    const base = { version: 1, language: 'es', theme: 'dark', diffFontSize: 13, gitPath: null, pullRebase: false, profileRules: [] };
+    const base = { version: 1, language: 'es', theme: 'dark', diffFontSize: 13, gitPath: null, pullRebase: false, profileRules: [], oauthGitHubClientId: null, oauthGitLabClientId: 'Iv1.abc' };
     expect(check(appSettings, base)).toEqual([]);
     expect(check(appSettings, { ...base, theme: 'fucsia' }).join()).toMatch(/fuera de/);
     expect(check(appSettings, { ...base, extra: 1 }).join()).toMatch(/clave desconocida/);

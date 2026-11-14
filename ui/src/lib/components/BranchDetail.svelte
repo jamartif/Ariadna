@@ -6,6 +6,7 @@
   import { prOf } from '$lib/stores/pullRequests.svelte';
   import { remotesOf } from '$lib/stores/remotes.svelte';
   import { branchNameProblem } from '$lib/util/branchName';
+  import BranchDiff from './BranchDiff.svelte';
   import EmptyState from './EmptyState.svelte';
   import Icon from './Icon.svelte';
 
@@ -176,6 +177,12 @@
     {/if}
     {#if br.isHead}<p class="note"><Icon name="info" size={12} />{t('branches.cannotDeleteCurrent')}</p>{/if}
     {#if remote}<p class="note"><Icon name="info" size={12} />{t('branches.remoteNote')}</p>{/if}
+
+    {#if b.diffBusy && !b.diff}
+      <p class="note" role="status"><Icon name="loader" size={12} spin />{t('rail.menu.diffLoading')}</p>
+    {:else if b.diff?.head === br.name}
+      <BranchDiff {tab} head={br.name} />
+    {/if}
   {/if}
 </section>
 

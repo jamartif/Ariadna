@@ -217,6 +217,32 @@ impl GitServing for GitCliEngine {
     ) -> GitResult<MergeResult> {
         self.merge(repo, branch, fast_forward).await
     }
+    async fn rebase_onto(
+        &self,
+        repo: &Repository,
+        onto: &str,
+        confirmation: &Confirmation,
+    ) -> GitResult<MergeResult> {
+        self.rebase_onto(repo, onto, confirmation).await
+    }
+    async fn delete_remote_branch(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        name: &str,
+        confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        self.delete_remote_branch(repo, remote, name, confirmation)
+            .await
+    }
+    async fn diff_against(
+        &self,
+        repo: &Repository,
+        base: &str,
+        head: &str,
+    ) -> GitResult<Vec<FileDiff>> {
+        self.diff_against(repo, base, head).await
+    }
     async fn integration_state(&self, repo: &Repository) -> GitResult<IntegrationState> {
         self.integration_state(repo).await
     }

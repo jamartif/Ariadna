@@ -16,8 +16,8 @@ use crate::conflict::conflict_hunks;
 use crate::error::{truncate, GitError, GitResult};
 use crate::listings::{parse_branches, parse_remotes};
 use crate::models::{
-    Branch, ConflictFile, ConflictKind, ConflictSide, GitPath, IntegrationState, MergeFastForward,
-    MergeResult, Remote, RemoteCheckout, Repository,
+    Branch, ConflictFile, ConflictKind, ConflictSide, DiffScope, FileDiff, GitPath,
+    IntegrationState, MergeFastForward, MergeResult, Remote, RemoteCheckout, Repository,
 };
 use crate::path_safety::{
     git_pathspec_args, validate_ref, validate_repo_path_components, validate_revision_arg,
@@ -830,6 +830,26 @@ impl GitCliEngine {
         Ok(())
     }
 
+    /// Borra una rama en el **remoto** (`git push <remote> --delete <rama>`). No toca la copia
+    /// local ni las ramas de seguimiento. Destructivo para quien la use: exige [`Confirmation`].
+    pub async fn delete_remote_branch(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        name: &str,
+        _confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        check_ref(remote)?;
+        check_ref(name)?;
+        self.bo_ok(
+            repo,
+            CommandKind::Network,
+            &["push", remote, "--delete", name],
+        )
+        .await?;
+        Ok(())
+    }
+
     /// `pull` con merge (`--no-rebase`) o rebase. Un conflicto no es un error: devuelve
     /// `Conflicts` y deja la integración en curso.
     pub async fn pull(
@@ -886,6 +906,65 @@ impl GitCliEngine {
             MergeResult::FastForward { new_head: after }
         } else {
             MergeResult::Merged { new_head: after }
+        })
+    }
+
+    /// `git diff A...B`: lo que `head` aporta desde que se separó de `base` (el diff va de la
+    /// base común a `head`). Se resuelve la base con `merge-base`; sin historia común es un
+    /// `InvalidReference` (no hay nada que comparar).
+    pub async fn diff_against(
+        &self,
+        repo: &Repository,
+        base: &str,
+        head: &str,
+    ) -> GitResult<Vec<FileDiff>> {
+        check_rev(base)?;
+        check_rev(head)?;
+        let out = self
+            .bo_raw(repo, CommandKind::Read, &["merge-base", base, head])
+            .await?;
+        let common = out.stdout_lossy().trim().to_owned();
+        if !out.success() || common.is_empty() {
+            return Err(GitError::InvalidReference(format!("{base}...{head}")));
+        }
+        let scope = DiffScope::Between {
+            base: common,
+            head: head.to_owned(),
+        };
+        self.diff(repo, &scope, &[]).await
+    }
+
+    /// Rebasa la rama actual sobre `onto` (`git rebase <onto>`): los commits que solo están en
+    /// HEAD se reescriben encima de `onto`. Un conflicto no es un error: devuelve `Conflicts` y
+    /// deja el rebase **en curso** (se continúa con `continue_integration` o se aborta). Antes de
+    /// tocar nada se rechazan los cambios sin confirmar que chocarían (como `checkout`). La
+    /// [`Confirmation`] es la prueba de que la capa de comandos obtuvo permiso: reescribe historia.
+    pub async fn rebase_onto(
+        &self,
+        repo: &Repository,
+        onto: &str,
+        _confirmation: &Confirmation,
+    ) -> GitResult<MergeResult> {
+        check_rev(onto)?;
+        let Some(before) = self.bo_rev(repo, "HEAD").await? else {
+            return Err(GitError::InvalidReference("HEAD".into()));
+        };
+        let target = self.bo_rev(repo, &format!("{onto}^{{commit}}")).await?;
+        let Some(target) = target else {
+            return Err(GitError::InvalidReference(onto.to_owned()));
+        };
+        self.bo_guard_local_changes(repo, &target).await?;
+        let out = self
+            .bo_raw(repo, CommandKind::Mutate, &["rebase", onto])
+            .await?;
+        if !out.success() {
+            return self.bo_conflicts_or_error(repo, "rebase", &out).await;
+        }
+        let after = self.bo_rev(repo, "HEAD").await?;
+        Ok(match after {
+            Some(a) if a == before => MergeResult::UpToDate,
+            Some(a) => MergeResult::Merged { new_head: a },
+            None => return Err(GitError::Parse("HEAD no resuelve tras el rebase".into())),
         })
     }
 

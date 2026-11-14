@@ -182,6 +182,22 @@ describe('axe: riel de ramas, detalle y remotos', () => {
   });
 });
 
+describe('axe: menú contextual del riel', () => {
+  it('menú de acciones abierto (rama actual, con acciones deshabilitadas)', async () => {
+    const ctx = await loadedTab('tab-ariadna');
+    render(BranchRail, {
+      props: { tab: ctx.tab, collapsed: false, ontoggle: vi.fn(), oninspect: vi.fn(), onrepo: vi.fn() }
+    });
+    const nav = await screen.findByRole('navigation', { name: 'Árbol de ramas' });
+    const currentRow = [...nav.querySelectorAll<HTMLElement>('[data-brail-name]')].find((r) => r.dataset.brailName === 'rust-migration');
+    expect(currentRow).toBeDefined();
+    await userEvent.pointer({ keys: '[MouseRight]', target: currentRow as HTMLElement, coords: { clientX: 60, clientY: 120 } });
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getAllByRole('menuitem').length).toBeGreaterThan(10);
+    await expectNoSeriousViolations();
+  });
+});
+
 describe('axe: Historial', () => {
   it('lista de commits y detalle', async () => {
     const ctx = await loadedTab('tab-ariadna');

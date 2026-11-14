@@ -2,6 +2,7 @@
   import { onDestroy, onMount, untrack } from 'svelte';
   import type { AppStore } from '$lib/stores/app.svelte';
   import { CloneFlow } from '$lib/stores/clone.svelte';
+  import type { AuthMethodId, CliAuthStatus } from '$lib/api/types';
   import { t } from '$lib/i18n';
   import { toasts } from '$lib/stores/toasts.svelte';
   import { focusTrap } from '$lib/util/focusTrap';
@@ -27,6 +28,9 @@
   const urlTouched = $derived(flow.url.trim() !== '');
   const showProblem = $derived(urlTouched && flow.problem !== null);
   const percent = $derived(flow.progress?.percent ?? null);
+  // El selector de método solo tiene sentido si hay algo más que el PAT y la URL es HTTPS.
+  const showMethods = $derived(flow.wantsCredentials && flow.methods.length > 1);
+  const oauthPanel = $derived(flow.method === 'oauth' && flow.oauthState !== 'idle');
 
   const providerName = $derived(t(provider === 'other' ? 'clone.provider.generic' : `clone.provider.${provider}`));
   const hint = $derived.by(() => {
@@ -34,6 +38,26 @@
     const parts = [g.owner, g.project, g.repo].filter((x): x is string => !!x);
     return parts.join(' / ');
   });
+
+  function cliState(id: 'gh' | 'glab'): CliAuthStatus | null {
+    return flow.authOptions?.cli.find((c) => c.id === id) ?? null;
+  }
+
+  function cliReady(id: 'gh' | 'glab'): boolean {
+    const c = cliState(id);
+    return !!c?.installed && !!c?.loggedIn;
+  }
+
+  /** Texto corto bajo el nombre del método (el estado sale de Rust, nunca de un token). */
+  function methodNote(m: AuthMethodId): string {
+    if (m === 'pat') return t('clone.method.patNote');
+    if (m === 'oauth') return t('clone.method.oauthNote');
+    const c = cliState(m as 'gh' | 'glab');
+    if (!c) return '';
+    if (!c.installed) return t('clone.method.cliMissing', { tool: m });
+    if (!c.loggedIn) return t('clone.method.cliLoggedOut', { label: c.label });
+    return c.version ? t('clone.method.version', { version: c.version }) : t('clone.method.ready');
+  }
 
   async function pickFolder() {
     const p = await app.browse();
@@ -49,6 +73,27 @@
     }
   }
 
+  async function openVerification() {
+    const url = flow.oauth?.verificationUri;
+    if (!url) return;
+    try {
+      await app.api.openExternalUrl(url);
+    } catch (e) {
+      toasts.error(t('clone.openGuideFailed'), e);
+    }
+  }
+
+  async function copyCode() {
+    const code = flow.oauth?.userCode;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      toasts.info(t('clone.method.codeCopied'));
+    } catch {
+      /* sin permiso de portapapeles: el código se ve en pantalla */
+    }
+  }
+
   function key(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -59,7 +104,10 @@
   }
 
   let urlInput = $state<HTMLInputElement>();
-  onMount(() => urlInput?.focus());
+  onMount(() => {
+    urlInput?.focus();
+    void flow.loadAuthOptions();
+  });
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -106,6 +154,7 @@
             type="text"
             value={flow.url}
             oninput={(e) => flow.setUrl(e.currentTarget.value)}
+            onblur={() => flow.loadAuthOptions()}
             placeholder="https://dev.azure.com/org/proyecto/_git/repo"
             autocomplete="off"
             autocapitalize="off"
@@ -172,58 +221,155 @@
           </button>
           {#if flow.credOpen}
             <div id="clone-cred-body" class="cred-body">
-              <div class="two">
-                <div class="row">
-                  <label class="lbl" for="clone-user">{t('clone.username')}</label>
-                  <input
-                    id="clone-user"
-                    class="field"
-                    type="text"
-                    bind:value={flow.username}
-                    placeholder={provider === 'azure' ? t('clone.usernameAzure') : t('clone.usernamePlaceholder')}
-                    autocomplete="off"
-                    autocapitalize="off"
-                    spellcheck="false"
-                  />
+              {#if showMethods}
+                <div class="methods" role="radiogroup" aria-label={t('clone.method.label')}>
+                  {#each flow.methods as m (m)}
+                    <button
+                      type="button"
+                      class="method"
+                      class:on={flow.method === m}
+                      role="radio"
+                      aria-checked={flow.method === m}
+                      disabled={cloning}
+                      onclick={() => flow.setMethod(m)}
+                    >
+                      <span class="dot" aria-hidden="true"></span>
+                      <span class="m-body">
+                        <span class="m-name">{t(`clone.method.${m}`)}</span>
+                        <span class="m-sub">{methodNote(m)}</span>
+                      </span>
+                      {#if (m === 'gh' || m === 'glab') && flow.authOptions}
+                        <span class="m-state" class:ok={cliReady(m as 'gh' | 'glab')}>
+                          {cliReady(m as 'gh' | 'glab') ? t('clone.method.ready') : t('clone.method.notReady')}
+                        </span>
+                      {/if}
+                    </button>
+                  {/each}
                 </div>
-                <div class="row">
-                  <label class="lbl" for="clone-pat">{t('clone.token')}</label>
-                  <div class="pat-wrap">
+              {/if}
+
+              {#if flow.method === 'pat'}
+                <div class="two">
+                  <div class="row">
+                    <label class="lbl" for="clone-user">{t('clone.username')}</label>
                     <input
-                      id="clone-pat"
-                      class="field mono"
-                      type={flow.showSecret ? 'text' : 'password'}
-                      bind:value={flow.secret}
-                      placeholder="••••••••••••••••"
+                      id="clone-user"
+                      class="field"
+                      type="text"
+                      bind:value={flow.username}
+                      placeholder={provider === 'azure' ? t('clone.usernameAzure') : t('clone.usernamePlaceholder')}
                       autocomplete="off"
                       autocapitalize="off"
                       spellcheck="false"
-                      data-1p-ignore
-                      data-lpignore="true"
                     />
-                    <button
-                      type="button"
-                      class="eye btn btn-ghost btn-icon btn-sm"
-                      aria-label={flow.showSecret ? t('clone.hideToken') : t('clone.showToken')}
-                      aria-pressed={flow.showSecret}
-                      onclick={() => (flow.showSecret = !flow.showSecret)}
-                    >
-                      <Icon name={flow.showSecret ? 'eye-off' : 'eye'} size={14} />
-                    </button>
+                  </div>
+                  <div class="row">
+                    <label class="lbl" for="clone-pat">{t('clone.token')}</label>
+                    <div class="pat-wrap">
+                      <input
+                        id="clone-pat"
+                        class="field mono"
+                        type={flow.showSecret ? 'text' : 'password'}
+                        bind:value={flow.secret}
+                        placeholder="••••••••••••••••"
+                        autocomplete="off"
+                        autocapitalize="off"
+                        spellcheck="false"
+                        data-1p-ignore
+                        data-lpignore="true"
+                      />
+                      <button
+                        type="button"
+                        class="eye btn btn-ghost btn-icon btn-sm"
+                        aria-label={flow.showSecret ? t('clone.hideToken') : t('clone.showToken')}
+                        aria-pressed={flow.showSecret}
+                        onclick={() => (flow.showSecret = !flow.showSecret)}
+                      >
+                        <Icon name={flow.showSecret ? 'eye-off' : 'eye'} size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-              {#if provider === 'azure'}<p class="hint"><Icon name="info" size={12} />{t('clone.azureUserHint')}</p>{/if}
-              <p class="safe"><Icon name="shield-check" size={14} /><span>{t('clone.tokenStorage')}</span></p>
+                {#if provider === 'azure'}<p class="hint"><Icon name="info" size={12} />{t('clone.azureUserHint')}</p>{/if}
+                <p class="safe"><Icon name="shield-check" size={14} /><span>{t('clone.tokenStorage')}</span></p>
 
-              {#if guide}
-                <div class="cred-actions">
-                  <button type="button" class="btn btn-ghost btn-sm link" onclick={openGuide}>
-                    {t('clone.howToPat')}<Icon name="external-link" size={12} />
-                  </button>
+                {#if guide}
+                  <div class="cred-actions">
+                    <button type="button" class="btn btn-ghost btn-sm link" onclick={openGuide}>
+                      {t('clone.howToPat')}<Icon name="external-link" size={12} />
+                    </button>
+                  </div>
+                {/if}
+                {#if guide}<p class="hint perms"><Icon name="key" size={12} />{t(guide.perms)}</p>{/if}
+              {:else if flow.method === 'gh' || flow.method === 'glab'}
+                {@const cli = cliState(flow.method)}
+                <div class="cli">
+                  <span class="cli-icon"><Icon name="terminal" size={14} /></span>
+                  <div class="cli-body">
+                    {#if cli?.installed && cli.loggedIn}
+                      <p class="cli-title">{t('clone.method.cliReady', { label: cli.label })}</p>
+                      {#if cli.version}<p class="cli-sub mono">{cli.version}</p>{/if}
+                    {:else if cli?.installed}
+                      <p class="cli-title">{t('clone.method.cliLoggedOut', { label: cli.label })}</p>
+                      <p class="cli-sub">{t('clone.method.cliCommand', { command: cli.loginCommand })}</p>
+                      <p class="cli-sub mono">{cli.loginCommand}</p>
+                    {:else}
+                      <p class="cli-title">{t('clone.method.cliMissing', { tool: flow.method })}</p>
+                      <p class="cli-sub">{t('clone.method.cliCommand', { command: flow.method === 'gh' ? 'gh auth login' : 'glab auth login' })}</p>
+                    {/if}
+                  </div>
+                </div>
+              {:else if flow.method === 'oauth'}
+                <div class="oauth">
+                  {#if !flow.oauthAvailable}
+                    <p class="hint"><Icon name="info" size={12} />{t('clone.method.oauthUnavailable')}</p>
+                  {:else if flow.oauthState === 'idle'}
+                    <button type="button" class="btn" onclick={() => flow.startOauth()} disabled={cloning}>
+                      <Icon name="external-link" size={14} />{t('clone.method.oauthStart')}
+                    </button>
+                  {:else if flow.oauthState === 'starting'}
+                    <p class="hint"><Icon name="loader" size={12} />{t('clone.method.oauthWaiting')}</p>
+                  {:else if oauthPanel && flow.oauth}
+                    <p class="lbl">{t('clone.method.oauthCode')}</p>
+                    <div class="code-row">
+                      <output class="code mono" aria-label={t('clone.method.oauthCode')}>{flow.oauth.userCode}</output>
+                      <button type="button" class="btn btn-ghost btn-sm" onclick={copyCode} aria-label={t('clone.method.copyCode')}>
+                        <Icon name="copy" size={14} />
+                      </button>
+                      <button type="button" class="btn btn-ghost btn-sm" onclick={openVerification}>
+                        <Icon name="external-link" size={12} />{t('clone.method.oauthOpen')}
+                      </button>
+                    </div>
+                    <p class="hint" class:good={flow.oauthState === 'authorized'} aria-live="polite">
+                      {#if flow.oauthState === 'waiting'}
+                        <Icon name="loader" size={12} />{t('clone.method.oauthWaiting')}
+                      {:else if flow.oauthState === 'authorized'}
+                        <Icon name="circle-check" size={12} />{t('clone.method.oauthAuthorized')}
+                      {:else if flow.oauthState === 'expired'}
+                        <Icon name="circle-alert" size={12} />{t('clone.method.oauthExpired')}
+                      {:else if flow.oauthState === 'denied'}
+                        <Icon name="ban" size={12} />{t('clone.method.oauthDenied')}
+                      {/if}
+                    </p>
+                  {:else if flow.oauthState === 'error'}
+                    <p class="hint bad"><Icon name="circle-alert" size={12} />{flow.oauthError?.message || t('clone.method.oauthError')}</p>
+                  {/if}
                 </div>
               {/if}
-              {#if guide}<p class="hint perms"><Icon name="key" size={12} />{t(guide.perms)}</p>{/if}
+
+              <div class="check-row">
+                <button type="button" class="btn btn-ghost btn-sm" onclick={() => flow.check()} disabled={!flow.canCheck}>
+                  <Icon name={flow.checkState === 'checking' ? 'loader' : 'shield-check'} size={14} />
+                  {flow.checkState === 'checking' ? t('clone.checking') : t('clone.check')}
+                </button>
+                <span class="check-msg" aria-live="polite">
+                  {#if flow.checkState === 'ok'}
+                    <span class="good"><Icon name="circle-check" size={12} />{t('clone.checkOk')}</span>
+                  {:else if flow.checkState === 'failed'}
+                    <span class="bad"><Icon name="circle-alert" size={12} />{flow.checkError?.message || t('clone.checkFailed')}</span>
+                  {/if}
+                </span>
+              </div>
             </div>
           {/if}
         </section>
@@ -396,6 +542,9 @@
   .hint.bad {
     color: var(--danger);
   }
+  .hint.good {
+    color: var(--success);
+  }
   .prov {
     padding: 1px 8px;
     border-radius: var(--pill);
@@ -467,6 +616,78 @@
     padding: var(--space-1) var(--space-3) var(--space-3);
     animation: rise-in var(--dur-slow) var(--ease-out);
   }
+  .methods {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--radius-md);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+  }
+  .method {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: 7px var(--space-2);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    text-align: left;
+    color: var(--text-muted);
+  }
+  .method:hover {
+    background: var(--bg-hover);
+  }
+  .method.on {
+    background: var(--bg-raised);
+    box-shadow:
+      var(--elev-inset),
+      inset 2px 0 0 var(--accent);
+    color: var(--text);
+  }
+  .method .dot {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-strong, var(--border-hover));
+  }
+  .method.on .dot {
+    border-color: var(--accent);
+    background: radial-gradient(circle, var(--accent) 0 45%, transparent 46%);
+  }
+  .m-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  .m-name {
+    color: var(--text);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+  .m-sub {
+    color: var(--text-subtle);
+    font-size: var(--text-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .m-state {
+    flex: none;
+    padding: 1px 7px;
+    border-radius: var(--pill);
+    background: var(--bg-muted);
+    color: var(--text-subtle);
+    font-size: var(--text-xs);
+  }
+  .m-state.ok {
+    background: var(--success-soft);
+    color: var(--success);
+  }
   .two {
     display: grid;
     grid-template-columns: 1fr 1.4fr;
@@ -511,6 +732,83 @@
   }
   .perms {
     margin-top: -4px;
+  }
+  .cli {
+    display: flex;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+  }
+  .cli-icon {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    border-radius: 7px;
+    background: var(--bg-muted);
+    color: var(--text-muted);
+  }
+  .cli-body {
+    min-width: 0;
+  }
+  .cli-title {
+    font-size: var(--text-sm);
+    color: var(--text);
+  }
+  .cli-sub {
+    font-size: var(--text-xs);
+    color: var(--text-subtle);
+    overflow-wrap: anywhere;
+  }
+  .oauth {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .code-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .code {
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-muted);
+    color: var(--text);
+    font-size: var(--text-md);
+    letter-spacing: 0.08em;
+    font-weight: 650;
+    user-select: all;
+  }
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding-top: 2px;
+  }
+  .check-msg {
+    font-size: var(--text-xs);
+    color: var(--text-subtle);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .check-msg .good {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--success);
+  }
+  .check-msg .bad {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--danger);
+    overflow-wrap: anywhere;
   }
   .ssh-note {
     display: flex;

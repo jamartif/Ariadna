@@ -4,6 +4,8 @@
 pub mod ai;
 pub mod api;
 mod app;
+mod auth_ops;
+mod branch_ops;
 mod clone_ops;
 mod commands;
 pub mod error;
@@ -32,6 +34,11 @@ pub use api::{
     NoticeEvent, OpenResult, SnapshotEvent, TabInfo,
 };
 pub use app::{default_data_dir, locate_git, AppConfig, AppCore, CLOSE_GRACE, SOFT_TAB_LIMIT};
+pub use auth_ops::{
+    AuthOptions, CliAuthStatus, DeviceLoginPoll, DeviceLoginStart, OAuthAvailability,
+};
+pub use branch_ops::{PushBranchResult, RebaseOutcome};
+pub use clone_ops::{CloneAuthArg, CloneMethod};
 pub use error::{ApiError, ApiResult};
 pub use external::{validate_external_url, validate_remote_web_url};
 pub use merge_ops::{

@@ -21,10 +21,11 @@ use crate::core::{
     default_data_dir, locate_git, validate_external_url, AiAccounts, AiAccountsRequest,
     AiCommitOptions, AiCommitSuggestion, AiConflictSuggestion, AiContextPreview, AiLoginInfo,
     AiLoginRequest, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState,
-    AmendDraft, ApiError, ApiSnapshot, AppConfig, AppCore, AppEvent, AppState, CliStatus, Closed,
-    CommitResult, ConflictResolution, ContinueResult, CredentialTest, Done, EventSink, GitDetect,
-    GitIdentity, HunkArg, MergeStartResult, MergeState, OpenResult, Prompter, RemoteView, Settings,
-    SettingsView, WebTarget,
+    AmendDraft, ApiError, ApiSnapshot, AppConfig, AppCore, AppEvent, AppState, AuthOptions,
+    CliStatus, CloneAuthArg, CloneMethod, Closed, CommitResult, ConflictResolution, ContinueResult,
+    CredentialTest, DeviceLoginPoll, DeviceLoginStart, Done, EventSink, GitDetect, GitIdentity,
+    HunkArg, MergeStartResult, MergeState, OpenResult, Prompter, PushBranchResult, RebaseOutcome,
+    RemoteView, Settings, SettingsView, WebTarget,
 };
 
 use crate::core::{CommentInput, PrAction, PrCheckout, PrDiff, PrSupport};
@@ -163,17 +164,53 @@ async fn cancel_operation(
 }
 
 /// Clona y abre una pestaña. `secret` es un PAT de un solo uso: no se guarda (ver `clone_ops`).
+/// `auth_method` (`""`/`"pat"`, `"gh"`, `"glab"`, `"oauth"`) elige de dónde sale la credencial;
+/// con `"gh"`/`"glab"` el token se pide al CLI en Rust y **no** cruza el IPC.
+///
+/// Los argumentos van planos (es lo que espera `invoke`); se agrupan en `CloneAuthArg` antes de
+/// llamar al núcleo.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn clone_repository(
     core: State<'_, AppCore>,
     url: String,
     destination: String,
     branch: Option<String>,
+    auth_method: Option<String>,
     username: Option<String>,
     secret: Option<Secret>,
+    flow_id: Option<String>,
 ) -> Cmd<OpenResult> {
-    core.clone_repository(url, destination, branch, username, secret)
-        .await
+    let auth = clone_auth_arg(auth_method.as_deref(), username, secret, flow_id)?;
+    core.clone_repository(url, destination, branch, auth).await
+}
+
+/// Construye el argumento de autenticación del clonado a partir de los campos del IPC.
+fn clone_auth_arg(
+    method: Option<&str>,
+    username: Option<String>,
+    secret: Option<Secret>,
+    flow_id: Option<String>,
+) -> Cmd<Option<CloneAuthArg>> {
+    let method = CloneMethod::parse(method.unwrap_or(""))?;
+    match method {
+        CloneMethod::Pat => match secret.filter(|s| !s.is_empty()) {
+            Some(secret) => Ok(Some(CloneAuthArg {
+                method,
+                username,
+                secret: Some(secret),
+                flow_id: None,
+            })),
+            // Sin token no se envía credencial: el repo puede ser público.
+            None => Ok(None),
+        },
+        CloneMethod::Gh | CloneMethod::Glab | CloneMethod::OAuth => Ok(Some(CloneAuthArg {
+            method,
+            username,
+            secret: None,
+            flow_id,
+        })),
+    }
 }
 
 #[tauri::command]
@@ -186,9 +223,43 @@ async fn store_credential(
     core.store_credential(&url, &username, secret).await
 }
 
+/// `git ls-remote` con el método indicado (o con lo que ya conozca git si no se indica ninguno).
 #[tauri::command]
-async fn test_credential(core: State<'_, AppCore>, url: String) -> Cmd<CredentialTest> {
-    core.test_credential(&url).await
+async fn test_credential(
+    core: State<'_, AppCore>,
+    url: String,
+    auth_method: Option<String>,
+    username: Option<String>,
+    secret: Option<Secret>,
+    flow_id: Option<String>,
+) -> Cmd<CredentialTest> {
+    let auth = clone_auth_arg(auth_method.as_deref(), username, secret, flow_id)?;
+    core.test_credential(&url, auth).await
+}
+
+/// Métodos de autenticación disponibles para esa URL (estado real de `gh`/`glab`, sin tokens).
+#[tauri::command]
+async fn clone_auth_options(core: State<'_, AppCore>, url: String) -> Cmd<AuthOptions> {
+    core.auth_options(&url).await
+}
+
+/// Paso 1 del OAuth device code: devuelve `user_code` + URL y deja el flujo en memoria.
+#[tauri::command]
+async fn oauth_device_start(core: State<'_, AppCore>, url: String) -> Cmd<DeviceLoginStart> {
+    core.device_login_start(&url).await
+}
+
+/// Paso 3 del OAuth device code: un sondeo (`pending`, `slowDown`, `authorized`, `expired`,
+/// `denied`). La UI repite cada `interval` segundos.
+#[tauri::command]
+async fn oauth_device_poll(core: State<'_, AppCore>, flow_id: String) -> Cmd<DeviceLoginPoll> {
+    core.device_login_poll(&flow_id).await
+}
+
+/// Abandona un flujo OAuth y olvida su token.
+#[tauri::command]
+async fn oauth_device_cancel(core: State<'_, AppCore>, flow_id: String) -> Cmd<()> {
+    core.device_login_cancel(&flow_id).await
 }
 
 #[tauri::command]
@@ -926,6 +997,51 @@ async fn push(
     core.push(&tab_id, remote, refspec, set_upstream).await
 }
 
+/// Publica una rama **cualquiera** (no solo la actual): el remoto lo resuelve Rust (el de su
+/// upstream, `origin` o el primero). Con `setUpstream` fija el seguimiento si no lo tenía.
+#[tauri::command]
+async fn push_branch(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    branch: String,
+    set_upstream: bool,
+) -> Cmd<PushBranchResult> {
+    core.push_branch(&tab_id, branch, set_upstream).await
+}
+
+/// Rebasa la rama actual sobre otra (confirmación nativa: reescribe historia). Con conflictos,
+/// el rebase queda en curso y se devuelve su estado para abrir el estudio de conflictos.
+#[tauri::command]
+async fn rebase_onto(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    branch: String,
+) -> Cmd<RebaseOutcome> {
+    core.rebase_onto(&tab_id, branch).await
+}
+
+/// Borra una rama en el remoto (confirmación nativa). No toca la copia local.
+#[tauri::command]
+async fn delete_remote_branch(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    remote: String,
+    branch: String,
+) -> Cmd<Done> {
+    core.delete_remote_branch(&tab_id, remote, branch).await
+}
+
+/// `git diff base...head` en `FileDiff[]`: lo que `head` aporta desde que se separó de `base`.
+#[tauri::command]
+async fn branch_diff_against(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    base: String,
+    head: String,
+) -> Cmd<Vec<FileDiff>> {
+    core.branch_diff_against(&tab_id, base, head).await
+}
+
 // --- arranque -----------------------------------------------------------------------------
 
 /// Arranca la aplicación.
@@ -1011,6 +1127,10 @@ pub fn run() {
             abandon_pull_request,
             reopen_pull_request,
             clone_repository,
+            clone_auth_options,
+            oauth_device_start,
+            oauth_device_poll,
+            oauth_device_cancel,
             store_credential,
             test_credential,
             forget_credential,
@@ -1073,6 +1193,10 @@ pub fn run() {
             fetch,
             pull,
             push,
+            push_branch,
+            rebase_onto,
+            delete_remote_branch,
+            branch_diff_against,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {

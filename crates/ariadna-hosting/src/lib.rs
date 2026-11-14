@@ -12,7 +12,9 @@
 //! `argv`, URL, `Debug` ni mensajes de error.
 
 mod auth;
+mod auth_host;
 mod azure;
+mod device_flow;
 mod error;
 mod github;
 mod http;
@@ -24,7 +26,14 @@ mod remote;
 pub use auth::{
     AuthMethod, CredentialSource, GitCredentialFill, Scrubber, Secret, StaticCredentials,
 };
+pub use auth_host::{
+    CliOutcome, CliRun, CliRunner, CliSession, CliSessionStatus, CliTool, SystemCli, CLI_TIMEOUT,
+};
 pub use azure::AzureDevOps;
+pub use device_flow::{
+    DeviceCode, DeviceFlow, DeviceFlowConfig, DevicePoll, Endpoints, OAuthProvider, MAX_EXPIRES,
+    MAX_INTERVAL, MIN_INTERVAL, SLOWDOWN_STEP,
+};
 pub use error::{HostingError, HostingResult};
 pub use github::GitHub;
 pub use http::HttpConfig;
