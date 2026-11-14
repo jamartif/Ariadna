@@ -190,6 +190,15 @@ describe('Ajustes: Inteligencia artificial', () => {
     expect(within(codex).getByText('No encontrado')).toBeInTheDocument();
   });
 
+  it('en el perfil Empresa avisa de que la sesión de Copilot es la personal', async () => {
+    // Decisión D16: la IA se permite directamente en Empresa, con el aviso visible.
+    await setup({ scenario: 'ai-company' });
+    await userEvent.click(tab('Inteligencia artificial'));
+    const warn = await screen.findByTestId('company-shared-warning');
+    expect(warn).toHaveTextContent(/tu cuenta personal/i);
+    expect(warn).toHaveTextContent(/código del trabajo/i);
+  });
+
   it('«Iniciar sesión» muestra el comando oficial y se puede copiar', async () => {
     await setup();
     await userEvent.click(tab('Inteligencia artificial'));

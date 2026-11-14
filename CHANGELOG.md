@@ -9,6 +9,9 @@ usa [versionado semántico](https://semver.org/lang/es/).
 
 Lo que hay encima de `v0.1.0-alpha.3`.
 
+### Decidido
+- **D16 (perfiles): la IA se permite directamente en el perfil Empresa** (Codex y Copilot), con un aviso permanente en Ajustes › IA de que esos proveedores comparten la sesión con el perfil Personal y de que el código del trabajo se enviaría a la cuenta personal del CLI. Se prioriza el uso real en el trabajo, ya que el aislamiento no es posible con esos CLI (solo Claude lo soporta y no está disponible en la empresa).
+
 ### Añadido
 - Rediseño de la ventana alrededor de un **riel de ramas persistente** a la izquierda (visible
   en todas las vistas: cambiar, crear, renombrar, borrar, fusionar y traer/subir con
