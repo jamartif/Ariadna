@@ -57,8 +57,9 @@ jobs:
           if (-not $app) { throw 'No encuentro ariadna-app.exe' }
           $dir = New-Item -ItemType Directory -Force -Path portables/Ariadna
           Copy-Item $app.FullName "$($dir.FullName)/Ariadna.exe"
-          # Recursos que Tauri deja junto al ejecutable (plugins, iconos, etc.).
-          Get-ChildItem $app.Directory | Where-Object { $_.Name -ne 'ariadna-app.exe' } | Copy-Item -Destination $dir.FullName -Recurse
+          # Solo las DLL que el ejecutable necesite al lado (p. ej. WebView2Loader); el resto de
+          # la carpeta de compilación son artefactos intermedios y no van al ZIP.
+          Get-ChildItem $app.Directory -Filter '*.dll' -File | Copy-Item -Destination $dir.FullName
           Compress-Archive -Path portables/Ariadna -DestinationPath "Ariadna_0.1.0_x64-portable.zip" -Force
           Get-Item Ariadna_0.1.0_x64-portable.zip | Select-Object Name,Length
       - uses: actions/upload-artifact@v4
