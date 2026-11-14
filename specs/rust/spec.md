@@ -135,7 +135,7 @@ Estados posibles, sin ambigüedad: **Cerrada** (vigente), **Propuesta** (decidid
 | D13 | Hitos y alfas publicables: `alpha.1` tras M5 (Git sin IA), `alpha.2` tras M6 (IA), `alpha.3` tras M8 (PR) y `v0.1.0` tras M7 | **Propuesta** (las tres alfas y `v0.1.0` ya existen) |
 | D14 | Doble uso, particular y profesional. Ariadna usa los CLI con la sesión que el usuario ya tiene y **no gestiona planes ni condiciones de cuenta**. Sin proxy ni certificado de firma corporativos. **No se diseña para despliegue gestionado por TI** | Cerrada |
 | D15 | macOS mínimo **15** (igual que el Swift) | Cerrada |
-| D16 | Perfiles **Personal** y **Empresa**; cada repo se asocia a uno y el perfil decide qué proveedores se permiten. Personal: los tres. **Empresa: IA desactivada por defecto**, porque el único proveedor con aislamiento verificado (Claude) no está disponible en la empresa y Codex/Copilot comparten sesión con Personal; se pueden habilitar aceptando por escrito el aviso de sesión compartida | **Propuesta** (revisión 3; antes «Empresa = Codex y Copilot») |
+| D16 | Perfiles **Personal** y **Empresa**; cada repo se asocia a uno y el perfil decide qué proveedores se permiten. Personal: los tres. **Empresa: IA permitida directamente** (Codex y Copilot; Claude desactivado por no estar disponible en la empresa), con un **aviso permanente en Ajustes › IA** de que esos proveedores comparten la sesión con el perfil Personal y de que el código del trabajo se enviaría a la cuenta personal del CLI | **Cerrada** (revisión 4, decisión del responsable del producto: se prioriza el uso real en el trabajo sobre el aislamiento, que no es posible con esos CLI) |
 | D17 | Firma de código por etapas: las alfas salen sin firmar con aviso; para `v0.1.0`, solicitar **SignPath Foundation** (gratis para código abierto con licencia OSI). Si no se concede, se publica sin firmar con la guía de «Abrir igualmente» o con un certificado OV | **Propuesta** |
 | D18 | Licencia **MIT** (`LICENSE` en la raíz) | Cerrada |
 | D19 | **Alojamiento remoto agnóstico.** Todo el control de versiones va por `git`, así que sirve Azure DevOps, GitHub, GitLab, Bitbucket o un servidor propio. Ariadna reconoce el proveedor por la URL para sugerir perfil, mostrar su icono y abrir el navegador | **Propuesta** |
@@ -513,7 +513,7 @@ macOS: Developer ID y notarización exigen Apple Developer Program (de pago). Si
 
 ## 13. Preguntas abiertas
 
-Ninguna bloquea el hito en curso. Quedan por confirmar las **Propuestas** de §2: D7 (ARM64 mejor esfuerzo), D10 (IA en el binario, apagada hasta consentir), D11 (sin Mica en 0.1), D13 (alfas), D16 (**Empresa con IA apagada**), D17 (SignPath), D19 (alojamiento agnóstico), D20 (clonar con PAT de un solo uso), D23 (clonado atómico), D25 (criterio de bloqueos) y D26 (cola de IA). Si no hay objeción antes del cierre de M7, pasan a cerradas.
+Ninguna bloquea el hito en curso. Quedan por confirmar las **Propuestas** de §2: D7 (ARM64 mejor esfuerzo), D10 (IA en el binario, apagada hasta consentir), D11 (sin Mica en 0.1), D13 (alfas), D17 (SignPath), D19 (alojamiento agnóstico), D20 (clonar con PAT de un solo uso), D23 (clonado atómico), D25 (criterio de bloqueos) y D26 (cola de IA). Si no hay objeción antes del cierre de M7, pasan a cerradas.
 
 ## 14. Historial de revisiones
 

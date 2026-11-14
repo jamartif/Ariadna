@@ -97,6 +97,11 @@
             <span class="pname" id="set-p-auto">{t('settings.ai.providerAuto')}</span>
             <span class="pmeta" id="set-p-auto-h">{t('settings.ai.providerAutoHint')}</span>
           </label>
+          {#if ai.profile.kind === 'empresa' && ai.providers.some((x) => x.sharesLogin)}
+            <p class="hint warnp" role="note" data-testid="company-shared-warning">
+              <Icon name="triangle-alert" size={12} />{t('settings.ai.companySharedWarning')}
+            </p>
+          {/if}
           {#each ai.providers as p (p.id)}
             {@const c = cliById.get(p.id)}
             {@const acc = panel.accountOf(p.id)}

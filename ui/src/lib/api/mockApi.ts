@@ -486,7 +486,11 @@ export function createMockApi(options: MockOptions = {}): MockApi {
   // ---- IA simulada (ipc.md «Comandos de IA») ----
   let ai: AiState = {
     enabled: scenario !== 'ai-disabled',
-    profile: { name: 'Personal', kind: 'personal', isolated: false },
+    // `ai-company`: perfil Empresa (repos del trabajo), con Codex y Copilot y sesión compartida.
+    profile:
+      scenario === 'ai-company'
+        ? { name: 'Empresa', kind: 'empresa', isolated: true, rule: 'dev.azure.com' }
+        : { name: 'Personal', kind: 'personal', isolated: false },
     choice: 'auto',
     providers: [
       { id: 'claude', displayName: 'Claude', availability: scenario === 'ai-not-installed' ? 'missing' : 'available', version: scenario === 'ai-not-installed' ? null : '2.1.319', hint: scenario === 'ai-not-logged' ? 'Sin sesión iniciada' : null, enabled: true, consented: false, loginCommand: 'claude auth login', sharesLogin: false, isolated: false, isolationVerified: true },
@@ -738,6 +742,12 @@ export function createMockApi(options: MockOptions = {}): MockApi {
   /** `ai` con la regla repo → perfil de la pestaña aplicada (como hace Rust). */
   function withRule(tabId: string | undefined): AiState {
     const out = clone(ai);
+    // `ai-company` fuerza el perfil Empresa aunque el repo de la pestaña sea de GitHub.
+    if (scenario === 'ai-company') {
+      out.profile = { name: 'Empresa', kind: 'empresa', isolated: true, rule: 'dev.azure.com' };
+      out.providers = out.providers.map((p) => (p.id === 'claude' ? { ...p, enabled: false } : p));
+      return withIsolation(out);
+    }
     const r = tabId ? repos.get(tabId) : undefined;
     const url = r?.remotes.find((x) => x.name === 'origin')?.fetchUrl ?? r?.remotes[0]?.fetchUrl;
     const m = url ? matchRule(settingsData.profileRules, url) : null;

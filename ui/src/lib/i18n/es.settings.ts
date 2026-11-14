@@ -108,6 +108,7 @@ export const esSettings = {
   'settings.ai.isolateHint': 'Cada CLI usa un directorio de configuración propio en este perfil, así Personal y Empresa no comparten el inicio de sesión. Apagado, el perfil usa la sesión normal del CLI.',
   'settings.ai.isolatedBadge': 'Sesión propia',
   'settings.ai.normalSession': 'Sesión normal del CLI',
+  'settings.ai.companySharedWarning': 'Perfil Empresa: los proveedores con sesión compartida usan tu cuenta personal. Si abres código del trabajo, ese código se enviará a tu cuenta personal del CLI, no a una cuenta de la empresa. Revisa los términos y las normas internas antes de usarlo.',
   'settings.ai.sharedBadge': 'Comparte sesión',
   'settings.ai.sharedWarn': '{name} no permite aislar su inicio de sesión: Personal y Empresa usan la misma cuenta. Ariadna solo controla si se permite este proveedor, no con qué cuenta se usa.',
   'settings.ai.unverified': 'Aislamiento según la documentación del CLI; no verificado.',

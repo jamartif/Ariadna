@@ -110,6 +110,7 @@ export const enSettings: Record<keyof typeof esSettings, string> = {
   'settings.ai.isolateHint': 'Each CLI uses its own configuration directory in this profile, so Personal and Company do not share the sign-in. When off, the profile uses the CLI normal session.',
   'settings.ai.isolatedBadge': 'Own session',
   'settings.ai.normalSession': 'CLI normal session',
+  'settings.ai.companySharedWarning': 'Company profile: providers that share the login use your personal account. If you open work code, that code will be sent to your personal CLI account, not to a company account. Check the terms and your internal rules before using it.',
   'settings.ai.sharedBadge': 'Shares session',
   'settings.ai.sharedWarn': '{name} cannot isolate its sign-in: Personal and Company use the same account. Ariadna only controls whether this provider is allowed, not which account it uses.',
   'settings.ai.unverified': 'Isolation as documented by the CLI; not verified.',
