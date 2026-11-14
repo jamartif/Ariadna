@@ -382,9 +382,10 @@ El riesgo que se evita: mandar código de la empresa con una cuenta personal, o 
 |---|---|---|
 | Claude | **Flags verificados** contra `claude 2.1.319` | `claude -p --output-format json --tools "" --strict-mcp-config --disable-slash-commands --no-session-persistence --permission-mode plan`, prompt por entrada estándar. Queda por probar `--setting-sources ""`. **Prohibido `--bare`**: solo lee `ANTHROPIC_API_KEY` y rompería el inicio de sesión por suscripción |
 | Codex | **No verificado** (CLI no instalado en la máquina de verificación) | Candidato: `codex exec --json --sandbox read-only --skip-git-repo-check -`. Spike pendiente |
-| Copilot | **No verificado** | Candidato: `copilot -p … -s --no-ask-user` con lista blanca de herramientas; comprobar lectura de la entrada estándar |
+| Copilot | **Flags verificados** contra `GitHub Copilot CLI 1.0.112` (2026-11-14) | `copilot --output-format json --no-ask-user --disable-builtin-mcps --disable-client-telemetry --no-auto-update --deny-tool shell write read url memory task --available-tools ariadna-no-tools`, prompt por entrada estándar **sin `-p`**. Detalle en [`docs/ia-copilot.md`](../../docs/ia-copilot.md) |
 
-Un proveedor sin flags verificados no bloquea `alpha.2`: se publica marcado como experimental.
+Un proveedor sin flags verificados no bloquea `alpha.2`: se publica marcado como experimental
+(hoy solo Codex).
 
 ### 5.3 Ejecución
 
@@ -496,7 +497,7 @@ macOS: Developer ID y notarización exigen Apple Developer Program (de pago). Si
 | Riesgo | Mitigación vigente en v0.1 |
 |---|---|
 | Alcance grande y tres tecnologías nuevas (Rust, Tauri, Svelte) | Hitos alfa (D13), núcleo primero, interfaz delgada y regla de corte de §1.1 |
-| Flags de Codex y Copilot sin verificar | Spike pendiente; se publican como experimentales si no se verifican |
+| Flags de Codex sin verificar (Copilot **ya verificado** con 1.0.112) | Spike de Codex pendiente; se publica como experimental si no se verifica |
 | Términos de uso de suscripciones en la empresa | RF-IA10 con extractos fechados; IA opt-in por perfil y proveedor, apagable con el interruptor global y, en Empresa, apagada por defecto |
 | Código de empresa enviado con una cuenta personal | Perfil Empresa con IA apagada por defecto (D16), aviso de sesión compartida y cuenta visible cuando el CLI la expone (RF-IA12). Sin mecanismo administrable en v0.1 |
 | Shims `.cmd` y límites de línea de comandos | RF-IA1, RF-IA2 |

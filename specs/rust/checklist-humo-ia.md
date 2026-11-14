@@ -20,11 +20,15 @@ detección; lo que sigue sin verificar se marca con su motivo.
 | Formato de salida / golden files | ⚠️ fixtures reconstruidos, no capturados | ❌ reconstruidos | ✅ JSONL capturado (`copilot_ok.jsonl`, `copilot_error.jsonl`) |
 | Cuenta activa (RF-IA12) | ✅ `claude auth status --json` (`loggedIn`, `email`, `orgName`, `subscriptionType`, `authMethod`, `configDirectory`; sale con 1 sin sesión) | ❌ NO VERIFICADO: no se ejecuta ningún subcomando de estado; la UI dice «Cuenta no disponible» | ❌ NO EXISTE: `copilot help` no tiene subcomando de cuenta ni de estado (app, login, init, config, update, version, workflow, sessions, memories, plugin, mcp, skill, instruction, lsp, sandbox, completion). La UI dice «Cuenta no disponible» |
 | Aislamiento de sesión | ✅ `CLAUDE_CONFIG_DIR` (directorio vacío → `loggedIn: false`; `configDirectory` refleja el directorio) | ⚠️ `CODEX_HOME` según la documentación, **no probado** | ❌ **verificado que no se puede**: `COPILOT_HOME` con un directorio vacío mueve configuración y estado, pero el token OAuth está en el llavero del sistema y la sesión **sigue activa** → **comparte login** y la UI lo avisa |
-| Comando de login | ✅ `claude auth login` (opciones `--claudeai`, `--console`, `--sso`, `--email`) | ❌ NO VERIFICADO: `codex login` | ⚠️ `copilot login` **existe** y `copilot login --with-token` procesa el token (probado con un PAT clásico: «Login failed: … not supported»); el flujo OAuth del navegador **NO VERIFICADO** → `verified = false` |
+| Comando de login | ✅ `claude auth login` (opciones `--claudeai`, `--console`, `--sso`, `--email`) | ❌ NO VERIFICADO: `codex login` | ⚠️ `copilot login` **existe** y `copilot login --with-token` procesa el token (probado con un PAT clásico: «Login failed: … not supported»); el flujo OAuth del navegador **NO VERIFICADO** → `ai_login.verified = false` (el **proveedor** sí está verificado; ver `docs/ia-copilot.md`) |
 | Apertura de terminal (`ai_login`) | Windows: `cmd /c start` y macOS: `open` — compilado, **no ejecutado a mano**; solo probado con una terminal falsa | | |
 
 
-Pendiente de la propia spec: RF-IA10 (términos de uso de Anthropic, OpenAI y GitHub citados con fecha antes de `alpha.2`).
+Pendiente de la propia spec: RF-IA10 queda **cerrado** con [`terminos-ia.md`](terminos-ia.md)
+(consulta del 2026-11-13, con fechas y cláusulas). Copilot ya **no** se publica como
+experimental: `ProviderId::is_experimental()` solo devuelve `true` para Codex. Lo único que
+sigue en `verified = false` es el comando de login de Copilot, porque el flujo OAuth del
+navegador no se ha recorrido a mano (ver §3).
 
 ## 1. Preparación
 

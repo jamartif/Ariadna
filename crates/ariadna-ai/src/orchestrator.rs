@@ -231,7 +231,11 @@ pub struct ProviderStatus {
     pub consented: bool,
     /// `true` si el proveedor no puede aislar el login por perfil (hay que avisar).
     pub shares_login: bool,
+    /// `true` si el proveedor no tiene flags verificados (se publica como experimental).
     pub experimental: bool,
+    /// Versión del CLI con la que se verificó (`None` = experimental), p. ej.
+    /// `GitHub Copilot CLI 1.0.112`.
+    pub verified_with: Option<&'static str>,
 }
 
 enum Action<'a> {
@@ -308,6 +312,7 @@ impl Orchestrator {
                 consented: profile.has_consent(*id),
                 shares_login: shares_login_between_profiles(*id),
                 experimental: id.is_experimental(),
+                verified_with: id.verified_with(),
             });
         }
         v

@@ -154,3 +154,20 @@ resultado de cada casilla y corregir `azure.rs`/`github.rs` si la realidad difie
 - [ ] TLS contra los servidores reales con las raíces del sistema (`rustls-platform-verifier`), también tras proxy corporativo con CA propia; el certificado inválido debe dar `NETWORK`, nunca continuar.
 - [ ] Redirecciones: confirmar que ningún flujo legítimo necesita salir del host (si lo necesita, decidir caso por caso).
 - [ ] Tiempos: 30 s por petición; cuánto tarda un detalle completo (≈ 6–8 peticiones) y un diff de Azure DevOps de 100 archivos (≈ 200 peticiones: ¿hace falta paralelizar o pedir menos?).
+
+## Contraste de Azure DevOps con la documentación oficial (2026-11-14)
+
+Sin una cuenta no se puede probar el comportamiento, pero sí comprobar que **las rutas y los parámetros que construye el cliente existen y coinciden** con la referencia de Microsoft (Azure DevOps REST 7.1, `learn.microsoft.com/rest/api/azure/devops/git`). Revisado con `curl` en la fecha indicada:
+
+| Lo que hace Ariadna | Documentación 7.1 | Estado |
+|---|---|---|
+| `POST /{org}/{project}/_apis/git/repositories/{id}/pullrequests?api-version=7.1` | Idéntico (incluido `{project}` en la ruta) | Coincide |
+| `GET …/pullRequests/{n}/threads?api-version=7.1` | Idéntico (mayúsculas incluidas) | Coincide |
+| `update`/completar con `lastMergeSourceCommit` | El campo existe; la respuesta asíncrona (202) y su reintento siguen sin confirmar | Parcial |
+| `GET …/items?path=…&versionDescriptor.versionType=commit&version=…&$format=text` (diff en cliente) | La ruta y `versionDescriptor` existen; **que devuelva el contenido de la versión pedida para cualquier archivo sigue sin confirmar** | Parcial |
+| `GET /_apis/connectionData` | Existe | Coincide |
+| `GET /{project}/_apis/policy/evaluations?artifactId=…` | Existe | Coincide |
+| Permisos del PAT (Code Read & Write, Pull Request Threads) | Son los que documenta Microsoft para esas operaciones | Coincide |
+
+**Sigue NO VERIFICADO** (necesita cuenta real): forma exacta de los errores (`401` frente a `203`, mensaje de política incumplida), finalización asíncrona de una PR y su `retry-after`, respuesta real del diff archivo a archivo con repos grandes, PR entre forks y políticas de rama de la organización.
+

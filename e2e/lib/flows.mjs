@@ -218,6 +218,195 @@ export async function createBranch(name, { from = null, timeout = 30_000 } = {})
 }
 
 /**
+ * Abre el menú contextual de una fila del riel con **clic derecho**: se emite el mismo
+ * `contextmenu` que produce el navegador (el manejador de la fila lee `clientX/clientY` y
+ * llama a `preventDefault`). Se hace desde la página porque el driver de WebKit no siempre
+ * entrega un clic de botón derecho por acciones de puntero.
+ */
+export async function openBranchMenuByRightClick(name, { timeout = 15_000 } = {}) {
+  await ensureRailOpen();
+  const b = getBrowser();
+  await b.waitUntil(
+    async () =>
+      b.execute((want) => {
+        const el = Array.from(document.querySelectorAll('[data-brail-name]')).find((x) => x.dataset.brailName === want);
+        if (!el) return false;
+        el.scrollIntoView({ block: 'nearest' });
+        const r = el.getBoundingClientRect();
+        el.dispatchEvent(
+          new MouseEvent('contextmenu', {
+            bubbles: true,
+            cancelable: true,
+            button: 2,
+            buttons: 2,
+            clientX: Math.round(r.left + 40),
+            clientY: Math.round(r.top + 8)
+          })
+        );
+        return true;
+      }, name),
+    { timeout, interval: 150, timeoutMsg: `no se encontró la rama «${name}» en el riel` }
+  );
+  await b.waitUntil(async () => (await branchMenuState()) !== null, {
+    timeout,
+    interval: 100,
+    timeoutMsg: `el menú de «${name}» no se abrió con clic derecho`
+  });
+}
+
+/**
+ * Abre el menú contextual con la fila enfocada y **Mayús+F10** (equivale a la tecla Menú).
+ * Si el driver no entrega la combinación, se emite el mismo `keydown` en la fila.
+ */
+export async function openBranchMenuByKeyboard(name, { timeout = 15_000 } = {}) {
+  await ensureRailOpen();
+  const b = getBrowser();
+  const focused = await b.execute((want) => {
+    const el = Array.from(document.querySelectorAll('[data-brail-name]')).find((x) => x.dataset.brailName === want);
+    if (!el) return false;
+    el.scrollIntoView({ block: 'nearest' });
+    el.focus();
+    return document.activeElement === el;
+  }, name);
+  if (!focused) throw new Error(`no se pudo enfocar la rama «${name}» en el riel`);
+
+  await b.keys(['Shift', 'F10']);
+  const opened = await b
+    .waitUntil(async () => (await branchMenuState()) !== null, { timeout: 2500, interval: 100 })
+    .then(() => true)
+    .catch(() => false);
+  if (!opened) {
+    await b.execute((want) => {
+      const el = Array.from(document.querySelectorAll('[data-brail-name]')).find((x) => x.dataset.brailName === want);
+      el?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }));
+    }, name);
+  }
+  await b.waitUntil(async () => (await branchMenuState()) !== null, {
+    timeout,
+    interval: 100,
+    timeoutMsg: `el menú de «${name}» no se abrió con Mayús+F10`
+  });
+}
+
+/**
+ * Estado del menú contextual abierto: `null` si no hay ninguno. `items` va en el orden del
+ * menú y lleva si está deshabilitado (`aria-disabled`), el motivo (`title`) y si tiene el foco.
+ * @returns {Promise<null | {mode: string, label: string, items: {id: string, label: string, disabled: boolean, title: string, focused: boolean}[]}>}
+ */
+export async function branchMenuState() {
+  const b = getBrowser();
+  return b.execute(() => {
+    const menu = document.querySelector('[data-testid="branch-menu"]');
+    if (!menu) return null;
+    const text = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
+    return {
+      mode: menu.getAttribute('data-mode') ?? 'actions',
+      label: menu.getAttribute('aria-label') ?? '',
+      items: Array.from(menu.querySelectorAll('[role="menuitem"]')).map((el) => ({
+        id: (el.getAttribute('data-testid') ?? '').replace('branch-menu-', ''),
+        label: text(el.textContent),
+        disabled: el.getAttribute('aria-disabled') === 'true',
+        title: el.getAttribute('title') ?? '',
+        focused: document.activeElement === el
+      }))
+    };
+  });
+}
+
+/** Acción concreta del menú abierto (`null` si no está o no existe). */
+export async function branchMenuItem(id, { timeout = 10_000 } = {}) {
+  const b = getBrowser();
+  await b.waitUntil(
+    async () => {
+      const state = await branchMenuState();
+      return !!state?.items.some((i) => i.id === id);
+    },
+    { timeout, interval: 100, timeoutMsg: `el menú no tiene la acción «${id}»` }
+  );
+  const state = await branchMenuState();
+  return state?.items.find((i) => i.id === id) ?? null;
+}
+
+/** Id de la acción que tiene el foco dentro del menú (o `null`). */
+export async function focusedMenuItem() {
+  const state = await branchMenuState();
+  return state?.items.find((i) => i.focused)?.id ?? null;
+}
+
+/**
+ * Cierra el menú con `Escape` y comprueba que el foco vuelve a la fila de la rama
+ * (lo que hace `BranchRail.closeMenu` con `queueMicrotask`).
+ */
+export async function closeBranchMenuWithEscape(name, { timeout = 10_000 } = {}) {
+  const b = getBrowser();
+  await b.keys(['Escape']);
+  const closed = await b
+    .waitUntil(async () => (await branchMenuState()) === null, { timeout: 2000, interval: 100 })
+    .then(() => true)
+    .catch(() => false);
+  if (!closed) {
+    // Mismo evento que entrega el navegador cuando el foco está dentro del menú.
+    await b.execute(() => {
+      const menu = document.querySelector('[data-testid="branch-menu"]');
+      menu?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+  }
+  await b.waitUntil(async () => (await branchMenuState()) === null, {
+    timeout,
+    interval: 100,
+    timeoutMsg: 'el menú no se cerró con Escape'
+  });
+  await b.waitUntil(
+    async () =>
+      b.execute((want) => {
+        const el = document.activeElement;
+        return !!el && el.dataset != null && el.dataset.brailName === want;
+      }, name),
+    { timeout, interval: 100, timeoutMsg: `el foco no volvió a la fila «${name}»` }
+  );
+}
+
+/**
+ * Sustituye `navigator.clipboard` por una trampa en la página: así «Copiar el nombre» y
+ * «Copiar el SHA» se ejecutan de verdad sin permisos del sistema ni portapapeles real.
+ */
+export async function trapClipboard() {
+  const b = getBrowser();
+  return b.execute(() => {
+    window.__e2e = window.__e2e ?? {};
+    window.__e2e.clipboard = [];
+    const stub = {
+      writeText: (text) => {
+        window.__e2e.clipboard.push(String(text));
+        return Promise.resolve();
+      },
+      readText: () => Promise.resolve(window.__e2e.clipboard[window.__e2e.clipboard.length - 1] ?? '')
+    };
+    try {
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, get: () => stub });
+    } catch {
+      if (navigator.clipboard) navigator.clipboard.writeText = stub.writeText;
+    }
+    return true;
+  });
+}
+
+/** Lo que la trampa de [`trapClipboard`] ha «copiado», en orden. */
+export async function trappedClipboard() {
+  const b = getBrowser();
+  return b.execute(() => window.__e2e?.clipboard ?? []);
+}
+
+/** Nombres de las ramas que el riel lista ahora mismo (locales y del remoto). */
+export async function railBranches() {
+  await ensureRailOpen();
+  const b = getBrowser();
+  return b.execute(() =>
+    Array.from(document.querySelectorAll('[data-brail-name]')).map((el) => el.dataset.brailName ?? '')
+  );
+}
+
+/**
  * Deja la app con una única pestaña en blanco (pantalla de bienvenida). Cierra
  * las pestañas de repositorio que hayan quedado de una ejecución anterior.
  */

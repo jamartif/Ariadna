@@ -60,9 +60,28 @@ impl ProviderId {
         }
     }
 
+    /// Versión del CLI con la que se verificaron los flags, el transporte del prompt y el
+    /// formato de salida. `None` = proveedor **no verificado** (se publica como experimental).
+    pub fn verified_with(self) -> Option<&'static str> {
+        match self {
+            ProviderId::Claude => Some("claude 2.1.319"),
+            ProviderId::Copilot => Some("GitHub Copilot CLI 1.0.112"),
+            ProviderId::Codex => None,
+        }
+    }
+
+    /// Fecha (`YYYY-MM-DD`) de la verificación de [`ProviderId::verified_with`].
+    pub fn verified_on(self) -> Option<&'static str> {
+        match self {
+            ProviderId::Claude => Some("2026-11-11"),
+            ProviderId::Copilot => Some("2026-11-14"),
+            ProviderId::Codex => None,
+        }
+    }
+
     /// `true` si el proveedor no tiene flags verificados y se publica como experimental.
     pub fn is_experimental(self) -> bool {
-        !matches!(self, ProviderId::Claude)
+        self.verified_with().is_none()
     }
 }
 
@@ -508,6 +527,19 @@ mod tests {
         assert_eq!(ProviderId::Copilot.login_invocation(), "copilot login");
         assert!(ProviderId::Codex.is_experimental());
         assert!(!ProviderId::Claude.is_experimental());
+        // Copilot dejó de ser experimental el 2026-11-14 (GitHub Copilot CLI 1.0.112).
+        assert!(!ProviderId::Copilot.is_experimental());
+        assert_eq!(
+            ProviderId::Copilot.verified_with(),
+            Some("GitHub Copilot CLI 1.0.112")
+        );
+        assert_eq!(ProviderId::Copilot.verified_on(), Some("2026-11-14"));
+        assert_eq!(ProviderId::Codex.verified_with(), None);
+        assert_eq!(ProviderId::Codex.verified_on(), None);
+        assert!(ProviderId::Claude.verified_with().is_some());
+        for p in ProviderId::AUTO_ORDER {
+            assert_eq!(p.is_experimental(), p.verified_with().is_none());
+        }
     }
 
     #[test]

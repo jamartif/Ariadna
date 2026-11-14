@@ -5,7 +5,7 @@ build web ni mocks) usando [`tauri-driver`](https://crates.io/crates/tauri-drive
 [WebdriverIO](https://webdriver.io/) con Mocha. Además, un script de **regresión visual**
 que compara capturas con baselines por sistema operativo.
 
-- 9 ficheros de flujo (13 pruebas) sobre un repositorio sintético que crea la propia
+- 10 ficheros de flujo (15 pruebas) sobre un repositorio sintético que crea la propia
   suite con `git` real.
 - 8 pantallas × 2 temas (claro/oscuro) = 16 baselines por sistema operativo.
 - Sin red y sin tokens: solo `git` local y el binario compilado.
@@ -56,7 +56,7 @@ Linux / WSL necesita un servidor X; en CI y en local se usa `xvfb-run`:
 
 ```bash
 cd e2e
-xvfb-run -a -s "-screen 0 1440x900x24" npm test            # los 9 ficheros (13 pruebas)
+xvfb-run -a -s "-screen 0 1440x900x24" npm test            # los 10 ficheros (15 pruebas)
 xvfb-run -a -s "-screen 0 1440x900x24" npm test -- --grep "rama"
 xvfb-run -a -s "-screen 0 1440x900x24" npm run visual      # comparar con baselines
 xvfb-run -a -s "-screen 0 1440x900x24" npm run visual:update  # regenerar baselines
@@ -86,6 +86,7 @@ Si la sesión gráfica ya existe (escritorio de WSLg, macOS, Windows) no hace fa
 | `07-historial-paginado` | Historial | Paginación 100 → 200 → 240 y commit más antiguo visible |
 | `08-ajustes-tema` | Ajustes (`Ctrl+,`) | Tema oscuro/claro en `<html data-theme>`, `localStorage` y persistencia tras guardar |
 | `09-pestana-nueva` | Pestaña nueva | Alta y cierre por teclado (`Supr` sobre la pestaña), el repo sigue abierto |
+| `10-menu-contextual-rama` | Menú contextual del riel | Clic derecho y `Mayús+F10`, acciones deshabilitadas con motivo, `Esc` con el foco de vuelta a la fila, «Copiar el nombre» (portapapeles interceptado) y «Ver el diff» en el panel derecho |
 
 El armazón es el del rediseño: **riel de ramas** a la izquierda, **vista central con
 control segmentado** (Cambios · Historial · Stashes · Pull requests · Conflictos) y
@@ -98,6 +99,11 @@ control segmentado** (Cambios · Historial · Stashes · Pull requests · Confli
 | `filterBranches(texto)` | Escribe en el filtro instantáneo del riel |
 | `selectBranch(nombre)` / `checkoutBranch(nombre)` | Selecciona en el riel (inspector) y cambia de rama, aceptando el aviso de cambios sin confirmar |
 | `createBranch(nombre, { from })` | Crea la rama desde la cabecera del riel |
+| `openBranchMenuByRightClick(nombre)` / `openBranchMenuByKeyboard(nombre)` | Abre el menú contextual de una rama (clic derecho o `Mayús+F10`) |
+| `branchMenuState()` / `branchMenuItem(id)` / `focusedMenuItem()` | Acciones del menú abierto: si están deshabilitadas, su motivo (`title`) y cuál tiene el foco |
+| `closeBranchMenuWithEscape(nombre)` | Cierra con `Esc` y comprueba que el foco vuelve a la fila |
+| `trapClipboard()` / `trappedClipboard()` | Portapapeles interceptado en la página (sin permisos del sistema) y lo que se copió |
+| `railBranches()` | Nombres de las ramas que el riel lista ahora |
 
 Los localizadores son **roles, `data-testid` y atributos de datos** (`data-tab-id`,
 `data-tab-kind`, `data-brail-name`, `data-section`): el texto visible solo se usa para
