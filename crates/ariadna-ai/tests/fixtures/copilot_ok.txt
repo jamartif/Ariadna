@@ -1,3 +1,0 @@
-feat: parsear status
-
-Usa porcelain v2.

@@ -7,6 +7,7 @@
   import { remotesOf } from '$lib/stores/remotes.svelte';
   import { branchNameProblem } from '$lib/util/branchName';
   import { formatCombo, isMac, registerHandlers, SHORTCUTS } from '$lib/shortcuts/registry';
+  import BranchMenu from './BranchMenu.svelte';
   import Icon from './Icon.svelte';
 
   /**
@@ -133,10 +134,10 @@
     if (collapsed) ontoggle();
   }
 
-  function startCreate(): void {
+  function startCreate(startFrom?: string): void {
     creating = true;
     newName = '';
-    startPoint = selBranch?.name ?? '';
+    startPoint = startFrom ?? selBranch?.name ?? '';
     queueMicrotask(() => nameInput?.focus());
   }
 
@@ -171,6 +172,52 @@
   function focusRow(name: string): void {
     const el = Array.from(document.querySelectorAll<HTMLElement>('[data-brail-name]')).find((x) => x.dataset.brailName === name);
     el?.focus();
+  }
+
+  // ---- Menú contextual de una fila ---------------------------------------------------------
+
+  /** Rama cuyo menú está abierto, con el punto donde se abrió (coordenadas de la ventana). */
+  let menu = $state<{ br: Branch; remote: boolean; x: number; y: number } | null>(null);
+
+  function openMenu(br: Branch, remote: boolean, x: number, y: number): void {
+    select(br.name);
+    menu = { br, remote, x, y };
+  }
+
+  /** Cierra el menú y devuelve el foco a la fila (teclado y lectores de pantalla). */
+  function closeMenu(): void {
+    const name = menu?.br.name ?? null;
+    menu = null;
+    if (name !== null) queueMicrotask(() => focusRow(name));
+  }
+
+  /** Clic derecho: el menú nativo ya está suprimido por `installContextMenuGuard`. */
+  function rowContextMenu(e: MouseEvent, br: Branch, remote: boolean): void {
+    e.preventDefault();
+    openMenu(br, remote, e.clientX, e.clientY);
+  }
+
+  /** Menú de teclado de la fila: tecla Menú o Mayús+F10, junto a la fila enfocada. */
+  function rowMenuKey(e: KeyboardEvent, br: Branch, remote: boolean): boolean {
+    if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return false;
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLElement | null)?.getBoundingClientRect();
+    openMenu(br, remote, rect ? rect.left + 24 : 24, rect ? Math.min(rect.bottom, rect.top + 24) : 24);
+    return true;
+  }
+
+  /** «Crear una rama desde esta…»: el formulario se abre con ese punto de partida. */
+  async function createFrom(startPoint: string): Promise<void> {
+    b.select(startPoint);
+    await tick();
+    startCreate(startPoint);
+  }
+
+  /** «Renombrar…»: abre el formulario del inspector con esa rama seleccionada. */
+  async function renameFrom(name: string): Promise<void> {
+    b.select(name);
+    await tick();
+    startRename();
   }
 
   function rowKey(e: KeyboardEvent, name: string): void {
@@ -251,11 +298,15 @@
       data-testid="rail-branch"
       tabindex={tabStop === br.name ? 0 : -1}
       aria-current={br.isHead ? 'true' : undefined}
-      title={br.name}
+      aria-haspopup="menu"
+      title={`${br.name} — ${t('rail.menu.hint')}`}
       onfocus={() => (focusName = br.name)}
       onclick={() => open(br)}
       ondblclick={() => !br.isHead && void checkoutOrCreate(br)}
-      onkeydown={(e) => rowKey(e, br.name)}
+      oncontextmenu={(e) => rowContextMenu(e, br, remote)}
+      onkeydown={(e) => {
+        if (!rowMenuKey(e, br, remote)) rowKey(e, br.name);
+      }}
     >
       <Icon name={remote ? 'cloud' : 'git-branch'} size={13} />
       <span class="name mono">{br.name}</span>
@@ -345,7 +396,7 @@
         aria-label={t('branches.new')}
         title={t('branches.new')}
         data-testid="rail-new-branch"
-        onclick={startCreate}
+        onclick={() => startCreate()}
       >
         <Icon name="plus" size={15} />
       </button>
@@ -653,6 +704,20 @@
       </div>
     {/if}
   </aside>
+
+  {#if menu}
+    <BranchMenu
+      {tab}
+      branch={menu.br}
+      remote={menu.remote}
+      x={menu.x}
+      y={menu.y}
+      onclose={closeMenu}
+      oncreatefrom={(sp) => void createFrom(sp)}
+      onrename={(n) => void renameFrom(n)}
+      {oninspect}
+    />
+  {/if}
 {/if}
 
 <style>

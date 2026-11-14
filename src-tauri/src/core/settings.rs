@@ -29,6 +29,8 @@ pub const DIFF_FONT_RANGE: std::ops::RangeInclusive<u8> = 10..=24;
 pub const MAX_RULES: usize = 50;
 const MAX_PATTERN: usize = 200;
 const MAX_PATH: usize = 1024;
+/// Tope de un `client_id` de OAuth App.
+const MAX_CLIENT_ID: usize = 200;
 
 /// Repositorio y licencia que muestra «Acerca de».
 const REPOSITORY: &str = "https://github.com/jamartif/Ariadna";
@@ -66,6 +68,15 @@ pub struct Settings {
     /// `git pull --rebase` en lugar de merge.
     pub pull_rebase: bool,
     pub profile_rules: Vec<ProfileRule>,
+    /// `client_id` de la OAuth App **del usuario** en GitHub (flujo device code del clonado).
+    /// Sin él, el diálogo de clonado oculta la opción OAuth (ver `docs/oauth-cli.md`). No es un
+    /// secreto: un `client_id` es público. Nunca se guarda aquí ningún token.
+    /// Se serializa como `oauthGitHubClientId` (el `rename_all` camelCase daría `oauthGithub…`).
+    #[serde(rename = "oauthGitHubClientId")]
+    pub oauth_github_client_id: Option<String>,
+    /// `client_id` de la OAuth App del usuario en GitLab.
+    #[serde(rename = "oauthGitLabClientId")]
+    pub oauth_gitlab_client_id: Option<String>,
 }
 
 impl Default for Settings {
@@ -87,6 +98,8 @@ impl Default for Settings {
                     profile: ProfileKind::Personal,
                 },
             ],
+            oauth_github_client_id: None,
+            oauth_gitlab_client_id: None,
         }
     }
 }
@@ -173,8 +186,35 @@ impl Settings {
                 return Err(bad("profileRules", "hay dos reglas con el mismo patrón"));
             }
         }
+        self.oauth_github_client_id =
+            normalize_client_id("oauthGitHubClientId", self.oauth_github_client_id.take())?;
+        self.oauth_gitlab_client_id =
+            normalize_client_id("oauthGitLabClientId", self.oauth_gitlab_client_id.take())?;
         Ok(())
     }
+}
+
+/// Normaliza el `client_id` de una OAuth App: vacío = `None`, y solo caracteres de un id público
+/// (`Iv1.abc123`, `0123456789abcdef…`). **No es un secreto**, pero un valor basura rompería el
+/// flujo con un error del servidor en lugar de decir qué falta.
+fn normalize_client_id(field: &str, value: Option<String>) -> ApiResult<Option<String>> {
+    let Some(raw) = value else {
+        return Ok(None);
+    };
+    let v = raw.trim().to_owned();
+    if v.is_empty() {
+        return Ok(None);
+    }
+    if v.len() > MAX_CLIENT_ID {
+        return Err(bad(field, "es demasiado largo"));
+    }
+    if !v
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    {
+        return Err(bad(field, "solo letras, números y . - _"));
+    }
+    Ok(Some(v))
 }
 
 // --------------------------------------------------------------------- reglas repo → perfil

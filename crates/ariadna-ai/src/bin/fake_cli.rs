@@ -118,7 +118,15 @@ fn main() {
                 std::process::exit(1);
             }
             _ => {
-                eprintln!("Error: you are not logged in. Run `copilot login`");
+                // Copilot: `session.error` + `exitCode` en el JSONL (formato real 1.0.112).
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"session.error","data":{"errorType":"auth","message":"Error: not logged in. Run `copilot login`"}})
+                );
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"result","exitCode":1,"usage":{"premiumRequests":0}})
+                );
                 std::process::exit(1);
             }
         },
@@ -139,6 +147,14 @@ fn main() {
             }
             _ => {
                 eprintln!("HTTP 429 Too Many Requests");
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"session.error","data":{"errorType":"quota","message":"HTTP 429 Too Many Requests"}})
+                );
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"result","exitCode":1,"usage":{"premiumRequests":0}})
+                );
                 std::process::exit(1);
             }
         },
@@ -169,7 +185,34 @@ fn main() {
                     serde_json::json!({"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":4}})
                 );
             }
-            _ => println!("{reply}"),
+            // Copilot: JSONL real (`--output-format json`). Ruido de sesión + mensaje final.
+            _ => {
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"session.start","data":{"sessionId":"fake","copilotVersion":"9.9.9"}})
+                );
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"session.info","data":{"infoType":"configuration","message":"Unknown tool name in the tool allowlist: \"ariadna-no-tools\""}})
+                );
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"assistant.message_delta","data":{"deltaContent":reply}})
+                );
+                println!("{}", serde_json::json!({"type":"assistant.idle","data":{}}));
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"assistant.message","data":{"content":reply,"toolRequests":[]}})
+                );
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"session.usage_checkpoint","data":{"accountingSnapshot":{"tokenDetails":{"input":{"tokenCount":7},"output":{"tokenCount":5}}}}})
+                );
+                println!(
+                    "{}",
+                    serde_json::json!({"type":"result","exitCode":0,"usage":{"premiumRequests":1}})
+                );
+            }
         },
     }
 }

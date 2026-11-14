@@ -36,6 +36,37 @@
   </div>
 
   <div class="group">
+    <h3>{t('settings.accounts.oauth')}</h3>
+    <p class="hint">{t('settings.accounts.oauthHint')}</p>
+    {#if panel.draft}
+      <div class="oauth-ids">
+        <label class="lbl" for="oauth-gh">{t('settings.accounts.oauthGithub')}</label>
+        <input
+          id="oauth-gh"
+          class="field mono"
+          type="text"
+          value={panel.draft.oauthGitHubClientId ?? ''}
+          oninput={(e) => panel.draft && (panel.draft.oauthGitHubClientId = e.currentTarget.value)}
+          placeholder={t('settings.accounts.oauthPlaceholder')}
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <label class="lbl" for="oauth-gl">{t('settings.accounts.oauthGitlab')}</label>
+        <input
+          id="oauth-gl"
+          class="field mono"
+          type="text"
+          value={panel.draft.oauthGitLabClientId ?? ''}
+          oninput={(e) => panel.draft && (panel.draft.oauthGitLabClientId = e.currentTarget.value)}
+          placeholder={t('settings.accounts.oauthPlaceholder')}
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+    {/if}
+  </div>
+
+  <div class="group">
     <h3>{t('settings.accounts.help')}</h3>
     <p class="hint">{t('settings.accounts.minimum')}</p>
     <ul class="provs">
@@ -120,5 +151,17 @@
   dd {
     margin: 0;
     color: var(--text);
+  }
+  .oauth-ids {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: var(--space-2);
+    max-width: 420px;
+  }
+  .oauth-ids .lbl {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--text-muted);
   }
 </style>

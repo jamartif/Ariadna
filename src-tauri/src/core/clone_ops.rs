@@ -1,13 +1,21 @@
 //! Clonar desde URL y credenciales (`specs/rust/ipc.md`, D20).
 //!
-//! # El PAT no se guarda
+//! # El secreto no se guarda
 //!
-//! `clone_repository` recibe `username` y `secret` **opcionales**. El secreto entra por IPC como
-//! [`Secret`] (sin `Clone`/`Serialize`, `Debug` redactado, se borra de memoria al soltarse), se
-//! entrega a git **solo** por `GIT_ASKPASS` temporal + variables de entorno del proceso hijo (ver
-//! `ariadna_git::askpass`), nunca va en `argv`, en la URL, en `.git/config`, en un registro ni en un
-//! helper de credenciales, y todo texto de error se limpia antes de volver a la UI. Guardarlo en el
-//! gestor del sistema es un acto distinto y explícito (`store_credential`).
+//! El clonado admite tres métodos y **ninguno guarda nada**:
+//!
+//! * **PAT**: `username` y `secret` **opcionales**. El secreto entra por IPC como [`Secret`] (sin
+//!   `Clone`/`Serialize`, `Debug` redactado, se borra de memoria al soltarse).
+//! * **Sesión de `gh`/`glab`**: la UI manda solo el método (`"gh"`/`"glab"`); Rust pide el token
+//!   al CLI en ese momento ([`CliSession`]) y **el token no cruza el IPC**.
+//! * **OAuth device code**: la UI autoriza en el navegador y recibe un `flowId` opaco; el token
+//!   vive en memoria del núcleo y se consume al clonar (`take_oauth_token`).
+//!
+//! En los tres casos el token llega a git **solo** por `GIT_ASKPASS` temporal + variables de
+//! entorno del proceso hijo (ver `ariadna_git::askpass`), nunca en `argv`, en la URL, en
+//! `.git/config`, en un registro ni en un helper de credenciales, y todo texto de error se limpia
+//! antes de volver a la UI. Guardarlo en el gestor del sistema es un acto distinto y explícito
+//! (`store_credential`).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,6 +26,7 @@ use ariadna_git::{
     CloneAuth, ClonePhase, CloneProgress, CloneRequest, CloneService, CredentialStore,
     GitCliEngine, GitError, Secret,
 };
+use ariadna_hosting::{CliSession, CliTool, Provider, RemoteInfo};
 use ariadna_process::CancellationToken;
 
 use super::api::{AppEvent, CloneProgressEvent, CredentialTest, OpenResult};
@@ -86,30 +95,187 @@ fn phase_label(p: ClonePhase) -> &'static str {
     }
 }
 
+/// Método de autenticación del clonado (lo elige el usuario en el diálogo).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloneMethod {
+    /// Token de acceso personal escrito en el formulario.
+    Pat,
+    /// Sesión ya iniciada en GitHub CLI.
+    Gh,
+    /// Sesión ya iniciada en GitLab CLI.
+    Glab,
+    /// Token obtenido con el flujo OAuth device code (por `flowId`).
+    OAuth,
+}
+
+impl CloneMethod {
+    /// `""`/`"pat"` → PAT; `"gh"`, `"glab"`, `"oauth"`. Cualquier otra cosa es un error.
+    pub fn parse(raw: &str) -> ApiResult<Self> {
+        Ok(match raw.trim().to_ascii_lowercase().as_str() {
+            "" | "pat" => CloneMethod::Pat,
+            "gh" => CloneMethod::Gh,
+            "glab" => CloneMethod::Glab,
+            "oauth" => CloneMethod::OAuth,
+            other => {
+                return Err(ApiError::new(
+                    "INVALID_REFERENCE",
+                    format!("Método de autenticación desconocido «{other}»."),
+                    None,
+                ))
+            }
+        })
+    }
+
+    /// CLI que usa este método, si es de sesión.
+    fn cli(self) -> Option<CliTool> {
+        match self {
+            CloneMethod::Gh => Some(CliTool::Gh),
+            CloneMethod::Glab => Some(CliTool::Glab),
+            CloneMethod::Pat | CloneMethod::OAuth => None,
+        }
+    }
+}
+
+/// Lo que manda la UI: método + (solo para PAT) usuario y token + (solo OAuth) `flowId`.
+#[derive(Debug)]
+pub struct CloneAuthArg {
+    pub method: CloneMethod,
+    pub username: Option<String>,
+    /// Token del PAT. Nunca se guarda; se borra al soltarlo.
+    pub secret: Option<Secret>,
+    /// Identificador opaco del flujo OAuth ya autorizado.
+    pub flow_id: Option<String>,
+}
+
+impl CloneAuthArg {
+    /// PAT con usuario y token.
+    pub fn pat(username: Option<String>, secret: Secret) -> Self {
+        Self {
+            method: CloneMethod::Pat,
+            username,
+            secret: Some(secret),
+            flow_id: None,
+        }
+    }
+
+    /// Sesión del CLI indicado.
+    pub fn cli(method: CloneMethod) -> Self {
+        Self {
+            method,
+            username: None,
+            secret: None,
+            flow_id: None,
+        }
+    }
+
+    /// Token OAuth de un flujo ya autorizado.
+    pub fn oauth(flow_id: impl Into<String>) -> Self {
+        Self {
+            method: CloneMethod::OAuth,
+            username: None,
+            secret: None,
+            flow_id: Some(flow_id.into()),
+        }
+    }
+}
+
 impl AppCore {
+    /// Resuelve el método elegido a una credencial de un solo uso.
+    ///
+    /// Comprueba que el método encaja con el proveedor de la URL: un token de GitLab no se envía
+    /// nunca a GitHub (ni al revés) aunque la UI se equivoque.
+    async fn resolve_clone_auth(
+        &self,
+        url: &str,
+        arg: Option<CloneAuthArg>,
+    ) -> ApiResult<Option<CloneAuth>> {
+        let Some(arg) = arg else {
+            return Ok(None);
+        };
+        let info = RemoteInfo::parse(url);
+        let https = url.trim().to_ascii_lowercase().starts_with("https://");
+        if !https && arg.method != CloneMethod::Pat {
+            return Err(ApiError::new(
+                "INVALID_REFERENCE",
+                "Las credenciales solo se usan con direcciones HTTPS.",
+                None,
+            ));
+        }
+        let auth = match arg.method {
+            CloneMethod::Pat => {
+                let secret = arg.secret.filter(|s| !s.is_empty()).ok_or_else(|| {
+                    ApiError::new(
+                        "INVALID_REFERENCE",
+                        "Escribe el token de acceso (PAT) o elige otro método.",
+                        None,
+                    )
+                })?;
+                CloneAuth::new(arg.username.as_deref().unwrap_or(""), secret)
+                    .map_err(ApiError::from)?
+            }
+            CloneMethod::Gh | CloneMethod::Glab => {
+                let tool = arg.method.cli().unwrap_or(CliTool::Gh);
+                let expected = match tool {
+                    CliTool::Gh => Provider::GitHub,
+                    CliTool::Glab => Provider::GitLab,
+                };
+                if info.provider != expected {
+                    return Err(ApiError::new(
+                        "POLICY",
+                        format!(
+                            "La sesión de {} no sirve para este repositorio ({}). Elige otro método.",
+                            tool.label(),
+                            info.provider.label()
+                        ),
+                        None,
+                    ));
+                }
+                let token = CliSession::new(tool)
+                    .token()
+                    .await
+                    .map_err(ApiError::from)?;
+                CloneAuth::new(tool.default_username(), Secret::new(token.expose()))
+                    .map_err(ApiError::from)?
+            }
+            CloneMethod::OAuth => {
+                let flow_id = arg
+                    .flow_id
+                    .map(|f| f.trim().to_owned())
+                    .filter(|f| !f.is_empty())
+                    .ok_or_else(|| {
+                        ApiError::new(
+                            "AUTH",
+                            "Falta la autorización OAuth: inicia sesión con el navegador.",
+                            None,
+                        )
+                    })?;
+                let token = self.take_oauth_token(&flow_id)?;
+                CloneAuth::new("oauth2", Secret::new(token.expose())).map_err(ApiError::from)?
+            }
+        };
+        Ok(Some(auth))
+    }
+
     /// Clona `url` en `destination` y abre el repositorio en una pestaña nueva. Emite
     /// `clone-progress` y se cancela con `cancel_operation` (id del primer evento).
     ///
-    /// `secret` es un PAT de un solo uso (ver la documentación del módulo).
+    /// `auth` elige el método (PAT, sesión de CLI u OAuth); los secretos que no son el PAT no
+    /// pasan por aquí: se piden a su fuente en este momento.
     pub async fn clone_repository(
         &self,
         url: String,
         destination: String,
         branch: Option<String>,
-        username: Option<String>,
-        secret: Option<Secret>,
+        auth: Option<CloneAuthArg>,
     ) -> ApiResult<OpenResult> {
         let runner = self.runner()?;
+        // La credencial se resuelve antes de crear nada: si falta la sesión, no se toca el disco.
+        let auth = self.resolve_clone_auth(&url, auth).await?;
+
         let token = CancellationToken::new();
         let reg = CloneRegistration::new(token.clone());
         let operation_id = reg.id;
 
-        let auth = match secret.filter(|s| !s.is_empty()) {
-            Some(s) => {
-                Some(CloneAuth::new(username.as_deref().unwrap_or(""), s).map_err(ApiError::from)?)
-            }
-            None => None,
-        };
         let req = CloneRequest {
             url,
             destination: PathBuf::from(destination.trim()),
@@ -156,10 +322,20 @@ impl AppCore {
             .map_err(ApiError::from)
     }
 
-    /// `git ls-remote` sin interacción: ¿hay acceso con lo que ya conoce git?
-    pub async fn test_credential(&self, url: &str) -> ApiResult<CredentialTest> {
+    /// `git ls-remote` sin interacción y **sin abrir** el repositorio: ¿hay acceso con lo que ya
+    /// conoce git (`auth: None`) o con el método elegido en el diálogo?
+    pub async fn test_credential(
+        &self,
+        url: &str,
+        auth: Option<CloneAuthArg>,
+    ) -> ApiResult<CredentialTest> {
         let engine = GitCliEngine::new(self.runner()?);
-        Ok(match engine.test_credential(url).await {
+        let resolved = self.resolve_clone_auth(url, auth).await?;
+        let res = match resolved {
+            Some(a) => engine.test_credential_with_auth(url, a).await,
+            None => engine.test_credential(url).await,
+        };
+        Ok(match res {
             Ok(()) => CredentialTest {
                 ok: true,
                 code: None,

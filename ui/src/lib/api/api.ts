@@ -21,9 +21,12 @@ import type {
   ConflictResolution,
   ContinueResult,
   ContextPreview,
+  AuthOptions,
   CliStatus,
-  CloneAuth,
+  CloneAuthRequest,
   CredentialTest,
+  DeviceLoginPoll,
+  DeviceLoginStart,
   DiffHunk,
   DiffScope,
   DoneResult,
@@ -37,6 +40,8 @@ import type {
   MergeFastForward,
   MergeResult,
   MergeStartResult,
+  PushBranchResult,
+  RebaseOutcome,
   RemoteView,
   WebTarget,
   MergeState,
@@ -71,13 +76,31 @@ export interface Api extends PullRequestApi, TagApi {
   openExternalUrl(url: string): Promise<void>;
   /**
    * Clona y abre una pestaña. Emite `clone-progress`; cancelable con `cancelOperation('', id)`.
-   * `auth` es un PAT de **un solo uso**: Rust lo pasa a git por `GIT_ASKPASS` temporal y no lo guarda.
+   * `auth` elige el método (PAT, sesión de `gh`/`glab` u OAuth). Solo el PAT viaja como texto
+   * (**un solo uso**): Rust lo pasa a git por `GIT_ASKPASS` temporal y no lo guarda.
    */
-  cloneRepository(url: string, destination: string, branch: string | null, auth?: CloneAuth | null): Promise<OpenResult>;
+  cloneRepository(url: string, destination: string, branch: string | null, auth?: CloneAuthRequest | null): Promise<OpenResult>;
+  /**
+   * Qué métodos ofrecer para esa URL, con el estado real de `gh`/`glab` comprobado por Rust
+   * (`auth status`, sin pedir el token) y si hay `client_id` para OAuth.
+   */
+  cloneAuthOptions(url: string): Promise<AuthOptions>;
   /** Entrega el secreto a `git credential approve`. El secreto NUNCA vuelve a la UI. */
   storeCredential(url: string, username: string, secret: string): Promise<void>;
-  testCredential(url: string): Promise<CredentialTest>;
+  /**
+   * `git ls-remote` (no abre el repositorio). Con `auth` comprueba el método elegido; sin él,
+   * lo que ya conozca git.
+   */
+  testCredential(url: string, auth?: CloneAuthRequest | null): Promise<CredentialTest>;
   forgetCredential(url: string, username: string): Promise<void>;
+
+  // OAuth device code (solo con `client_id` configurado en Ajustes; ver docs/oauth-cli.md)
+  /** Paso 1: pide el código, devuelve `userCode` y deja el flujo en memoria de Rust. */
+  oauthDeviceStart(url: string): Promise<DeviceLoginStart>;
+  /** Paso 3: un sondeo. La UI repite cada `interval` segundos hasta `authorized`. */
+  oauthDevicePoll(flowId: string): Promise<DeviceLoginPoll>;
+  /** Abandona el flujo y olvida su token. */
+  oauthDeviceCancel(flowId: string): Promise<void>;
 
   // Pestaña
   getSnapshot(tabId: string): Promise<Snapshot>;
@@ -138,6 +161,20 @@ export interface Api extends PullRequestApi, TagApi {
   /** `rebase` omitido (o `null`) = usa el ajuste «pull con rebase» de Ajustes → Git. */
   pull(tabId: string, remote: string, refspec: string | null, rebase?: boolean | null): Promise<MergeResult>;
   push(tabId: string, remote: string, refspec: string | null, setUpstream: boolean): Promise<void>;
+  /**
+   * Publica una rama **cualquiera** (no solo la actual). El remoto lo resuelve Rust (el de su
+   * upstream, `origin` o el primero). Con `setUpstream` fija el seguimiento si no lo tenía.
+   */
+  pushBranch(tabId: string, branch: string, setUpstream: boolean): Promise<PushBranchResult>;
+  /**
+   * Rebasa la rama actual sobre `branch` (reescribe historia: **confirmación nativa**). Con
+   * conflictos el rebase queda en curso y se resuelve en el estudio de conflictos.
+   */
+  rebaseOnto(tabId: string, branch: string): Promise<RebaseOutcome>;
+  /** Borra una rama en el remoto (**confirmación nativa**). No toca la copia local. */
+  deleteRemoteBranch(tabId: string, remote: string, branch: string): Promise<DoneResult>;
+  /** `git diff base...head` en `FileDiff[]`: lo que `head` aporta desde que se separó de `base`. */
+  branchDiffAgainst(tabId: string, base: string, head: string): Promise<FileDiff[]>;
 
   // Remotos (ipc.md «Remotos»). Añadir, renombrar y quitar abren confirmación nativa en Rust.
   listRemotes(tabId: string): Promise<RemoteView[]>;

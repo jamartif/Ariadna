@@ -206,6 +206,21 @@ export interface ContinueResult {
   integration: IntegrationState;
 }
 
+/** Resultado de publicar una rama cualquiera: el remoto lo eligió Rust. */
+export interface PushBranchResult {
+  remote: string;
+}
+
+/**
+ * Resultado de rebasar la rama actual sobre otra. `done: false` = el usuario canceló la
+ * confirmación nativa. Con `state`, el rebase quedó **en curso** con conflictos.
+ */
+export interface RebaseOutcome {
+  done: boolean;
+  result: MergeResult;
+  state: MergeState | null;
+}
+
 export type HunkSide = 'ours' | 'theirs' | 'base' | 'both';
 
 export interface HunkChoice {
@@ -316,10 +331,78 @@ export interface StashApplyResult {
 
 // ---- Credenciales y clonado (ipc.md, `clone_repository`, `*_credential`) ---------
 
-/** PAT de un solo uso para clonar. Nunca se guarda ni se registra. */
-export interface CloneAuth {
+/** Método de autenticación del clonado que elige el usuario en el diálogo. */
+export type AuthMethodId = 'pat' | 'gh' | 'glab' | 'oauth';
+
+/**
+ * Lo que viaja a `clone_repository` / `test_credential`.
+ *
+ * `secret` solo existe para el PAT: llega desde la interfaz una sola vez y se borra al usarlo.
+ * Con `gh`/`glab` el token lo pide Rust al CLI y **no** cruza el IPC; con `oauth` solo viaja el
+ * `flowId` opaco de un flujo ya autorizado (el token vive en memoria de Rust).
+ */
+export interface CloneAuthRequest {
+  method: AuthMethodId;
+  /** Solo PAT. */
+  username?: string | null;
+  /** Solo PAT. Nunca se guarda ni se registra. */
+  secret?: string | null;
+  /** Solo OAuth: flujo autorizado por el que se pide el token. */
+  flowId?: string | null;
+}
+
+/** Estado real de un CLI de alojamiento, comprobado por Rust **sin** pedir el token. */
+export interface CliAuthStatus {
+  id: 'gh' | 'glab';
+  /** `GitHub CLI` / `GitLab CLI`. */
+  label: string;
+  installed: boolean;
+  loggedIn: boolean;
+  version: string | null;
+  /** Motivo en español si no sirve (incluye el comando a ejecutar). */
+  detail: string | null;
+  /** `gh auth login` / `glab auth login`. */
+  loginCommand: string;
+  /** Usuario que se envía al remoto con ese token. */
   username: string;
-  secret: string;
+}
+
+/** Disponibilidad del flujo OAuth device code (requiere un `client_id` propio). */
+export interface OAuthAvailability {
+  provider: 'github' | 'gitlab';
+  available: boolean;
+  reason: string | null;
+  scopes: string[];
+}
+
+/** Respuesta de `clone_auth_options`: qué métodos ofrecer para esa URL. */
+export interface AuthOptions {
+  provider: RemoteProviderId;
+  /** Las credenciales solo aplican a HTTPS. */
+  https: boolean;
+  cli: CliAuthStatus[];
+  oauth: OAuthAvailability | null;
+}
+
+/** Datos del paso 1 del flujo device code. */
+export interface DeviceLoginStart {
+  /** Identificador opaco del flujo (nunca el `device_code`). */
+  flowId: string;
+  /** Código corto que el usuario teclea en la web. */
+  userCode: string;
+  verificationUri: string;
+  expiresIn: number;
+  interval: number;
+  provider: 'github' | 'gitlab';
+}
+
+export type DeviceLoginState = 'pending' | 'slowDown' | 'authorized' | 'expired' | 'denied';
+
+/** Resultado de un sondeo del flujo device code. */
+export interface DeviceLoginPoll {
+  state: DeviceLoginState;
+  /** Intervalo para el siguiente sondeo (cambia con `slowDown`). */
+  interval: number | null;
 }
 
 export interface CredentialTest {
@@ -509,6 +592,10 @@ export interface AppSettings {
   gitPath: string | null;
   pullRebase: boolean;
   profileRules: ProfileRule[];
+  /** `client_id` de la OAuth App del usuario en GitHub (flujo device code). No es un secreto. */
+  oauthGitHubClientId?: string | null;
+  /** `client_id` de la OAuth App del usuario en GitLab. */
+  oauthGitLabClientId?: string | null;
 }
 
 export type SettingsLoadStatus = 'ok' | 'missing' | 'migrated' | 'resetCorrupt';

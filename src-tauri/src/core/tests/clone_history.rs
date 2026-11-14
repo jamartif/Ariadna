@@ -8,6 +8,7 @@ use ariadna_git::{IntegrationState, MergeFastForward, MergeResult, Secret};
 
 use super::*;
 use crate::core::api::CloneProgressEvent;
+use crate::core::CloneAuthArg;
 
 const PAT: &str = "pat-secreto-4e8d2b7a91";
 
@@ -45,7 +46,7 @@ async fn clona_abre_una_pestana_y_emite_progreso() {
     let dest = env.root.join("clones").join("copia");
     let r = env
         .core
-        .clone_repository(url, Env::s(&dest), None, None, None)
+        .clone_repository(url, Env::s(&dest), None, None)
         .await
         .unwrap();
     assert!(!r.already_open);
@@ -75,7 +76,12 @@ async fn urls_y_destinos_invalidos_dan_error_claro_sin_rastro_del_pat() {
         let dest = env.root.join("nunca");
         let e = env
             .core
-            .clone_repository(bad.into(), Env::s(&dest), None, Some("u".into()), pat())
+            .clone_repository(
+                bad.into(),
+                Env::s(&dest),
+                None,
+                pat().map(|s| CloneAuthArg::pat(Some("u".into()), s)),
+            )
             .await
             .unwrap_err();
         let shown = format!("{e:?}");
@@ -88,7 +94,7 @@ async fn urls_y_destinos_invalidos_dan_error_claro_sin_rastro_del_pat() {
     // Destino relativo.
     let e = env
         .core
-        .clone_repository(good.clone(), "relativa/x".into(), None, None, None)
+        .clone_repository(good.clone(), "relativa/x".into(), None, None)
         .await
         .unwrap_err();
     assert_eq!(e.code, "IO", "{e:?}");
@@ -99,8 +105,7 @@ async fn urls_y_destinos_invalidos_dan_error_claro_sin_rastro_del_pat() {
             good,
             Env::s(&env.root.join("z")),
             None,
-            None,
-            Some(Secret::new("a\nb-secreto")),
+            Some(CloneAuthArg::pat(None, Secret::new("a\nb-secreto"))),
         )
         .await
         .unwrap_err();
@@ -151,8 +156,7 @@ async fn un_401_es_auth_y_el_token_no_aparece_en_el_error_ni_en_disco() {
             format!("http://127.0.0.1:{port}/org/repo.git"),
             Env::s(&dest),
             None,
-            Some("persona".into()),
-            Some(Secret::new(PAT)),
+            Some(CloneAuthArg::pat(Some("persona".into()), Secret::new(PAT))),
         )
         .await
         .unwrap_err();
@@ -183,7 +187,7 @@ async fn cancelar_un_clonado_por_su_id_lo_aborta_y_limpia() {
     let dest = env.root.join("lento");
     let core = env.core.clone();
     let (url, d) = (format!("http://127.0.0.1:{port}/x.git"), Env::s(&dest));
-    let task = tokio::spawn(async move { core.clone_repository(url, d, None, None, None).await });
+    let task = tokio::spawn(async move { core.clone_repository(url, d, None, None).await });
     wait_until("evento inicial", || !clone_events(&env).is_empty()).await;
     let id = clone_events(&env)[0].operation_id;
     // Tab vacío: los clonados se cancelan solo por id.
@@ -203,7 +207,7 @@ async fn credenciales_guardar_probar_y_olvidar_con_un_helper_falso() {
     let (port, stop, _seen) = server_401();
     let t = env
         .core
-        .test_credential(&format!("http://127.0.0.1:{port}/o/r.git"))
+        .test_credential(&format!("http://127.0.0.1:{port}/o/r.git"), None)
         .await
         .unwrap();
     stop.store(true, Ordering::Relaxed);

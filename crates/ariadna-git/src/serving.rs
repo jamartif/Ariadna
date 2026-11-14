@@ -184,6 +184,44 @@ pub trait GitServing: Send + Sync {
         branch: &str,
         fast_forward: MergeFastForward,
     ) -> GitResult<MergeResult>;
+    /// Rebasa la rama actual sobre `onto` (reescribe historia: pide [`Confirmation`]). Con
+    /// conflictos devuelve `Conflicts` y deja el rebase en curso. Por defecto no está soportado:
+    /// lo implementa el motor real.
+    async fn rebase_onto(
+        &self,
+        _repo: &Repository,
+        _onto: &str,
+        _confirmation: &Confirmation,
+    ) -> GitResult<MergeResult> {
+        Err(GitError::Io(
+            "el rebase no está soportado por este motor".into(),
+        ))
+    }
+    /// Borra una rama en el remoto. Destructivo: pide [`Confirmation`]. Por defecto no está
+    /// soportado: lo implementa el motor real.
+    async fn delete_remote_branch(
+        &self,
+        _repo: &Repository,
+        _remote: &str,
+        _name: &str,
+        _confirmation: &Confirmation,
+    ) -> GitResult<()> {
+        Err(GitError::Io(
+            "borrar una rama remota no está soportado por este motor".into(),
+        ))
+    }
+    /// `git diff A...B`: lo que `head` aporta desde que se separó de `base`. Por defecto no está
+    /// soportado: lo implementa el motor real.
+    async fn diff_against(
+        &self,
+        _repo: &Repository,
+        _base: &str,
+        _head: &str,
+    ) -> GitResult<Vec<FileDiff>> {
+        Err(GitError::Io(
+            "el diff entre ramas no está soportado por este motor".into(),
+        ))
+    }
     async fn integration_state(&self, repo: &Repository) -> GitResult<IntegrationState>;
     async fn abort_integration(&self, repo: &Repository) -> GitResult<()>;
     async fn continue_integration(&self, repo: &Repository) -> GitResult<()>;

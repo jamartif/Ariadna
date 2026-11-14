@@ -2,6 +2,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod ai;
+mod auth_methods;
+mod branch_menu;
 mod clone_history;
 mod destructive;
 mod errors;

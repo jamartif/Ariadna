@@ -27,12 +27,32 @@ export function createTauriApi(): Api {
     cancelOperation: (tabId, operationId) => call('cancel_operation', { tabId, operationId }),
     openExternalUrl: (url) => call('open_external_url', { url }),
     // El PAT viaja una sola vez hacia Rust (entorno del proceso git vía GIT_ASKPASS temporal); no se guarda.
+    // Con `gh`/`glab`/`oauth` solo viaja el método (y el `flowId`): el token se queda en Rust.
     cloneRepository: (url, destination, branch, auth) =>
-      call('clone_repository', { url, destination, branch, username: auth?.username ?? null, secret: auth?.secret ?? null }),
+      call('clone_repository', {
+        url,
+        destination,
+        branch,
+        authMethod: auth?.method ?? null,
+        username: auth?.username ?? null,
+        secret: auth?.secret ?? null,
+        flowId: auth?.flowId ?? null
+      }),
+    cloneAuthOptions: (url) => call('clone_auth_options', { url }),
     // El secreto viaja una sola vez hacia Rust (stdin de `git credential approve`) y no se devuelve.
     storeCredential: (url, username, secret) => call('store_credential', { url, username, secret }),
-    testCredential: (url) => call('test_credential', { url }),
+    testCredential: (url, auth) =>
+      call('test_credential', {
+        url,
+        authMethod: auth?.method ?? null,
+        username: auth?.username ?? null,
+        secret: auth?.secret ?? null,
+        flowId: auth?.flowId ?? null
+      }),
     forgetCredential: (url, username) => call('forget_credential', { url, username }),
+    oauthDeviceStart: (url) => call('oauth_device_start', { url }),
+    oauthDevicePoll: (flowId) => call('oauth_device_poll', { flowId }),
+    oauthDeviceCancel: (flowId) => call('oauth_device_cancel', { flowId }),
 
     getSnapshot: (tabId) => call('get_snapshot', { tabId }),
     refresh: (tabId) => call('refresh', { tabId }),
@@ -90,6 +110,10 @@ export function createTauriApi(): Api {
     getCliStatus: () => call('get_cli_status'),
     push: (tabId, remote, refspec, setUpstream) =>
       call('push', { tabId, remote, refspec, setUpstream }),
+    pushBranch: (tabId, branch, setUpstream) => call('push_branch', { tabId, branch, setUpstream }),
+    rebaseOnto: (tabId, branch) => call('rebase_onto', { tabId, branch }),
+    deleteRemoteBranch: (tabId, remote, branch) => call('delete_remote_branch', { tabId, remote, branch }),
+    branchDiffAgainst: (tabId, base, head) => call('branch_diff_against', { tabId, base, head }),
 
     aiState: (tabId) => call('ai_state', { tabId }),
     aiUpdateSettings: (patch) => call('ai_update_settings', { patch }),

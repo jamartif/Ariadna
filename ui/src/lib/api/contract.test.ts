@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMockApi } from './mockApi';
 import { toApiError, ApiError, API_ERROR_CODES, CODES_ADDED_IN_WAVE_2 } from './types';
-import { aiCommitSuggestion, aiState, appState, check, cloneProgress, contextPreview, credentialTest, detect, diffScope, fileDiff, gitPath, mergeResult, notice, openResult, recentRepository, snapshot } from './validate';
+import { aiCommitSuggestion, aiState, appState, authOptions, check, cloneProgress, contextPreview, credentialTest, detect, deviceLoginPoll, deviceLoginStart, diffScope, fileDiff, gitPath, mergeResult, notice, openResult, recentRepository, snapshot } from './validate';
 
 // Fixtures REALES generados por `src-tauri` desde el motor de Rust (ipc.md, «Verificación del contrato»).
 const fixtureModules = import.meta.glob('./fixtures/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
@@ -121,6 +121,15 @@ describe('contrato: IA, clonado y credenciales (sin fixtures de Rust todavía)',
     const sug = await api.aiGenerateCommitMessage('tab-ariadna', { template: null, language: 'auto', style: 'plain' });
     expect(check(aiCommitSuggestion, sug)).toEqual([]);
     expect(check(credentialTest, await api.testCredential('https://github.com/o/r.git'))).toEqual([]);
+    // Métodos de acceso: estado del CLI y del OAuth, sin tokens.
+    expect(check(authOptions, await api.cloneAuthOptions('https://github.com/o/r.git'))).toEqual([]);
+    expect(check(authOptions, await api.cloneAuthOptions('https://dev.azure.com/o/p/_git/r'))).toEqual([]);
+    // Flujo OAuth device code (con `client_id` simulado).
+    const oauthApi = createMockApi({ latency: 0, auth: { oauth: true } });
+    const start = await oauthApi.oauthDeviceStart('https://github.com/o/r.git');
+    expect(check(deviceLoginStart, start)).toEqual([]);
+    const poll = await oauthApi.oauthDevicePoll(start.flowId);
+    expect(check(deviceLoginPoll, poll)).toEqual([]);
     const events: unknown[] = [];
     await api.listen('clone-progress', (p) => events.push(p));
     const res = await api.cloneRepository('https://github.com/o/nuevo.git', '/tmp/nuevo', null);

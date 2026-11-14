@@ -313,7 +313,10 @@ export const appSettings = obj({
   diffFontSize: int,
   gitPath: nullable(str),
   pullRebase: bool,
-  profileRules: arr(profileRule)
+  profileRules: arr(profileRule),
+  // `client_id` de OAuth (públicos): sin ellos, la opción OAuth no aparece al clonar.
+  oauthGitHubClientId: nullable(str),
+  oauthGitLabClientId: nullable(str)
 });
 
 export const settingsView = obj({
@@ -346,6 +349,46 @@ export const cliStatus = obj({
 });
 
 export const credentialTest = obj({ ok: bool, code: nullable(str) });
+
+/** Estado de un CLI de alojamiento (`clone_auth_options`): sin tokens. */
+export const cliAuthStatus = obj({
+  id: oneOf('gh', 'glab'),
+  label: str,
+  installed: bool,
+  loggedIn: bool,
+  version: nullable(str),
+  detail: nullable(str),
+  loginCommand: str,
+  username: str
+});
+
+export const oauthAvailability = obj({
+  provider: oneOf('github', 'gitlab'),
+  available: bool,
+  reason: nullable(str),
+  scopes: arr(str)
+});
+
+export const authOptions = obj({
+  provider: oneOf('azureDevOps', 'github', 'gitlab', 'bitbucket', 'other'),
+  https: bool,
+  cli: arr(cliAuthStatus),
+  oauth: nullable(oauthAvailability)
+});
+
+export const deviceLoginStart = obj({
+  flowId: str,
+  userCode: str,
+  verificationUri: str,
+  expiresIn: int,
+  interval: int,
+  provider: oneOf('github', 'gitlab')
+});
+
+export const deviceLoginPoll = obj({
+  state: oneOf('pending', 'slowDown', 'authorized', 'expired', 'denied'),
+  interval: nullable(int)
+});
 
 export const cloneProgress = obj({ operationId: int, phase: str, percent: nullable(num) });
 

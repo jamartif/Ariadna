@@ -18,6 +18,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Deserializer};
 use zeroize::{Zeroize, Zeroizing};
 
+use crate::askpass::{scrub_error, AskpassScript, CloneAuth, SECRET_VAR, USER_VAR};
 use crate::engine::GitCliEngine;
 use crate::error::{truncate, GitError, GitResult};
 use crate::remote_url::{parse_remote_url, ParsedRemote, UrlKind};
@@ -105,6 +106,12 @@ pub trait CredentialStore {
     /// `git ls-remote --exit-code -q <url>` sin interacción. `Ok` si el servidor responde
     /// (también con un repo vacío); [`GitError::Auth`] si las credenciales no valen.
     async fn test_credential(&self, url: &str) -> GitResult<()>;
+
+    /// Igual que [`test_credential`](Self::test_credential) pero con una credencial de **un solo
+    /// uso**: `git ls-remote` recibe el token por `GIT_ASKPASS` temporal (nunca en `argv` ni en
+    /// la URL) y con `credential.helper=` vacío (nadie lo guarda). Sirve al botón «Comprobar» del
+    /// diálogo de clonado antes de descargar nada.
+    async fn test_credential_with_auth(&self, url: &str, auth: CloneAuth) -> GitResult<()>;
 
     /// `git credential fill` sin interacción (para las pull requests). Si el helper no tiene la
     /// credencial devuelve [`GitError::Auth`].
@@ -246,6 +253,39 @@ impl GitCliEngine {
                 .await),
         }
     }
+
+    /// `ls-remote` con una credencial de un solo uso (mismo mecanismo que clonar: `GIT_ASKPASS`
+    /// temporal + `credential.helper=` vacío). El token no va en `argv` ni en la URL.
+    async fn probe_with_auth(&self, url: &str, auth: &CloneAuth) -> GitResult<()> {
+        let askpass = AskpassScript::create()?;
+        let script = askpass.git_askpass_value();
+        let args: Vec<std::ffi::OsString> = ["ls-remote", "--exit-code", "-q", "--", url]
+            .iter()
+            .map(std::ffi::OsString::from)
+            .collect();
+        let env = [
+            ("GIT_ASKPASS", script.as_str()),
+            ("GCM_INTERACTIVE", "never"),
+            (USER_VAR, auth.username()),
+            (SECRET_VAR, auth.secret()),
+        ];
+        let cwd = neutral_cwd();
+        let runner = self.runner.clone().with_config("credential.helper", "");
+        let fut = runner.run_with_env(&cwd, CommandKind::Network, &args, None, &env);
+        let out = tokio::time::timeout(PROBE_TIMEOUT, fut)
+            .await
+            .map_err(|_| GitError::Timeout {
+                command: "git ls-remote".into(),
+            })??;
+        drop(askpass);
+        match out.code {
+            Some(0) | Some(2) => Ok(()),
+            _ => Err(self
+                .runner
+                .failure_error(&cwd, CommandKind::Network, &args, &out)
+                .await),
+        }
+    }
 }
 
 #[async_trait]
@@ -285,6 +325,14 @@ impl CredentialStore for GitCliEngine {
         // el usuario que lleve.
         parse_remote_url(url, false).map_err(|why| why.into_error(url))?;
         self.probe_remote(url.trim()).await
+    }
+
+    async fn test_credential_with_auth(&self, url: &str, auth: CloneAuth) -> GitResult<()> {
+        parse_remote_url(url, false).map_err(|why| why.into_error(url))?;
+        let secret = auth.secret().to_owned();
+        let secret = zeroize::Zeroizing::new(secret);
+        let res = self.probe_with_auth(url.trim(), &auth).await;
+        res.map_err(|e| scrub_error(e, &secret))
     }
 
     async fn fill_credential(&self, url: &str) -> GitResult<FilledCredential> {

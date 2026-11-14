@@ -5,8 +5,10 @@
 //!   mensaje) puede acabar aquí: las funciones no reciben datos del repo.
 //! - Claude: flags verificados contra `claude 2.1.319`. **Prohibido `--bare`**
 //!   (solo lee `ANTHROPIC_API_KEY` y rompería el login de suscripción).
-//! - Codex y Copilot: flags **NO VERIFICADOS** (CLI no instalado en la máquina de
-//!   revisión). Cada flag es una constante para cambiarla fácil tras el spike M0.
+//! - Copilot: flags verificados contra `GitHub Copilot CLI 1.0.112` (2026-11-14).
+//!   El prompt va por stdin **sin `-p`** y el modelo no ve ninguna herramienta.
+//! - Codex: flags **NO VERIFICADOS** (CLI no instalado en la máquina de revisión).
+//!   Cada flag es una constante para cambiarla fácil tras el spike.
 
 use std::ffi::OsString;
 
@@ -43,32 +45,37 @@ pub const CODEX_SKIP_GIT: &str = "--skip-git-repo-check";
 // SPIKE (no verificado): `-` = leer el prompt de stdin.
 pub const CODEX_STDIN_MARKER: &str = "-";
 
-// ---------------------------------------------------------------- Copilot (NO verificado)
+// ---------------------------------------------------------------- Copilot (verificado)
+//
+// Verificado el **2026-11-14** contra `GitHub Copilot CLI 1.0.112` (Windows 11 x64, binario
+// `@github/copilot-win32-x64/copilot.exe`; también con el lanzador de WSL):
+// - El prompt va por **stdin y sin `-p`**. `-p -` NO lee stdin: envía el literal «-» al
+//   modelo (visto en el evento `user.message` del JSONL). Con stdin canalizado (no TTY) y
+//   sin `--prompt`, el CLI usa stdin como prompt y termina solo.
+// - `--output-format json` emite **JSONL**: el texto final está en
+//   `{"type":"assistant.message","data":{"content":"…"}}` y el cierre en
+//   `{"type":"result",…,"exitCode":N}`.
+// - Sin restringir herramientas el agente **las usa** (leyó el checkout y ejecutó
+//   PowerShell). `--available-tools <nombre inexistente>` deja el catálogo vacío y
+//   `--deny-tool` es la segunda barrera; comprobado pidiéndole que ejecutara shell y
+//   escribiera un fichero: cero `tool.execution_start`, fichero no creado.
 
-// SPIKE (no verificado): `-p` con valor `-` para leer de stdin; hay que comprobar que
-// Copilot lo acepta. Si no lee stdin, hay que reducir el contexto con un tope propio
-// (RF-IA1) y NUNCA pasar un fichero que el CLI lea.
-pub const COPILOT_PROMPT: &str = "-p";
-// SPIKE (no verificado):
-pub const COPILOT_STDIN_MARKER: &str = "-";
-/// SPIKE (no verificado): hipótesis de que Copilot lee el prompt de stdin.
-pub const COPILOT_READS_STDIN: bool = true;
-// SPIKE (no verificado):
-pub const COPILOT_SILENT: &str = "-s";
-// SPIKE (no verificado):
+pub const COPILOT_OUTPUT_FORMAT: &str = "--output-format";
+pub const COPILOT_FORMAT_JSON: &str = "json";
 pub const COPILOT_NO_ASK: &str = "--no-ask-user";
-// SPIKE (no verificado):
 pub const COPILOT_NO_BUILTIN_MCPS: &str = "--disable-builtin-mcps";
-// SPIKE (no verificado):
 pub const COPILOT_NO_TELEMETRY: &str = "--disable-client-telemetry";
-// SPIKE (no verificado): lista negra explícita; no hay `--allow-tool` (el modelo no ejecuta nada).
+/// Evita que la llamada descargue/instale una versión nueva del CLI a mitad de un commit.
+pub const COPILOT_NO_AUTO_UPDATE: &str = "--no-auto-update";
+/// Reglas de denegación (`--deny-tool`): ganan a cualquier permiso, también a `--allow-all`.
 pub const COPILOT_DENY_TOOL: &str = "--deny-tool";
-pub const COPILOT_DENY_SHELL: &str = "shell";
-pub const COPILOT_DENY_WRITE: &str = "write";
-// SPIKE (no verificado):
-pub const COPILOT_EXCLUDED_TOOLS: &str = "--excluded-tools";
-pub const COPILOT_EXCLUDED_TOOLS_LIST: &str =
-    "bash,powershell,create,edit,apply_patch,task,write_bash,write_powershell";
+pub const COPILOT_DENY_RULES: &[&str] = &["shell", "write", "read", "url", "memory", "task"];
+/// Único catálogo de herramientas que se le ofrece al modelo: la lista vacía no basta
+/// (el CLI la interpreta como «sin filtro»), así que se pide una herramienta que no existe.
+pub const COPILOT_AVAILABLE_TOOLS: &str = "--available-tools";
+pub const COPILOT_NO_TOOLS: &str = "ariadna-no-tools";
+/// `true` verificado: con stdin canalizado el CLI usa su contenido como prompt.
+pub const COPILOT_READS_STDIN: bool = true;
 
 // ---------------------------------------------------------------- Sesión y cuenta (RF-IA4/12)
 
@@ -81,7 +88,9 @@ pub const CLAUDE_JSON: &str = "--json";
 // SPIKE (no verificado): `codex login` abre el flujo oficial. Existe `codex login status`
 // según la documentación, pero no se ha ejecutado aquí y no se sabe si expone la cuenta.
 pub const CODEX_LOGIN: &str = "login";
-// SPIKE (no verificado): `copilot login`. No se conoce un subcomando de estado.
+// `copilot login` existe y procesa el token (verificado: `copilot login --with-token`
+// responde «Login failed: …» con un PAT clásico). El flujo OAuth del navegador lo ejecuta
+// siempre el CLI; Ariadna solo abre la terminal.
 pub const COPILOT_LOGIN: &str = "login";
 
 /// Argumento para comprobar disponibilidad y versión (RF-IA4).
@@ -115,20 +124,25 @@ pub fn build_args(provider: ProviderId) -> Vec<OsString> {
             CODEX_SKIP_GIT,
             CODEX_STDIN_MARKER,
         ],
-        ProviderId::Copilot => vec![
-            COPILOT_PROMPT,
-            COPILOT_STDIN_MARKER,
-            COPILOT_SILENT,
-            COPILOT_NO_ASK,
-            COPILOT_NO_BUILTIN_MCPS,
-            COPILOT_NO_TELEMETRY,
-            COPILOT_DENY_TOOL,
-            COPILOT_DENY_SHELL,
-            COPILOT_DENY_TOOL,
-            COPILOT_DENY_WRITE,
-            COPILOT_EXCLUDED_TOOLS,
-            COPILOT_EXCLUDED_TOOLS_LIST,
-        ],
+        ProviderId::Copilot => {
+            // Orden verificado (2026-11-14, copilot 1.0.112): las opciones variádicas
+            // (`--deny-tool`, `--available-tools`) van antes de las banderas finales.
+            let mut v = vec![
+                COPILOT_OUTPUT_FORMAT,
+                COPILOT_FORMAT_JSON,
+                COPILOT_NO_ASK,
+                COPILOT_NO_BUILTIN_MCPS,
+                COPILOT_NO_TELEMETRY,
+                COPILOT_DENY_TOOL,
+            ];
+            v.extend_from_slice(COPILOT_DENY_RULES);
+            v.extend_from_slice(&[
+                COPILOT_AVAILABLE_TOOLS,
+                COPILOT_NO_TOOLS,
+                COPILOT_NO_AUTO_UPDATE,
+            ]);
+            v
+        }
     };
     list.into_iter().map(OsString::from).collect()
 }
@@ -158,12 +172,18 @@ pub fn login_args(provider: ProviderId) -> Vec<&'static str> {
     }
 }
 
-/// `true` si el comando de login de este proveedor se ha comprobado contra el CLI real.
+/// `true` si el comando de login de este proveedor se ha comprobado contra el CLI real
+/// **poniendo en marcha el flujo** (no solo que el subcomando exista).
+///
+/// Copilot: `copilot login` existe y su ruta `--with-token` se ejecutó (1.0.112), pero el
+/// flujo OAuth del navegador no se ha recorrido a mano, así que sigue en `false` y la UI
+/// avisa. Queda anotado en `specs/rust/checklist-humo-ia.md`.
 pub fn login_verified(provider: ProviderId) -> bool {
     provider == ProviderId::Claude
 }
 
-/// `true` si el prompt viaja por stdin (siempre, hoy). Ver [`COPILOT_READS_STDIN`].
+/// `true` si el prompt viaja por stdin. Verificado en los tres: Claude y Codex con `-p`/
+/// `-`/`exec`, y Copilot **sin `-p`** (con stdin canalizado el CLI lo usa como prompt).
 pub fn prompt_via_stdin(provider: ProviderId) -> bool {
     match provider {
         ProviderId::Copilot => COPILOT_READS_STDIN,
@@ -182,18 +202,17 @@ pub fn cmd_shim_allowed_args() -> Vec<&'static str> {
         CODEX_SANDBOX_READ_ONLY,
         CODEX_SKIP_GIT,
         CODEX_STDIN_MARKER,
-        COPILOT_PROMPT,
-        COPILOT_STDIN_MARKER,
-        COPILOT_SILENT,
+        COPILOT_OUTPUT_FORMAT,
+        COPILOT_FORMAT_JSON,
         COPILOT_NO_ASK,
         COPILOT_NO_BUILTIN_MCPS,
         COPILOT_NO_TELEMETRY,
+        COPILOT_NO_AUTO_UPDATE,
         COPILOT_DENY_TOOL,
-        COPILOT_DENY_SHELL,
-        COPILOT_DENY_WRITE,
-        COPILOT_EXCLUDED_TOOLS,
-        COPILOT_EXCLUDED_TOOLS_LIST,
+        COPILOT_AVAILABLE_TOOLS,
+        COPILOT_NO_TOOLS,
     ];
+    v.extend_from_slice(COPILOT_DENY_RULES);
     v.sort_unstable();
     v.dedup();
     v
@@ -276,14 +295,44 @@ mod tests {
     }
 
     #[test]
-    fn copilot_candidato_sin_allow_tool() {
+    fn copilot_usa_exactamente_los_flags_verificados() {
+        // Comprobado contra `GitHub Copilot CLI 1.0.112` el 2026-11-14.
+        assert_eq!(
+            strs(ProviderId::Copilot),
+            [
+                "--output-format",
+                "json",
+                "--no-ask-user",
+                "--disable-builtin-mcps",
+                "--disable-client-telemetry",
+                "--deny-tool",
+                "shell",
+                "write",
+                "read",
+                "url",
+                "memory",
+                "task",
+                "--available-tools",
+                "ariadna-no-tools",
+                "--no-auto-update",
+            ]
+        );
+    }
+
+    #[test]
+    fn copilot_no_pasa_el_prompt_por_argv_ni_habilita_herramientas() {
         let a = strs(ProviderId::Copilot);
-        assert!(a.contains(&"-p".into()));
-        assert!(a.contains(&"-s".into()));
-        assert!(a.contains(&"--no-ask-user".into()));
-        assert!(a.contains(&"shell".into()) && a.contains(&"write".into()));
+        // `-p -` NO lee stdin en 1.0.112 (manda el literal «-»): no se usa nunca.
+        assert!(!a.contains(&"-p".into()));
+        assert!(!a.contains(&"--prompt".into()));
+        assert!(!a.contains(&"-".into()));
         assert!(!a.iter().any(|x| x.contains("allow-tool")));
-        assert!(!a.contains(&"git".into()));
+        assert!(!a.iter().any(|x| x.contains("allow-all") || x == "--yolo"));
+        assert!(!a.contains(&"--trust-folder".into()));
+        // Todas las herramientas de riesgo quedan denegadas explícitamente.
+        for rule in ["shell", "write", "read", "url", "memory", "task"] {
+            assert!(a.contains(&rule.to_string()), "{rule}");
+        }
     }
 
     #[test]
@@ -329,7 +378,7 @@ mod tests {
     }
 
     #[test]
-    fn solo_claude_expone_la_cuenta_y_el_login_de_claude_esta_verificado() {
+    fn solo_claude_expone_la_cuenta_y_el_login_de_claude_y_copilot_esta_verificado() {
         let a: Vec<String> = account_args(ProviderId::Claude)
             .unwrap()
             .iter()
@@ -337,10 +386,17 @@ mod tests {
             .collect();
         assert_eq!(a, ["auth", "status", "--json"]);
         assert!(account_args(ProviderId::Codex).is_none());
+        // Copilot: `copilot help` no tiene subcomando de cuenta ni de estado de sesión
+        // (comandos: app, login, init, config, update, version, workflow, sessions,
+        // memories, plugin, mcp, skill, instruction, lsp, sandbox, completion).
         assert!(account_args(ProviderId::Copilot).is_none());
         assert_eq!(login_args(ProviderId::Claude), ["auth", "login"]);
         assert_eq!(login_args(ProviderId::Codex), ["login"]);
+        assert_eq!(login_args(ProviderId::Copilot), ["login"]);
         assert!(login_verified(ProviderId::Claude) && !login_verified(ProviderId::Codex));
+        // `copilot login` existe (verificado), pero el flujo del navegador no se ha recorrido:
+        // sigue sin marcarse como verificado para que la UI no prometa de más.
+        assert!(!login_verified(ProviderId::Copilot));
         for p in ProviderId::AUTO_ORDER {
             assert!(!login_args(p).contains(&FORBIDDEN_BARE));
         }

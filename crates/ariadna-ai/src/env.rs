@@ -51,20 +51,23 @@ pub const ALWAYS_REMOVE: &[&str] = &[
 /// Variable que aísla la configuración (y el login) de cada proveedor, como dato.
 ///
 /// Claude y Codex: verificado en la documentación de los CLI (spec §5.1.1).
-/// Copilot: `None` = no verificado; comparte login entre perfiles (hay que avisar).
+/// Copilot: `None` = **no se puede aislar el login** (verificado el 2026-11-14 con
+/// `copilot 1.0.112`: `COPILOT_HOME` mueve configuración y estado, pero el token OAuth vive
+/// en el almacén de credenciales del sistema y sigue disponible con un `COPILOT_HOME` vacío
+/// → comparte sesión entre perfiles y la interfaz lo avisa).
 pub fn config_dir_var(provider: ProviderId) -> Option<&'static str> {
     match provider {
         ProviderId::Claude => Some("CLAUDE_CONFIG_DIR"),
         ProviderId::Codex => Some("CODEX_HOME"),
-        // SPIKE (no verificado): Copilot no tiene variable de aislamiento confirmada.
         ProviderId::Copilot => None,
     }
 }
 
-/// Candidata para Copilot que **no** se usa: `COPILOT_HOME` (y `--config-dir`) aparecen en
-/// referencias del CLI, pero no se han podido comprobar (no hay `copilot` instalado). Mientras
-/// no se verifique, Copilot comparte login entre perfiles y la interfaz lo avisa.
-pub const COPILOT_HOME_CANDIDATE_UNVERIFIED: &str = "COPILOT_HOME";
+/// Variable de Copilot que **solo** mueve configuración y estado (`settings.json`, sesiones,
+/// plugins, logs): **no** aísla la sesión, porque el token está en el llavero del sistema
+/// (comprobado con un `COPILOT_HOME` vacío: `copilot 1.0.112` siguió autenticado). No se
+/// inyecta para no dar a entender un aislamiento que no existe.
+pub const COPILOT_HOME_CONFIG_ONLY: &str = "COPILOT_HOME";
 
 /// Cómo se aísla el login de un proveedor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,8 +80,9 @@ pub struct Isolation {
 
 /// Aislamiento disponible. Claude: **verificado** (`CLAUDE_CONFIG_DIR` cambia `configDirectory`
 /// y deja `loggedIn: false` en un directorio vacío, claude 2.1.319). Codex: `CODEX_HOME` según
-/// la documentación de OpenAI, **no verificado** (CLI no instalado). Copilot: sin mecanismo
-/// confirmado.
+/// la documentación de OpenAI, **no verificado** (CLI no instalado). Copilot: **verificado que
+/// no se puede aislar el login** (`COPILOT_HOME` solo mueve configuración; el token está en el
+/// llavero del sistema).
 pub fn isolation(provider: ProviderId) -> Isolation {
     Isolation {
         var: config_dir_var(provider),
@@ -265,16 +269,14 @@ mod tests {
         assert_eq!(isolation(ProviderId::Codex).var, Some("CODEX_HOME"));
         assert!(!isolation(ProviderId::Codex).verified);
         assert_eq!(isolation(ProviderId::Copilot).var, None);
-        // La candidata de Copilot no se aplica nunca mientras no se verifique.
+        // La candidata de Copilot no se aplica nunca: movería la configuración pero no la
+        // sesión, y la interfaz daría por aislado un login que sigue siendo el mismo.
         let opts = EnvOptions {
             config_dir: Some(PathBuf::from("/x")),
             ..EnvOptions::default()
         };
         let pe = provider_env(ProviderId::Copilot, &opts);
-        assert!(pe
-            .extra
-            .iter()
-            .all(|(k, _)| k != COPILOT_HOME_CANDIDATE_UNVERIFIED));
+        assert!(pe.extra.iter().all(|(k, _)| k != COPILOT_HOME_CONFIG_ONLY));
     }
 
     #[test]

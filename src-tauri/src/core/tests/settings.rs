@@ -436,6 +436,8 @@ async fn formas_json_del_contrato_con_la_ui() {
             "diffFontSize",
             "gitPath",
             "language",
+            "oauthGitHubClientId",
+            "oauthGitLabClientId",
             "profileRules",
             "pullRebase",
             "theme",

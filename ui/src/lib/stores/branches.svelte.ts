@@ -1,5 +1,5 @@
-import type { Branch, MergeFastForward } from '$lib/api/types';
-import { toApiError } from '$lib/api/types';
+import type { Branch, FileDiff, MergeFastForward } from '$lib/api/types';
+import { toApiError, type ApiError } from '$lib/api/types';
 import { t, tn } from '$lib/i18n';
 import { toasts } from './toasts.svelte';
 import type { TabState } from './tab.svelte';
@@ -9,6 +9,13 @@ export type BranchPrompt =
   | { kind: 'checkout-dirty'; name: string; changes: number }
   | { kind: 'merge'; name: string }
   | null;
+
+/** Diff de una rama contra otra (`base...head`), tal como lo pinta el detalle de rama. */
+export interface BranchDiff {
+  base: string;
+  head: string;
+  files: FileDiff[];
+}
 
 /**
  * Acciones sobre ramas de UNA pestaña. Las confirmaciones destructivas (borrar, divergencia)
@@ -140,6 +147,95 @@ export class BranchesController {
 
   cancelPrompt(): void {
     this.prompt = null;
+  }
+
+  // ---- Menú contextual del riel -------------------------------------------------------------
+
+  /**
+   * Publica una rama **cualquiera** (no solo la actual). Con una rama sin origen, Rust la
+   * publica con `--set-upstream`: queda siguiendo su remoto.
+   */
+  async pushBranch(name: string): Promise<boolean> {
+    const local = this.locals.find((x) => x.name === name);
+    if (!local) return false;
+    const setUpstream = !local.upstream;
+    const res = await this.run('push', t('branches.pushFailed'), () => this.tab.api.pushBranch(this.tab.id, name, setUpstream));
+    if (!res) return false;
+    toasts.success(t('branches.pushed', { name, remote: res.remote }));
+    return true;
+  }
+
+  /**
+   * Rebasa la **rama actual** sobre `name`. Si hay conflictos el rebase queda en curso y se pasa
+   * al panel de Conflictos (desde ahí se continúa o se aborta).
+   */
+  async rebase(name: string): Promise<boolean> {
+    if (this.busy) return false;
+    this.busy = 'rebase';
+    try {
+      const { done, result } = await this.tab.api.rebaseOnto(this.tab.id, name);
+      if (!done) return false;
+      if (typeof result === 'object' && 'conflicts' in result) {
+        toasts.warning(t('branches.rebaseStarted'), tn('conflicts.banner.pending', result.conflicts.paths.length));
+        this.tab.panel = 'conflicts';
+        return false;
+      }
+      toasts.success(t('branches.rebased', { branch: name }));
+      return true;
+    } catch (e) {
+      toasts.error(t('branches.rebaseFailed'), toApiError(e));
+      return false;
+    } finally {
+      this.busy = null;
+    }
+  }
+
+  /** Borra una rama en el remoto (`remoto/rama`). Confirmación nativa desde Rust. */
+  async removeRemote(remote: string, name: string): Promise<boolean> {
+    const res = await this.run('deleteRemote', t('branches.deleteRemoteFailed'), () =>
+      this.tab.api.deleteRemoteBranch(this.tab.id, remote, name)
+    );
+    if (!res?.done) return false;
+    toasts.success(t('branches.deletedRemote', { name: `${remote}/${name}` }));
+    if (this.selected === `${remote}/${name}`) this.selected = null;
+    return true;
+  }
+
+  /** Diff `base...head` que pinta el detalle de una rama («Ver diff contra la actual»). */
+  diff = $state.raw<BranchDiff | null>(null);
+  diffError = $state.raw<ApiError | null>(null);
+  diffBusy = $state(false);
+  private diffGen = 0;
+
+  /** Carga (o limpia, si `base === head`) el diff de `head` contra `base`. */
+  async compare(base: string, head: string): Promise<void> {
+    const mine = ++this.diffGen;
+    if (base === head) {
+      this.diff = null;
+      this.diffError = null;
+      this.diffBusy = false;
+      return;
+    }
+    this.diffBusy = true;
+    try {
+      const files = await this.tab.api.branchDiffAgainst(this.tab.id, base, head);
+      if (mine !== this.diffGen) return;
+      this.diff = { base, head, files };
+      this.diffError = null;
+    } catch (e) {
+      if (mine !== this.diffGen) return;
+      this.diff = null;
+      this.diffError = toApiError(e);
+    } finally {
+      if (mine === this.diffGen) this.diffBusy = false;
+    }
+  }
+
+  clearDiff(): void {
+    this.diffGen++;
+    this.diff = null;
+    this.diffError = null;
+    this.diffBusy = false;
   }
 }
 

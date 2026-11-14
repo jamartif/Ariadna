@@ -35,10 +35,15 @@ import {
   type AppSettings,
   type AppState,
   type Branch,
+  type AuthOptions,
+  type CliAuthStatus,
   type CliStatus,
   type Commit,
   type ConflictFile,
   type ContextPreview,
+  type CredentialTest,
+  type DeviceLoginPoll,
+  type DeviceLoginStart,
   type DiffHunk,
   type DiffScope,
   type FileDiff,
@@ -123,6 +128,12 @@ export interface MockOptions {
   confirm?: (message: string) => boolean;
   /** Reloj inyectable. */
   now?: () => Date;
+  /**
+   * Qué métodos de clonado simula. Por defecto `gh` instalado y con sesión (como una máquina
+   * normal con GitHub CLI), `glab` ausente y OAuth oculto (sin `client_id`). Los escenarios
+   * `oauth`, `glab` y `gh-logged-out` cambian eso desde la URL (para verlo en el navegador).
+   */
+  auth?: { gh?: boolean; ghLogged?: boolean; glab?: boolean; glabLogged?: boolean; oauth?: boolean };
 }
 
 type Base = 'M' | 'A' | 'D' | 'R' | '?' | 'U';
@@ -502,7 +513,9 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     profileRules: [
       { pattern: 'dev.azure.com', profile: 'empresa' },
       { pattern: 'github.com', profile: 'personal' }
-    ]
+    ],
+    oauthGitHubClientId: null,
+    oauthGitLabClientId: null
   };
   let gitInUse: { path: string; version: string } | null = scenario === 'nogit' ? null : { path: '/usr/bin/git', version: '2.47.0' };
   const settingsWarning =
@@ -514,6 +527,64 @@ export function createMockApi(options: MockOptions = {}): MockApi {
   const aiCancelled = new Map<string, () => void>();
   /** Credenciales «guardadas» por host: solo si el token era válido; el secreto NO se conserva. */
   const credentials = new Map<string, { username: string; valid: boolean }>();
+  // Escenarios de URL para verlo en el navegador: `?scenario=oauth` (client_id configurado) y
+  // `?scenario=gh-logged-out` (gh instalado sin sesión).
+  const authCfg = {
+    gh: options.auth?.gh ?? true,
+    ghLogged: options.auth?.ghLogged ?? scenario !== 'gh-logged-out',
+    glab: options.auth?.glab ?? scenario === 'glab',
+    glabLogged: options.auth?.glabLogged ?? scenario === 'glab',
+    oauth: options.auth?.oauth ?? scenario === 'oauth'
+  };
+  /** Flujos OAuth device code simulados: el token nunca se representa, solo el estado. */
+  const oauthFlows = new Map<string, { provider: 'github' | 'gitlab'; state: 'pending' | 'authorized'; polls: number }>();
+  let oauthCounter = 0;
+
+  /** Estado simulado de un CLI de alojamiento (sin token, como Rust). */
+  const cliStatus = (
+    id: 'gh' | 'glab',
+    label: string,
+    installed: boolean,
+    loggedIn: boolean,
+    loginCommand: string,
+    username: string
+  ): CliAuthStatus => ({
+    id,
+    label,
+    installed,
+    loggedIn,
+    version: installed ? (id === 'gh' ? 'gh version 2.103.3 (2026-10-26)' : 'glab version 1.64.0') : null,
+    detail: installed ? (loggedIn ? null : `${label} no tiene la sesión iniciada. Ejecuta «${loginCommand}».`) : `No se encontró «${id}».`,
+    loginCommand,
+    username
+  });
+
+  /** Por qué ese método no puede clonar (`null` = sí puede). Nunca compara tokens reales. */
+  const authProblem = (method: string, url: string, auth?: { secret?: string | null; flowId?: string | null } | null): string | null => {
+    const provider = PROVIDER_IDS[parseRemote(url)?.provider ?? 'other'] ?? 'other';
+    if (method === 'gh' || method === 'glab') {
+      const want = method === 'gh' ? 'github' : 'gitlab';
+      if (provider !== want) return `La sesión de ${method === 'gh' ? 'GitHub' : 'GitLab'} CLI no sirve para este repositorio. Elige otro método.`;
+      const installed = method === 'gh' ? authCfg.gh : authCfg.glab;
+      const logged = method === 'gh' ? authCfg.ghLogged : authCfg.glabLogged;
+      if (!installed) return `No se encontró «${method}». Instálalo y ejecuta «${method} auth login».`;
+      if (!logged) {
+        const label = method === 'gh' ? 'GitHub CLI' : 'GitLab CLI';
+        return `${label} no tiene la sesión iniciada en este equipo. Ejecuta «${method} auth login» y vuelve a intentarlo.`;
+      }
+      return null;
+    }
+    if (method === 'oauth') {
+      const f = auth?.flowId ? oauthFlows.get(auth.flowId) : undefined;
+      return f?.state === 'authorized' ? null : 'La autorización OAuth ha caducado. Vuelve a iniciar sesión con el navegador.';
+    }
+    // PAT: un token válido o una credencial guardada; si no, el repo puede seguir siendo público.
+    const host = (/^[a-z]+:\/\/(?:[^@/]*@)?([^/:]+)/i.exec(url)?.[1] ?? '').toLowerCase();
+    const oneShot = auth?.secret && auth.secret.length >= 8 && auth.secret !== 'invalid-token';
+    const cred = credentials.get(host);
+    if (oneShot || cred?.valid) return null;
+    return 'Git no pudo autenticarse en el servidor. Guarda un token de acceso personal (PAT) o inicia sesión con el Git Credential Manager.';
+  };
   const cloneOps = new Map<number, () => void>();
   /** Enlaces que habría abierto el navegador (solo pruebas). */
   const openedUrls: string[] = [];
@@ -1029,6 +1100,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       cloneOps.set(operationId, () => {
         cancelled = true;
       });
+      const method = auth?.method ?? 'pat';
       const phases: [string, number | null][] = [
         ['Resolviendo el host', null],
         ['Recibiendo objetos', 12],
@@ -1045,16 +1117,12 @@ export function createMockApi(options: MockOptions = {}): MockApi {
           await delay(step || 0);
           if (cancelled) throw err('CANCELLED', 'Clonado cancelado.');
           if (phase === 'Resolviendo el host' && needsAuth) {
-            // El PAT de un solo uso se valida y se descarta: nunca se guarda en `credentials`.
-            const oneShot = auth && auth.secret.length >= 8 && auth.secret !== 'invalid-token';
-            const cred = credentials.get(host);
-            if (!oneShot && (!cred || !cred.valid)) {
-              throw err('AUTH', 'Git no pudo autenticarse en el servidor. Guarda un token de acceso personal (PAT) o inicia sesión con el Git Credential Manager.', `remote: Authentication failed for '${host}'`);
-            }
+            const why = authProblem(method, url, auth);
+            if (why) throw err('AUTH', why, `remote: Authentication failed for '${host}'`);
           }
         }
         if (/no-existe|notfound/i.test(url)) throw err('COMMAND_FAILED', 'Git no pudo clonar el repositorio: no se encontró.', 'fatal: repository not found');
-        const name = destination.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || 'repo';
+        const name = destination.replace(/[\/]+$/, '').split(/[\/]/).pop() || 'repo';
         const existing = [...repos.values()].find((r) => r.path === destination);
         let repo = existing;
         let alreadyOpen = true;
@@ -1077,6 +1145,51 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         cloneOps.delete(operationId);
       }
     },
+    async cloneAuthOptions(url): Promise<AuthOptions> {
+      await delay(Math.min(latency, 60));
+      const provider = PROVIDER_IDS[parseRemote(url)?.provider ?? 'other'] ?? 'other';
+      const cli: CliAuthStatus[] = [];
+      if (provider === 'github') cli.push(cliStatus('gh', 'GitHub CLI', authCfg.gh, authCfg.ghLogged, 'gh auth login', 'x-access-token'));
+      if (provider === 'gitlab') cli.push(cliStatus('glab', 'GitLab CLI', authCfg.glab, authCfg.glabLogged, 'glab auth login', 'oauth2'));
+      const oauth =
+        provider === 'github' || provider === 'gitlab'
+          ? {
+              provider: (provider === 'github' ? 'github' : 'gitlab') as 'github' | 'gitlab',
+              available: authCfg.oauth,
+              reason: authCfg.oauth ? null : 'Falta el client_id de tu aplicación OAuth (ver docs/oauth-cli.md).',
+              scopes: provider === 'github' ? ['repo'] : ['read_repository', 'write_repository']
+            }
+          : null;
+      return { provider, https: /^https:\/\//i.test(url.trim()), cli, oauth };
+    },
+    async oauthDeviceStart(url): Promise<DeviceLoginStart> {
+      await delay(Math.min(latency, 60));
+      const provider: 'github' | 'gitlab' = parseRemote(url)?.provider === 'gitlab' ? 'gitlab' : 'github';
+      if (!authCfg.oauth) throw err('POLICY', 'Falta el client_id de tu aplicación OAuth (ver docs/oauth-cli.md).');
+      const flowId = `oauth-flow-${++oauthCounter}`;
+      oauthFlows.set(flowId, { provider, state: 'pending', polls: 0 });
+      return {
+        flowId,
+        userCode: 'ABCD-1234',
+        verificationUri: provider === 'github' ? 'https://github.com/login/device' : 'https://gitlab.com/-/device',
+        expiresIn: 900,
+        interval: 0, // segundos: 0 para que los tests no esperen al sondeo
+        provider
+      };
+    },
+    async oauthDevicePoll(flowId): Promise<DeviceLoginPoll> {
+      await delay(Math.min(latency, 40));
+      const f = oauthFlows.get(flowId);
+      if (!f) throw err('POLICY', 'El inicio de sesión ya no está en curso. Vuelve a empezar.');
+      f.polls += 1;
+      // El «usuario» autoriza en el navegador tras el primer sondeo.
+      if (f.polls > 1) f.state = 'authorized';
+      return { state: f.state, interval: 1 };
+    },
+    async oauthDeviceCancel(flowId) {
+      await delay(Math.min(latency, 20));
+      oauthFlows.delete(flowId);
+    },
     async storeCredential(url, username, secret) {
       await delay(Math.min(latency, 80));
       if (username.trim() === '' || secret === '') throw err('PARSE', 'Falta el usuario o el token.');
@@ -1084,9 +1197,14 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       // El secreto no se conserva: solo se recuerda si «era válido» para simular el servidor.
       credentials.set(host, { username, valid: secret.length >= 8 && secret !== 'invalid-token' });
     },
-    async testCredential(url) {
+    async testCredential(url, auth): Promise<CredentialTest> {
       await delay(Math.min(latency * 4, 700));
       const host = (/^[a-z]+:\/\/(?:[^@/]*@)?([^/:]+)/i.exec(url)?.[1] ?? '').toLowerCase();
+      // Con un método explícito se comprueba ESE método (como `ls-remote` con su credencial).
+      if (auth) {
+        const why = authProblem(auth.method, url, auth);
+        return why ? { ok: false, code: 'AUTH' } : { ok: true, code: null };
+      }
       const c = credentials.get(host);
       if (c?.valid) return { ok: true, code: null };
       const needs = /private|secreto/i.test(url) || host === 'dev.azure.com' || host.endsWith('.visualstudio.com');
@@ -1556,6 +1674,89 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       }
       r.branches = r.branches.map((x) => (x === local ? { ...x, ahead: 0, upstream: setUpstream || !x.upstream ? remoteName : x.upstream } : x));
       publish(r);
+    },
+    async pushBranch(tabId, branchName, setUpstream) {
+      const r = repoOf(tabId);
+      await delay(latency * 3);
+      const local = r.branches.find((x) => x.name === branchName);
+      if (!local) throw err('INVALID_REFERENCE', 'Esa rama ya no existe.');
+      const remote =
+        local.upstream?.split('/')[0] ??
+        (r.remotes.some((x) => x.name === 'origin') ? 'origin' : r.remotes[0]?.name);
+      if (!remote) throw err('POLICY', 'Este repositorio no tiene remotos: no hay dónde subir la rama.');
+      const remoteName = `${remote}/${local.name}`;
+      if (!r.remoteBranches.some((x) => x.name === remoteName)) {
+        r.remoteBranches = [...r.remoteBranches, branch(remoteName, r.remoteBranches.length + 80, false, null)];
+      }
+      r.branches = r.branches.map((x) => (x === local ? { ...x, ahead: 0, upstream: setUpstream || !x.upstream ? remoteName : x.upstream } : x));
+      publish(r);
+      return { remote };
+    },
+    async rebaseOnto(tabId, branchName) {
+      const r = repoOf(tabId);
+      await delay();
+      if (r.integration !== 'none') {
+        throw err('INVALID_REFERENCE', 'Hay un merge, rebase o cherry-pick en curso. Termínalo o abórtalo antes.');
+      }
+      if (!r.branches.some((b) => b.name === branchName) && !r.remoteBranches.some((b) => b.name === branchName)) {
+        throw err('INVALID_REFERENCE', `No existe la referencia ${branchName}.`);
+      }
+      if (!confirmFn(`¿Rebasar «${r.branch ?? 'HEAD'}» sobre «${branchName}»? Los commits cambiarán de hash.`)) {
+        return { done: false, result: 'upToDate', state: null };
+      }
+      if (/conflict|choca/i.test(branchName)) {
+        const defs = demoConflictDefs();
+        r.integration = 'rebasing';
+        r.mergeSource = branchName;
+        r.conflictDefs = defs;
+        for (const [path, d] of defs) {
+          r.files = r.files.filter((f) => f.path !== path);
+          r.files.unshift({ path, base: 'U', staged: [], unstaged: [], conflictKind: d.kind });
+        }
+        publish(r);
+        return { done: true, result: { conflicts: { paths: [...defs.keys()] } }, state: mergeStateOf(r) };
+      }
+      const target = r.branches.find((b) => b.name === branchName);
+      const head = r.branches.find((b) => b.isHead);
+      if (target && head && target.oid === head.oid) return { done: true, result: 'upToDate', state: null };
+      const newHead = sha(r.commits.length + 120 + r.revision);
+      const c: Commit = {
+        sha: newHead,
+        parents: [r.commits[0]?.sha ?? ''].filter(Boolean),
+        subject: `Rebasa ${r.branch ?? 'HEAD'} sobre '${branchName}'`,
+        body: '',
+        authorName: 'Javier',
+        authorEmail: 'javier@example.com',
+        authorDateIso: now().toISOString(),
+        refs: [`HEAD -> ${r.branch ?? 'main'}`]
+      };
+      r.commits = [c, ...r.commits.map((x) => ({ ...x, refs: x.refs.filter((f) => !f.startsWith('HEAD')) }))];
+      publish(r);
+      return { done: true, result: { merged: { new_head: newHead } }, state: null };
+    },
+    async deleteRemoteBranch(tabId, remote, branchName) {
+      const r = repoOf(tabId);
+      await delay(latency * 2);
+      const full = `${remote}/${branchName}`;
+      if (!r.remoteBranches.some((b) => b.name === full)) {
+        throw err('INVALID_REFERENCE', 'Esa rama ya no está en el remoto.');
+      }
+      if (!confirmFn(`¿Borrar la rama «${branchName}» del remoto «${remote}»?`)) return { done: false };
+      r.remoteBranches = r.remoteBranches.filter((b) => b.name !== full);
+      r.branches = r.branches.map((b) => (b.upstream === full ? { ...b, upstream: null, ahead: 0, behind: 0 } : b));
+      publish(r);
+      return { done: true };
+    },
+    async branchDiffAgainst(tabId, base, head) {
+      const r = repoOf(tabId);
+      await delay();
+      const known = [...r.branches, ...r.remoteBranches].some((b) => b.name === head);
+      if (!known) throw err('INVALID_REFERENCE', `No existe la referencia ${head}.`);
+      if (base === head) return [];
+      // Simulado: el repo de ejemplo no tiene historial por rama, así que se devuelve el diff de
+      // trabajo de los archivos cambiados (basta para ver el visor con contenido y para los tests).
+      const paths = r.files.filter((f) => !f.ignored && (f.unstaged.length > 0 || f.staged.length > 0 || f.binary === true)).map((f) => f.path);
+      return api.diff(tabId, 'unstaged', paths);
     },
 
     async listRemotes(tabId) {

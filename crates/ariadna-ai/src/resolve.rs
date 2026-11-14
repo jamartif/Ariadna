@@ -185,6 +185,40 @@ fn classify(path: &Path, env: &SearchEnv) -> Option<ResolvedBinary> {
     }
 }
 
+/// Ejecutables nativos que publican los paquetes de npm en rutas **conocidas**, fuera del
+/// `PATH`. Hoy solo Copilot: `@github/copilot` es un cargador (`npm-loader.js`) que lanza un
+/// binario por plataforma. Lanzarlo directamente evita el proceso intermedio de `node` (una
+/// capa menos que matar en la cancelación y nada de `node.exe` en `PATH`).
+///
+/// Verificado el 2026-11-14 con `@github/copilot 1.0.112` en Windows 11 x64:
+/// `%APPDATA%\npm\node_modules\@github\copilot\node_modules\@github\copilot-win32-x64\copilot.exe`.
+/// En WSL/Linux el `copilot` del `PATH` es un lanzador propio y se resuelve como nativo.
+pub fn well_known_natives(provider: ProviderId, env: &SearchEnv) -> Vec<PathBuf> {
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        _ => return Vec::new(),
+    };
+    match provider {
+        ProviderId::Copilot if env.windows => env
+            .appdata
+            .as_ref()
+            .map(|a| {
+                vec![a
+                    .join("npm")
+                    .join("node_modules")
+                    .join("@github")
+                    .join("copilot")
+                    .join("node_modules")
+                    .join("@github")
+                    .join(format!("copilot-win32-{arch}"))
+                    .join("copilot.exe")]
+            })
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
 /// Localiza el CLI de `provider` (RF-IA2). `configured` es la ruta de Ajustes: si se da
 /// y existe, manda; si se da y no existe, devuelve `None` (no se busca otro en silencio).
 pub fn resolve_binary(
@@ -212,7 +246,13 @@ pub fn resolve_binary(
             }
         }
     }
-    // (2)/(3) shims de Windows.
+    // (2) nativo publicado por un paquete de npm en una ruta conocida (Copilot).
+    for p in well_known_natives(provider, env) {
+        if is_file(&p) {
+            return Some(ResolvedBinary::Native(p));
+        }
+    }
+    // (3)/(4) shims de Windows.
     if env.windows {
         for d in &dirs {
             for ext in ["cmd", "bat", "ps1"] {
@@ -253,6 +293,12 @@ endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\node_
 
     /// Variante con `%~dp0` y CRLF, de versiones antiguas de npm.
     const NPM_CMD_OLD: &str = "@IF EXIST \"%~dp0\\node.exe\" (\r\n  \"%~dp0\\node.exe\"  \"%~dp0\\node_modules\\@github\\copilot\\index.js\" %*\r\n) ELSE (\r\n  @SETLOCAL\r\n  @SET PATHEXT=%PATHEXT:;.JS;=;%\r\n  node  \"%~dp0\\node_modules\\@github\\copilot\\index.js\" %*\r\n)\r\n";
+
+    /// `copilot.cmd` **real** de `npm i -g @github/copilot` (1.0.112, Windows 11).
+    const COPILOT_CMD: &str = "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\nIF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n  SET \"_prog=node\"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & \"%_prog%\"  \"%dp0%\\node_modules\\@github\\copilot\\npm-loader.js\" %*\r\n";
+
+    /// `copilot.ps1` real: el cargador se invoca con `$basedir` y `npm-loader.js`.
+    const COPILOT_PS1: &str = "#!/usr/bin/env pwsh\n$basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent\n$ret=0\nif (Test-Path \"$basedir/node$exe\") {\n  & \"$basedir/node$exe\"  \"$basedir/node_modules/@github/copilot/npm-loader.js\" $args\n} else {\n  & \"node$exe\"  \"$basedir/node_modules/@github/copilot/npm-loader.js\" $args\n}\nexit $ret\n";
 
     const NPM_PS1: &str = r#"#!/usr/bin/env pwsh
 $basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent
@@ -296,6 +342,99 @@ exit $ret
             parse_npm_cmd_shim(NPM_PS1).as_deref(),
             Some("node_modules/@openai/codex/bin/codex.js")
         );
+    }
+
+    #[test]
+    fn parsea_los_shims_reales_de_copilot() {
+        for shim in [COPILOT_CMD, COPILOT_PS1] {
+            assert_eq!(
+                parse_npm_cmd_shim(shim).as_deref(),
+                Some("node_modules/@github/copilot/npm-loader.js")
+            );
+        }
+        // El binario de plataforma y el `.exe.old-*` de una actualización no se confunden.
+        assert_eq!(parse_npm_cmd_shim("copilot.exe.old-2748"), None);
+    }
+
+    #[test]
+    fn copilot_prefiere_el_exe_nativo_del_paquete_de_plataforma() {
+        let t = tempfile::tempdir().unwrap();
+        let npm = t.path().join("npm");
+        std::fs::create_dir_all(&npm).unwrap();
+        std::fs::write(npm.join("copilot.cmd"), COPILOT_CMD).unwrap();
+        std::fs::write(npm.join("copilot.ps1"), COPILOT_PS1).unwrap();
+        let exe = npm
+            .join("node_modules/@github/copilot/node_modules/@github")
+            .join(platform_pkg())
+            .join("copilot.exe");
+        touch(&exe);
+        let env = SearchEnv {
+            appdata: Some(t.path().to_path_buf()),
+            windows: true,
+            ..SearchEnv::default()
+        };
+        // Existe un `.cmd`, pero se lanza el `.exe` real: sin `node` de por medio no hay
+        // proceso nieto que quede vivo si se cancela.
+        assert_eq!(
+            resolve_binary(ProviderId::Copilot, None, &env),
+            Some(ResolvedBinary::Native(exe))
+        );
+    }
+
+    #[test]
+    fn copilot_sin_exe_nativo_usa_el_cargador_de_npm() {
+        let t = tempfile::tempdir().unwrap();
+        let npm = t.path().join("npm");
+        std::fs::create_dir_all(&npm).unwrap();
+        std::fs::write(npm.join("copilot.cmd"), COPILOT_CMD).unwrap();
+        touch(&npm.join("node_modules/@github/copilot/npm-loader.js"));
+        touch(&npm.join("node.exe"));
+        let env = SearchEnv {
+            appdata: Some(t.path().to_path_buf()),
+            windows: true,
+            ..SearchEnv::default()
+        };
+        assert_eq!(
+            resolve_binary(ProviderId::Copilot, None, &env),
+            Some(ResolvedBinary::NodeEntry {
+                node: npm.join("node.exe"),
+                script: npm.join("node_modules/@github/copilot/npm-loader.js"),
+            })
+        );
+    }
+
+    #[test]
+    fn well_known_en_wsl_no_inventa_rutas_de_windows() {
+        let env = SearchEnv {
+            appdata: Some(PathBuf::from("/no/aplica")),
+            windows: false,
+            ..SearchEnv::default()
+        };
+        assert!(well_known_natives(ProviderId::Copilot, &env).is_empty());
+        assert!(well_known_natives(ProviderId::Claude, &env).is_empty());
+        // En Linux/WSL el `copilot` del PATH es un lanzador nativo: se usa tal cual.
+        let t = tempfile::tempdir().unwrap();
+        let launcher = t.path().join("bin").join("copilot");
+        touch(&launcher);
+        let env = SearchEnv {
+            path_dirs: vec![t.path().join("bin")],
+            ..SearchEnv::default()
+        };
+        assert_eq!(
+            resolve_binary(ProviderId::Copilot, None, &env),
+            Some(ResolvedBinary::Native(launcher))
+        );
+    }
+
+    fn platform_pkg() -> String {
+        format!(
+            "copilot-win32-{}",
+            if cfg!(target_arch = "aarch64") {
+                "arm64"
+            } else {
+                "x64"
+            }
+        )
     }
 
     #[test]
