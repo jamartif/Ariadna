@@ -158,6 +158,8 @@ export interface Api extends PullRequestApi, TagApi {
   /** Aborta el merge en curso (confirmación nativa). */
   mergeAbort(tabId: string): Promise<DoneResult>;
   fetch(tabId: string, remote: string): Promise<void>;
+  /** Actualiza una rama local que no está activa desde su remoto (solo avance rápido). */
+  fetchBranch(tabId: string, remote: string, branch: string): Promise<void>;
   /** `rebase` omitido (o `null`) = usa el ajuste «pull con rebase» de Ajustes → Git. */
   pull(tabId: string, remote: string, refspec: string | null, rebase?: boolean | null): Promise<MergeResult>;
   push(tabId: string, remote: string, refspec: string | null, setUpstream: boolean): Promise<void>;

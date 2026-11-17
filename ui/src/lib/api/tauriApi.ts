@@ -95,6 +95,7 @@ export function createTauriApi(): Api {
       call('write_conflict_resolution', { tabId, path, contents }),
     markResolved: (tabId, path) => call('mark_resolved', { tabId, path }),
     fetch: (tabId, remote) => call('fetch', { tabId, remote }),
+    fetchBranch: (tabId, remote, branch) => call('fetch_branch', { tabId, remote, branch }),
     pull: (tabId, remote, refspec, rebase) => call('pull', { tabId, remote, refspec, rebase: rebase ?? null }),
 
     listRemotes: (tabId) => call('list_remotes', { tabId }),

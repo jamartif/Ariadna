@@ -85,6 +85,16 @@
     "message": "No hay un merge, rebase o cherry-pick en curso."
   },
   {
+    "code": "BRANCH_IS_CURRENT",
+    "detail": "main",
+    "message": "La rama «main» es la que tienes activa: git no la puede traer así. Usa «Bajar la rama actual» o cambia de rama antes."
+  },
+  {
+    "code": "BRANCH_NOT_FAST_FORWARD",
+    "detail": "main",
+    "message": "La rama «main» tiene commits que no están en el remoto: traerla no sería un avance rápido. Fusiónala o rebasa desde la rama activa."
+  },
+  {
     "code": "CONFIRMATION_REQUIRED",
     "detail": "descartar",
     "message": "Hace falta confirmación explícita para descartar."

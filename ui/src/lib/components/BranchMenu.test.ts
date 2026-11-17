@@ -60,6 +60,7 @@ describe('Menú contextual del riel: abrir y navegar', () => {
       'Rebasar la actual sobre esta',
       'Traer del remoto «origin»',
       'Subir la rama',
+      'Actualizar desde «origin» (sin cambiar de rama)',
       'Bajar la rama actual',
       'Renombrar…',
       'Borrar la rama',
@@ -185,6 +186,25 @@ describe('Menú contextual del riel: estado de las acciones', () => {
     expect(item('delete-remote')).toHaveAccessibleName('Borrar en el remoto «origin»');
     expect(item('delete-remote')).not.toHaveAttribute('aria-disabled');
     expect(item('pull')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('«Actualizar desde el remoto» trae la rama que no está activa, sin cambiar de rama', async () => {
+    const { tab } = await setup();
+    const spy = vi.spyOn(tab.api, 'fetchBranch');
+    await rightClick('main');
+    // En una rama que no es la activa la acción está disponible.
+    expect(item('update')).not.toHaveAttribute('aria-disabled');
+    await userEvent.click(item('update'));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('tab-ariadna', 'origin', 'main'));
+  });
+
+  it('en la rama activa avisa de que se use «Bajar la rama actual»', async () => {
+    await setup();
+    await rightClick('rust-migration');
+    expect(item('update')).toHaveAttribute('aria-disabled', 'true');
+    expect(item('update')).toHaveAttribute('title', 'Es la rama activa: usa «Bajar la rama actual»');
+    // Y la de bajar la rama actual sí está disponible.
+    expect(item('pull')).not.toHaveAttribute('aria-disabled');
   });
 });
 

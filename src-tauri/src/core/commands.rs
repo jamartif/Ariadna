@@ -616,6 +616,19 @@ impl AppCore {
         .await
     }
 
+    /// Actualiza una rama local **que no está activa** desde su remoto (solo avance rápido).
+    pub async fn fetch_branch(
+        &self,
+        tab_id: &str,
+        remote: String,
+        branch: String,
+    ) -> ApiResult<()> {
+        self.mutate_op(tab_id, "fetch", (remote, branch), |e, r, (n, b)| {
+            Box::pin(async move { e.fetch_into_branch(&r, &n, &b).await })
+        })
+        .await
+    }
+
     pub async fn pull(
         &self,
         tab_id: &str,

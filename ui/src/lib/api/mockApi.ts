@@ -1670,6 +1670,21 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     async fetch() {
       await delay(latency * 3);
     },
+    async fetchBranch(tabId, _remote, name) {
+      const r = repoOf(tabId);
+      await delay(latency * 3);
+      const local = r.branches.find((x) => x.name === name);
+      if (!local) throw err('INVALID_REFERENCE', `La rama «${name}» ya no existe.`, name);
+      if (r.branch === name) {
+        throw err('BRANCH_IS_CURRENT', 'La rama es la activa: usa «Bajar la rama actual».', name);
+      }
+      // Escenario `branch-diverged`: el simulado responde como git cuando no es avance rápido.
+      if (scenario === 'branch-diverged') {
+        throw err('BRANCH_NOT_FAST_FORWARD', `La rama «${name}» tiene commits que no están en el remoto.`, name);
+      }
+      r.branches = r.branches.map((x) => (x === local ? { ...x, behind: 0 } : x));
+      publish(r);
+    },
     async pull(_tabId, _remote, _refspec, rebase) {
       await delay(latency * 3);
       lastPullRebase = rebase ?? settingsData.pullRebase;

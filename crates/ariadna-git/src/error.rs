@@ -50,6 +50,12 @@ pub enum GitError {
     TagNotFound { name: String },
     #[error("No hay un merge, rebase o cherry-pick en curso.")]
     NoIntegrationInProgress,
+    /// La rama local y la del remoto divergieron: traerla no sería un avance rápido.
+    #[error("La rama «{branch}» tiene commits que no están en el remoto: traerla no sería un avance rápido. Fusiónala o rebasa desde la rama activa.")]
+    BranchNotFastForward { branch: String },
+    /// Se pidió traer una rama que es la que está activa: git lo rechaza y hay otra vía.
+    #[error("La rama «{branch}» es la que tienes activa: git no la puede traer así. Usa «Bajar la rama actual» o cambia de rama antes.")]
+    BranchIsCurrent { branch: String },
     #[error("Hace falta confirmación explícita para {action}.")]
     ConfirmationRequired { action: String },
     #[error("La ruta {path} sale del repositorio. No se ha escrito nada.")]

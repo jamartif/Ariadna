@@ -300,6 +300,14 @@ impl GitServing for GitCliEngine {
     async fn fetch(&self, repo: &Repository, remote: &str) -> GitResult<()> {
         self.fetch(repo, remote).await
     }
+    async fn fetch_into_branch(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        branch: &str,
+    ) -> GitResult<()> {
+        self.fetch_into_branch(repo, remote, branch).await
+    }
     async fn pull(
         &self,
         repo: &Repository,

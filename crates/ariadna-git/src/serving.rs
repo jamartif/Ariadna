@@ -340,6 +340,13 @@ pub trait GitServing: Send + Sync {
         )))
     }
     async fn fetch(&self, repo: &Repository, remote: &str) -> GitResult<()>;
+    /// Actualiza una rama local que no está activa desde su remoto (solo avance rápido).
+    async fn fetch_into_branch(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        branch: &str,
+    ) -> GitResult<()>;
     async fn pull(
         &self,
         repo: &Repository,

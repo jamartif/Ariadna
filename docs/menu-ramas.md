@@ -36,6 +36,7 @@ no hace nada.
 | | **Rebasar la actual sobre esta** | `git rebase` de la actual sobre esa rama; confirmación nativa | — | Que no sea la actual; que no haya merge/rebase en curso |
 | Red | **Traer del remoto «x»** | `git fetch` del remoto de esa rama (el suyo si es remota; si no, el de su upstream u `origin`) | — | Que la rama tenga remoto; que no haya otra operación en curso |
 | | **Subir la rama** | `git push`; con `--set-upstream` si la rama no lo tiene | — | Rama local con remoto |
+| | **Actualizar desde «x» (sin cambiar de rama)** | Trae esa rama local desde su remoto **sin cambiarte de rama**: `git fetch x rama:rama`. Solo avanza (avance rápido); si la rama divergió, git lo rechaza y Ariadna lo explica, sin forzar nada | — | Rama local que **no** sea la actual; en la actual se usa «Bajar la rama actual» |
 | | **Bajar la rama actual** | `git pull` del remoto de la rama actual | — | Ser la rama actual; que tenga remoto |
 | Escribir | **Renombrar…** | Abre el formulario de renombrado del inspector con el nombre actual | — | Rama local |
 | | **Borrar la rama** | `git branch -d/-D` con confirmación nativa (segunda confirmación si no está fusionada) | — | Rama local y no actual |

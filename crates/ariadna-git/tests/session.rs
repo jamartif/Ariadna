@@ -351,6 +351,14 @@ impl GitServing for FakeEngine {
     async fn fetch(&self, _repo: &Repository, _remote: &str) -> Result<(), GitError> {
         unimpl()
     }
+    async fn fetch_into_branch(
+        &self,
+        _repo: &Repository,
+        _remote: &str,
+        _branch: &str,
+    ) -> Result<(), GitError> {
+        unimpl()
+    }
     async fn pull(
         &self,
         _repo: &Repository,

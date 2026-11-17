@@ -89,6 +89,18 @@ pub fn every_git_error() -> Vec<(GitError, &'static str)> {
         ),
         (GitError::NoIntegrationInProgress, "NO_INTEGRATION"),
         (
+            GitError::BranchIsCurrent {
+                branch: "main".into(),
+            },
+            "BRANCH_IS_CURRENT",
+        ),
+        (
+            GitError::BranchNotFastForward {
+                branch: "main".into(),
+            },
+            "BRANCH_NOT_FAST_FORWARD",
+        ),
+        (
             GitError::ConfirmationRequired {
                 action: "descartar".into(),
             },
@@ -158,7 +170,7 @@ fn cada_git_error_tiene_su_codigo_exacto_y_mensaje_en_espanol() {
 #[test]
 fn los_codigos_cubren_exactamente_el_contrato() {
     let mapped: BTreeSet<&str> = every_git_error().iter().map(|(_, c)| *c).collect();
-    assert_eq!(mapped.len(), 27, "27 variantes, 27 códigos distintos");
+    assert_eq!(mapped.len(), 29, "29 variantes, 29 códigos distintos");
     let mut expected: BTreeSet<&str> = ALL_CODES.iter().copied().collect();
     // No vienen de git: REPO_MISSING (pestaña ausente), los AI_* y POLICY/RATE_LIMITED y los de PR.
     assert!(expected.remove("REPO_MISSING"));
@@ -181,7 +193,7 @@ fn los_codigos_cubren_exactamente_el_contrato() {
         assert!(expected.remove(c), "{c}");
     }
     assert_eq!(mapped, expected);
-    assert_eq!(ALL_CODES.len(), 50);
+    assert_eq!(ALL_CODES.len(), 52);
 }
 
 #[test]
