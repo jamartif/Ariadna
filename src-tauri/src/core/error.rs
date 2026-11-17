@@ -18,7 +18,7 @@ pub struct ApiError {
 pub type ApiResult<T> = Result<T, ApiError>;
 
 /// Todos los códigos del contrato (para tests y documentación).
-pub const ALL_CODES: [&str; 50] = [
+pub const ALL_CODES: [&str; 52] = [
     "MERGE_CONFLICTS",
     "CONFLICTS_PENDING",
     "CONFLICT_MARKERS_REMAIN",
@@ -42,6 +42,8 @@ pub const ALL_CODES: [&str; 50] = [
     "TAG_EXISTS",
     "TAG_NOT_FOUND",
     "NO_INTEGRATION",
+    "BRANCH_IS_CURRENT",
+    "BRANCH_NOT_FAST_FORWARD",
     "CONFIRMATION_REQUIRED",
     "PATH_ESCAPES_REPOSITORY",
     "TIMEOUT",
@@ -163,6 +165,10 @@ impl From<GitError> for ApiError {
             }
             GitError::PathEscapesRepository { path } => {
                 ("PATH_ESCAPES_REPOSITORY", non_empty(path))
+            }
+            GitError::BranchIsCurrent { branch } => ("BRANCH_IS_CURRENT", non_empty(branch)),
+            GitError::BranchNotFastForward { branch } => {
+                ("BRANCH_NOT_FAST_FORWARD", non_empty(branch))
             }
             GitError::Timeout { command } => ("TIMEOUT", non_empty(command)),
             GitError::Cancelled => ("CANCELLED", None),

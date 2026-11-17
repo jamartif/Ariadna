@@ -137,6 +137,20 @@
         run: () => void b.pushBranch(branch.name)
       },
       {
+        // Traer una rama que no tienes activa: equivale a `git fetch <remoto> rama:rama`.
+        id: 'update',
+        label: remoteName ? t('rail.menu.updateBranch', { remote: remoteName }) : t('rail.menu.updateBranchGeneric'),
+        icon: 'download',
+        blocked: remote
+          ? t('rail.menu.onlyLocal')
+          : isHead
+            ? t('rail.menu.isCurrentPull')
+            : (canInput(remoteName) ?? busyReason),
+        run: () => {
+          if (remoteName) void b.updateFromRemote(remoteName, branch.name);
+        }
+      },
+      {
         id: 'pull',
         label: t('rail.menu.pull'),
         icon: 'arrow-down',

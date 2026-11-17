@@ -975,6 +975,17 @@ async fn fetch(core: State<'_, AppCore>, tab_id: String, remote: String) -> Cmd<
     core.fetch(&tab_id, remote).await
 }
 
+/// Actualiza una rama local que **no** está activa desde su remoto (solo avance rápido).
+#[tauri::command]
+async fn fetch_branch(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    remote: String,
+    branch: String,
+) -> Cmd<()> {
+    core.fetch_branch(&tab_id, remote, branch).await
+}
+
 #[tauri::command]
 async fn pull(
     core: State<'_, AppCore>,
@@ -1191,6 +1202,7 @@ pub fn run() {
             merge_continue,
             merge_abort,
             fetch,
+            fetch_branch,
             pull,
             push,
             push_branch,

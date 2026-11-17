@@ -830,6 +830,66 @@ impl GitCliEngine {
         Ok(())
     }
 
+    /// Actualiza una rama **local que no está activa** desde su remoto, sin cambiar de rama:
+    /// `git fetch <remoto> <rama>:<rama>`. Solo avanza (fast-forward); si la rama hubiera
+    /// divergido, git lo rechaza y se devuelve el error en vez de forzar nada.
+    pub async fn fetch_into_branch(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        branch: &str,
+    ) -> GitResult<()> {
+        check_ref(remote)?;
+        check_ref(branch)?;
+        // Git rechaza traer hacia la rama activa («refusing to fetch into branch checked out»):
+        // se avisa antes y con una salida clara en vez de dejar el error crudo de git.
+        let head = self
+            .bo_raw(
+                repo,
+                CommandKind::Read,
+                &["symbolic-ref", "--short", "-q", "HEAD"],
+            )
+            .await?;
+        if head.success() && head.stdout_lossy().trim() == branch {
+            return Err(GitError::BranchIsCurrent {
+                branch: branch.to_owned(),
+            });
+        }
+        let refspec = format!("{branch}:{branch}");
+        let antes = self.bo_rev(repo, &format!("refs/heads/{branch}")).await?;
+        let out = self
+            .bo_raw(
+                repo,
+                CommandKind::Network,
+                &["fetch", remote, refspec.as_str()],
+            )
+            .await?;
+        let texto = format!("{}{}", out.stdout_lossy(), out.stderr_lossy());
+        // Un rechazo por no ser avance rápido no es un fallo de red: se explica como tal.
+        if texto.contains("non-fast-forward") || texto.contains("rejected") {
+            return Err(GitError::BranchNotFastForward {
+                branch: branch.to_owned(),
+            });
+        }
+        if !out.success() {
+            return Err(GitError::CommandFailed {
+                command: format!("git fetch {remote}"),
+                exit_code: out.code.unwrap_or(-1),
+                stderr: truncate(out.stderr_lossy().trim(), 600),
+            });
+        }
+        // `git fetch` sale con 0 aunque **rechace** esta referencia (sigue con las demás) y con
+        // `--quiet` ni lo cuenta, así que se comprueba el resultado: si la rama no se movió, no
+        // era un avance rápido y no se ha forzado nada.
+        let despues = self.bo_rev(repo, &format!("refs/heads/{branch}")).await?;
+        if antes == despues {
+            return Err(GitError::BranchNotFastForward {
+                branch: branch.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// Borra una rama en el **remoto** (`git push <remote> --delete <rama>`). No toca la copia
     /// local ni las ramas de seguimiento. Destructivo para quien la use: exige [`Confirmation`].
     pub async fn delete_remote_branch(

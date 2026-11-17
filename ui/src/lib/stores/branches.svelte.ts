@@ -166,6 +166,21 @@ export class BranchesController {
   }
 
   /**
+   * Actualiza una rama **local que no está activa** desde su remoto, sin cambiar de rama.
+   *
+   * Equivale a `git fetch <remoto> <rama>:<rama>`: solo avanza si es un avance rápido; si la
+   * rama divergió, Rust lo rechaza y aquí se muestra el motivo (nunca se fuerza).
+   */
+  async updateFromRemote(remote: string, name: string): Promise<boolean> {
+    const res = await this.run('fetch', t('branches.updateFailed', { name }), () =>
+      this.tab.api.fetchBranch(this.tab.id, remote, name)
+    );
+    if (!res) return false;
+    toasts.success(t('branches.updated', { name, remote }));
+    return true;
+  }
+
+  /**
    * Rebasa la **rama actual** sobre `name`. Si hay conflictos el rebase queda en curso y se pasa
    * al panel de Conflictos (desde ahí se continúa o se aborta).
    */
