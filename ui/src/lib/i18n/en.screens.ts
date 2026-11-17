@@ -138,6 +138,7 @@ export const enScreens: Record<keyof typeof esScreens, string> = {
   'branches.create': 'Create branch',
   'branches.createFailed': 'Could not create the branch',
   'branches.created': 'Branch “{name}” created',
+  'branches.toggleFolder': 'Open or close the {folder} folder',
   'branches.local': 'Local',
   'branches.remote': 'Remote',
   'branches.current': 'current',

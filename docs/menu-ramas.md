@@ -47,6 +47,13 @@ no hace nada.
 | Web | **Abrir en el navegador** | Abre la página de la rama en GitHub / Azure DevOps / GitLab / Bitbucket. La URL la construye **Rust** desde la configuración real del remoto (solo `https`, host del propio remoto) | — | Que el remoto tenga página web y esté reconocido |
 | | **Crear pull request** | Abre la página de nueva PR/comparación del proveedor (es un enlace; la API de PR vive en el panel de pull requests) | — | Que el proveedor del remoto admita PR (Azure DevOps, GitHub y GHE) |
 
+## Árbol de ramas
+
+El riel agrupa **Locales** y **Remotas** y, dentro, anida por **todos** los segmentos del nombre:
+`origin/release/1.0/hotfix` se ve como `origin/` → `release/` → `1.0/` → `hotfix`, con sangría por
+nivel y el número de ramas de cada carpeta. Cada carpeta se pliega y despliega por separado y, al
+escribir en el filtro, se abren todas para enseñar lo que coincide.
+
 Detalles que conviene saber:
 
 - **Nada destructivo ocurre dentro del menú**: borrar rama, borrar en el remoto, fusionar y

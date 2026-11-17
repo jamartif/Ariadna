@@ -55,29 +55,87 @@
   const remotes = $derived(b.remotes.filter(match));
   const empty = $derived(!snap && tab.loading);
 
-  /** Agrupa por primer segmento: `feature/x` → «feature/», `origin/main` → «origin/». */
-  function group(list: Branch[], remote: boolean): [string, Branch[]][] {
-    const map = new Map<string, Branch[]>();
-    for (const br of list) {
-      const i = br.name.indexOf('/');
-      const g = i < 0 ? '' : remote ? br.name.slice(0, i + 1) : br.name.slice(0, i);
-      const arr = map.get(g);
-      if (arr) arr.push(br);
-      else map.set(g, [br]);
-    }
-    // La raíz primero; los grupos por orden alfabético.
-    return [...map.entries()].sort(([a], [b2]) => (a === '' ? -1 : b2 === '' ? 1 : a.localeCompare(b2)));
+  /**
+   * Árbol de ramas por segmentos: `origin/release/1.0/hotfix` cuelga de `origin/` → `release/`
+   * → `1.0/`, no todo amontonado bajo el remoto. La raíz recoge las ramas sin `/` (`main`).
+   */
+  interface TreeNode {
+    /** Segmento visible, con barra (`rc/`). */
+    label: string;
+    /** Clave de plegado (`local:feature` / `remote:origin/release`). */
+    key: string;
+    depth: number;
+    /** Ramas que terminan exactamente en este nodo. */
+    leaves: Branch[];
+    children: TreeNode[];
+    /** Ramas en todo el subárbol (para el contador). */
+    count: number;
   }
-  const localGroups = $derived(group(locals, false));
-  const remoteGroups = $derived(group(remotes, true));
-  const openGroup = (key: string) => !closedGroups.has(key);
+  interface TreeRoot {
+    leaves: Branch[];
+    nodes: TreeNode[];
+  }
 
-  /** Filas visibles en orden de pintado (para el foco móvil con ↑/↓). */
+  function buildTree(list: Branch[], remote: boolean): TreeRoot {
+    type Raw = { segs: Map<string, Raw>; leaves: Branch[] };
+    const root: Raw = { segs: new Map(), leaves: [] };
+    for (const br of list) {
+      const parts = br.name.split('/');
+      const dirs = parts.slice(0, -1);
+      if (dirs.length === 0) {
+        root.leaves.push(br);
+        continue;
+      }
+      let node = root;
+      for (const seg of dirs) {
+        let next = node.segs.get(seg);
+        if (!next) {
+          next = { segs: new Map(), leaves: [] };
+          node.segs.set(seg, next);
+        }
+        node = next;
+      }
+      node.leaves.push(br);
+    }
+    const walk = (raw: Raw, prefix: string, depth: number): TreeNode[] =>
+      [...raw.segs.entries()]
+        .sort(([a], [b2]) => a.localeCompare(b2))
+        .map(([seg, child]) => {
+          const children = walk(child, `${prefix}${seg}/`, depth + 1);
+          return {
+            label: `${seg}/`,
+            key: `${remote ? 'remote' : 'local'}:${prefix}${seg}`,
+            depth,
+            leaves: child.leaves,
+            children,
+            count: child.leaves.length + children.reduce((n, c) => n + c.count, 0)
+          };
+        });
+    return { leaves: root.leaves, nodes: walk(root, '', 0) };
+  }
+
+  const localTree = $derived(buildTree(locals, false));
+  const remoteTree = $derived(buildTree(remotes, true));
+  /** Con un filtro escrito, todo se abre: no tiene sentido esconder lo que se busca. */
+  const openGroup = (key: string) => q !== '' || !closedGroups.has(key);
+
+  /** Filas de rama visibles en orden de pintado (para el foco móvil con ↑/↓). */
   const flatRows = $derived.by(() => {
-    const rows: { br: Branch; remote: boolean }[] = [];
-    if (localOpen) for (const [g, list] of localGroups) if (g === '' || openGroup(`local:${g}`)) rows.push(...list.map((br) => ({ br, remote: false })));
-    if (remoteOpen) for (const [g, list] of remoteGroups) if (openGroup(`remote:${g}`)) rows.push(...list.map((br) => ({ br, remote: true })));
-    return rows;
+    const out: { br: Branch; remote: boolean }[] = [];
+    const walk = (tree: TreeRoot, remote: boolean) => {
+      out.push(...tree.leaves.map((br) => ({ br, remote })));
+      const visit = (nodes: TreeNode[]) => {
+        for (const n of nodes) {
+          if (!openGroup(n.key)) continue;
+          out.push(...n.leaves.map((br) => ({ br, remote })));
+          visit(n.children);
+        }
+      };
+      visit(tree.nodes);
+    };
+    if (localOpen) walk(localTree, false);
+    if (remoteOpen) walk(remoteTree, true);
+    return out;
   });
   const tabStop = $derived.by(() => {
     const names = flatRows.map((x) => x.br.name);
@@ -330,6 +388,28 @@
   </ul>
 {/snippet}
 
+<!-- Árbol plegable: cada carpeta (`origin/`, `release/`…) se abre y se cierra por separado. -->
+{#snippet treeNodes(nodes: TreeNode[], remote: boolean)}
+  {#each nodes as n (n.key)}
+    <button
+      type="button"
+      class="subhead"
+      style:padding-left="calc(var(--space-2) + {n.depth * 12}px)"
+      aria-expanded={openGroup(n.key)}
+      title={t('branches.toggleFolder', { folder: n.label })}
+      onclick={() => toggleGroup(n.key)}
+    >
+      <Icon name={openGroup(n.key) ? 'chevron-down' : 'chevron-right'} size={10} />
+      <span class="mono">{n.label}</span>
+      <span class="subcount num">{n.count}</span>
+    </button>
+    {#if openGroup(n.key)}
+      {#if n.leaves.length > 0}{@render rows(n.leaves, remote)}{/if}
+      {#if n.children.length > 0}{@render treeNodes(n.children, remote)}{/if}
+    {/if}
+  {/each}
+{/snippet}
+
 {#if collapsed}
   <aside class="rail collapsed" aria-label={t('rail.label')} data-testid="rail" data-collapsed="true">
     <button
@@ -559,18 +639,8 @@
             <span class="chip num">{locals.length}</span>
           </button>
           {#if localOpen}
-            {#each localGroups as [g, list] (g)}
-              {#if g === ''}
-                {@render rows(list, false)}
-              {:else}
-                <button type="button" class="subhead" aria-expanded={openGroup(`local:${g}`)} onclick={() => toggleGroup(`local:${g}`)}>
-                  <Icon name={openGroup(`local:${g}`) ? 'chevron-down' : 'chevron-right'} size={10} />
-                  <span class="mono">{g}/</span>
-                  <span class="subcount num">{list.length}</span>
-                </button>
-                {#if openGroup(`local:${g}`)}{@render rows(list, false)}{/if}
-              {/if}
-            {/each}
+            {#if localTree.leaves.length > 0}{@render rows(localTree.leaves, false)}{/if}
+            {@render treeNodes(localTree.nodes, false)}
             {#if locals.length === 0}<p class="none sm">{t('branches.noMatches', { query: filter.trim() })}</p>{/if}
           {/if}
         </div>
@@ -583,14 +653,7 @@
               <span class="chip num">{remotes.length}</span>
             </button>
             {#if remoteOpen}
-              {#each remoteGroups as [g, list] (g)}
-                <button type="button" class="subhead" aria-expanded={openGroup(`remote:${g}`)} onclick={() => toggleGroup(`remote:${g}`)}>
-                  <Icon name={openGroup(`remote:${g}`) ? 'chevron-down' : 'chevron-right'} size={10} />
-                  <span class="mono">{g}</span>
-                  <span class="subcount num">{list.length}</span>
-                </button>
-                {#if openGroup(`remote:${g}`)}{@render rows(list, true)}{/if}
-              {/each}
+              {@render treeNodes(remoteTree.nodes, true)}
               {#if remotes.length === 0}<p class="none sm">{t('branches.noMatches', { query: filter.trim() })}</p>{/if}
             {/if}
           </div>

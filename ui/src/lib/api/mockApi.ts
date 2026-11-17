@@ -299,7 +299,10 @@ function buildAriadna(): MockRepo {
     ],
     remoteBranches: [
       branch('origin/rust-migration', 4, false, null),
-      branch('origin/main', 5, false, null)
+      branch('origin/main', 5, false, null),
+      // Ramas anidadas: el árbol del riel las cuelga de `release/` → `1.0/`.
+      branch('origin/release/1.0', 6, false, null),
+      branch('origin/release/1.0/hotfix', 7, false, null)
     ],
     remotes: [
       {

@@ -139,6 +139,7 @@ export const esScreens = {
   'branches.create': 'Crear rama',
   'branches.createFailed': 'No se pudo crear la rama',
   'branches.created': 'Rama «{name}» creada',
+  'branches.toggleFolder': 'Abrir o cerrar la carpeta {folder}',
   'branches.local': 'Locales',
   'branches.remote': 'Remotas',
   'branches.current': 'actual',
