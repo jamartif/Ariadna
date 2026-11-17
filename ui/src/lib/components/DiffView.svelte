@@ -6,7 +6,7 @@
   import { toApiError, type ApiError, type DiffHunk, type FileDiff } from '$lib/api/types';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { settings } from '$lib/stores/settings.svelte';
-  import { countLines, diffStats, flattenDiff, hunkHeader, isGiant, truncateLine, type DiffRow } from '$lib/util/diff';
+  import { countLines, diffStats, flattenDiff, hunkHeader, isGiant, splitDiff, truncateLine, type DiffRow, type SplitRow } from '$lib/util/diff';
   import { conflictsOf } from '$lib/stores/conflicts.svelte';
   import { pathBase, pathDir, pathKey, pathText } from '$lib/util/gitpath';
   import { buildOffsets, indexAt } from '$lib/util/virtual';
@@ -32,6 +32,8 @@
   let reqCounter = 0;
 
   const selKey = $derived(sel ? `${sel.section}:${sel.key}` : null);
+  /** Vista del diff: la misma información en una columna o partida en dos. */
+  const split = $derived(settings.diffLayout === 'split');
 
   // Carga (o recarga tras cada snapshot) el diff del archivo seleccionado.
   $effect(() => {
@@ -71,11 +73,13 @@
   const giant = $derived(file ? isGiant(file) : false);
   const showContent = $derived(!!file && !file.isBinary && (!giant || (selKey !== null && forceShow[selKey] === true)));
   const rows = $derived<DiffRow[]>(file && showContent ? flattenDiff(file) : []);
+  const splitRows = $derived<SplitRow[]>(file && showContent && split ? splitDiff(file) : []);
   const stats = $derived(file ? diffStats(file) : { additions: 0, deletions: 0 });
 
   const lineH = $derived(settings.codeLineHeight);
   const hunkH = $derived(Math.round(lineH * 1.5) + 4);
   const heightOf = (r: DiffRow) => (r.type === 'hunk' ? hunkH : lineH);
+  const heightOfSplit = (r: SplitRow) => (r.type === 'hunk' ? hunkH : lineH);
 
   // Cabecera pegajosa: el hunk que contiene la fila superior visible.
   const offsets = $derived(buildOffsets(rows.length, (i) => heightOf(rows[i] as DiffRow)));
@@ -101,7 +105,11 @@
 
   const isChange = (k: string) => k === 'addition' || k === 'deletion';
   const canPick = $derived(
-    !!file && !file.isBinary && sel !== null && (sel.section === 'staged' || sel.section === 'unstaged' || sel.section === 'untracked')
+    !!file &&
+      !file.isBinary &&
+      !split &&
+      sel !== null &&
+      (sel.section === 'staged' || sel.section === 'unstaged' || sel.section === 'untracked')
   );
   let linePick = $state.raw<{ hunk: number; lines: number[] } | null>(null);
   let anchor = $state.raw<{ hunk: number; line: number } | null>(null);
@@ -327,6 +335,28 @@
       {#if file.isNewFile}<span class="chip">{t('diff.newFile')}</span>{/if}
       {#if file.isDeletedFile}<span class="chip">{t('diff.deletedFile')}</span>{/if}
       <span class="spacer"></span>
+      <div class="layout" role="group" aria-label={t('diff.layout.label')}>
+        <button
+          type="button"
+          class="btn btn-sm"
+          class:on={!split}
+          aria-pressed={!split}
+          title={t('diff.layout.unifiedHint')}
+          onclick={() => settings.setDiffLayout('unified')}
+        >
+          <Icon name="rows" size={13} />{t('diff.layout.unified')}
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm"
+          class:on={split}
+          aria-pressed={split}
+          title={t('diff.layout.splitHint')}
+          onclick={() => settings.setDiffLayout('split')}
+        >
+          <Icon name="columns" size={13} />{t('diff.layout.split')}
+        </button>
+      </div>
       {#if loading}<span class="refreshing" title={t('diff.loading')}><Icon name="loader" size={14} spin /></span>{/if}
       {#if !file.isBinary}
         <span class="stat add" aria-label={tn('diff.additions', stats.additions)}>+{stats.additions}</span>
@@ -349,7 +379,13 @@
     {:else if file.hunks.length === 0}
       <EmptyState icon="file-diff" compact title={t('diff.emptyTitle')} body={t('diff.emptyBody')} />
     {:else}
-      <div class="code" style:--lh="{lineH}px" style:--pick-w={canPick ? '28px' : '0px'}>
+      <div
+        class="code"
+        class:split
+        data-testid={split ? 'diff-split' : 'diff-unified'}
+        style:--lh="{lineH}px"
+        style:--pick-w={canPick ? '28px' : '0px'}
+      >
         {#if canPick}
           <p id="diff-pick-hint" class="sr-only">{t('diff.pickHint')}</p>
           <p class="sr-only" role="status">{pickedCount > 0 ? tn('diff.linesSelected', pickedCount) : ''}</p>
@@ -359,78 +395,118 @@
             {@render hunkBar(stickyHunk.hunk, stickyHunk.index, file.hunks.length)}
           </div>
         {/if}
-        <VirtualList
-          bind:this={listEl}
-          items={rows}
-          {heightOf}
-          horizontal
-          role="region"
-          label={t('diff.codeLabel', { path: pathText(file.path) })}
-          tabindex={0}
-          overscan={12}
-          onscroll={(top) => (scrollTop = top)}
-          onkeydown={regionKey}
-        >
-          {#snippet row(r, _i)}
-            {#if r.type === 'hunk'}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div
-                class="hunk-row"
-                style:height="{hunkH}px"
-                onmouseenter={() => (hoverHunk = r.hunkIndex)}
-                onmouseleave={() => (hoverHunk = null)}
-              >
-                {@render hunkBar(r.hunk, r.hunkIndex, file?.hunks.length ?? 0)}
-              </div>
-            {:else}
-              {@const line = r.line}
-              {@const tr = truncateLine(line.text, expandedLines[line.id] === true)}
-              <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-              <div
-                class="line {line.kind}"
-                class:pickable={canPick && isChange(line.kind)}
-                class:picked={linePick?.hunk === r.hunkIndex && pickedSet.has(r.lineIndex)}
-                style:height="{lineH}px"
-                onmouseenter={() => (hoverHunk = r.hunkIndex)}
-                onmouseleave={() => (hoverHunk = null)}
-                onclick={(e) => isChange(line.kind) && onRowClick(e, r.hunkIndex, r.lineIndex)}
-              >
-                {#if canPick}
-                  <span class="pick">
-                    {#if isChange(line.kind)}
-                      <input
-                        type="checkbox"
-                        id="dl-{r.hunkIndex}-{r.lineIndex}"
-                        class="pick-cb"
-                        checked={linePick?.hunk === r.hunkIndex && pickedSet.has(r.lineIndex)}
-                        tabindex={activePick && activePick.hunk === r.hunkIndex && activePick.line === r.lineIndex ? 0 : -1}
-                        aria-label={pickLabel(line)}
-                        aria-describedby="diff-pick-hint"
-                        onclick={(e) => onPickClick(e, r.hunkIndex, r.lineIndex)}
-                        onkeydown={pickKey}
-                        onfocus={() => (cursor = { hunk: r.hunkIndex, line: r.lineIndex })}
-                      />
+        {#if split}
+          <VirtualList
+            items={splitRows}
+            heightOf={heightOfSplit}
+            horizontal
+            role="region"
+            label={t('diff.codeLabel', { path: pathText(file.path) })}
+            tabindex={0}
+            overscan={12}
+            onscroll={(top) => (scrollTop = top)}
+          >
+            {#snippet row(r)}
+              {#if r.type === 'hunk'}
+                <div class="hunk-row" style:height="{hunkH}px">
+                  {@render hunkBar(r.hunk, r.hunkIndex, file?.hunks.length ?? 0)}
+                </div>
+              {:else}
+                {@const izq = r.left}
+                {@const der = r.right}
+                <div class="srow" style:height="{lineH}px">
+                  <span class="snum" aria-hidden="true">{izq?.oldLineNumber ?? ''}</span>
+                  <span class="scell {izq?.kind ?? 'void'}" title={izq?.text ?? ''}>
+                    {#if izq}
+                      {#if kindName(izq.kind)}<span class="sr-only">{kindName(izq.kind)}: </span>{/if}
+                      {truncateLine(izq.text, expandedLines[izq.id] === true).text}
                     {/if}
                   </span>
-                {/if}
-                <span class="gut old" aria-hidden="true">{line.oldLineNumber ?? ''}</span>
-                <span class="gut new" aria-hidden="true">{line.newLineNumber ?? ''}</span>
-                <span class="mark" aria-hidden="true">{marker(line.kind)}</span>
-                {#if kindName(line.kind)}<span class="sr-only">{kindName(line.kind)}: </span>{/if}
-                <span class="text mono">{tr.text}</span>
-                {#if tr.truncated}
-                  <button
-                    type="button"
-                    class="more btn btn-sm"
-                    onclick={() => (expandedLines = { ...expandedLines, [line.id]: true })}
-                  >
-                    {t('diff.seeMore', { n: line.text.length.toLocaleString(intlLocale()) })}
-                  </button>
-                {/if}
-              </div>
-            {/if}
-          {/snippet}
-        </VirtualList>
+                  <span class="snum sep" aria-hidden="true">{der?.newLineNumber ?? ''}</span>
+                  <span class="scell {der?.kind ?? 'void'}" title={der?.text ?? ''}>
+                    {#if der}
+                      {#if kindName(der.kind)}<span class="sr-only">{kindName(der.kind)}: </span>{/if}
+                      {truncateLine(der.text, expandedLines[der.id] === true).text}
+                    {/if}
+                  </span>
+                </div>
+              {/if}
+            {/snippet}
+          </VirtualList>
+        {:else}
+        <VirtualList
+            bind:this={listEl}
+            items={rows}
+            {heightOf}
+            horizontal
+            role="region"
+            label={t('diff.codeLabel', { path: pathText(file.path) })}
+            tabindex={0}
+            overscan={12}
+            onscroll={(top) => (scrollTop = top)}
+            onkeydown={regionKey}
+          >
+            {#snippet row(r, _i)}
+              {#if r.type === 'hunk'}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                  class="hunk-row"
+                  style:height="{hunkH}px"
+                  onmouseenter={() => (hoverHunk = r.hunkIndex)}
+                  onmouseleave={() => (hoverHunk = null)}
+                >
+                  {@render hunkBar(r.hunk, r.hunkIndex, file?.hunks.length ?? 0)}
+                </div>
+              {:else}
+                {@const line = r.line}
+                {@const tr = truncateLine(line.text, expandedLines[line.id] === true)}
+                <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+                <div
+                  class="line {line.kind}"
+                  class:pickable={canPick && isChange(line.kind)}
+                  class:picked={linePick?.hunk === r.hunkIndex && pickedSet.has(r.lineIndex)}
+                  style:height="{lineH}px"
+                  onmouseenter={() => (hoverHunk = r.hunkIndex)}
+                  onmouseleave={() => (hoverHunk = null)}
+                  onclick={(e) => isChange(line.kind) && onRowClick(e, r.hunkIndex, r.lineIndex)}
+                >
+                  {#if canPick}
+                    <span class="pick">
+                      {#if isChange(line.kind)}
+                        <input
+                          type="checkbox"
+                          id="dl-{r.hunkIndex}-{r.lineIndex}"
+                          class="pick-cb"
+                          checked={linePick?.hunk === r.hunkIndex && pickedSet.has(r.lineIndex)}
+                          tabindex={activePick && activePick.hunk === r.hunkIndex && activePick.line === r.lineIndex ? 0 : -1}
+                          aria-label={pickLabel(line)}
+                          aria-describedby="diff-pick-hint"
+                          onclick={(e) => onPickClick(e, r.hunkIndex, r.lineIndex)}
+                          onkeydown={pickKey}
+                          onfocus={() => (cursor = { hunk: r.hunkIndex, line: r.lineIndex })}
+                        />
+                      {/if}
+                    </span>
+                  {/if}
+                  <span class="gut old" aria-hidden="true">{line.oldLineNumber ?? ''}</span>
+                  <span class="gut new" aria-hidden="true">{line.newLineNumber ?? ''}</span>
+                  <span class="mark" aria-hidden="true">{marker(line.kind)}</span>
+                  {#if kindName(line.kind)}<span class="sr-only">{kindName(line.kind)}: </span>{/if}
+                  <span class="text mono">{tr.text}</span>
+                  {#if tr.truncated}
+                    <button
+                      type="button"
+                      class="more btn btn-sm"
+                      onclick={() => (expandedLines = { ...expandedLines, [line.id]: true })}
+                    >
+                      {t('diff.seeMore', { n: line.text.length.toLocaleString(intlLocale()) })}
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            {/snippet}
+          </VirtualList>
+        {/if}
       </div>
     {/if}
   {/if}
@@ -566,6 +642,68 @@
     .hunk-btn {
       opacity: 1;
     }
+  }
+  .layout {
+    display: inline-flex;
+    flex: none;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-subtle);
+  }
+  .layout .btn {
+    gap: 4px;
+    color: var(--text-muted);
+  }
+  .layout .btn.on {
+    background: var(--bg-surface);
+    color: var(--text);
+    box-shadow: var(--elev-1);
+  }
+  /* Vista partida: antiguo | nuevo, con la misma línea de base para las dos columnas. */
+  .srow {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) 52px minmax(0, 1fr);
+    align-items: stretch;
+    width: 100%;
+    line-height: var(--lh);
+    white-space: pre;
+    tab-size: 4;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .snum {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    padding-right: var(--space-2);
+    text-align: right;
+    color: var(--text-muted);
+    background: var(--bg-subtle);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .snum.sep {
+    left: auto;
+    border-left: 1px solid var(--border);
+  }
+  .scell {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: var(--space-2);
+  }
+  .scell.addition {
+    background: var(--diff-add-bg);
+  }
+  .scell.deletion {
+    background: var(--diff-del-bg);
+  }
+  .scell.void {
+    background: var(--bg-subtle);
   }
   .line {
     display: flex;

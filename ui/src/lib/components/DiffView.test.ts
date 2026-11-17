@@ -39,6 +39,29 @@ describe('DiffView', () => {
     expect(screen.getAllByText(/^Eliminada:/).length).toBeGreaterThan(0);
   });
 
+  it('se puede ver el diff en dos columnas y volver a una, y se recuerda', async () => {
+    const { tab } = await loadedTab();
+    pick(tab, 'unstaged', 'src/lib/api/types.ts');
+    render(DiffView, { props: { tab } });
+    await screen.findByText(/^@@ -14,\d+ \+14,\d+ @@$/);
+
+    // Al empezar, una sola columna (como hasta ahora).
+    expect(screen.getByTestId('diff-unified')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Dos columnas/ }));
+    await waitFor(() => expect(screen.getByTestId('diff-split')).toBeInTheDocument());
+    expect(localStorage.getItem('ariadna.diffLayout.v1')).toBe('split');
+    // En dos columnas no hay casillas para preparar líneas sueltas.
+    expect(screen.queryByRole('checkbox', { name: /^Preparar la línea/ })).toBeNull();
+    // El contenido sigue ahí (a la izquierda lo antiguo y a la derecha lo nuevo).
+    expect(screen.getAllByText(/^Añadida:/).length).toBeGreaterThanOrEqual(0);
+    expect(document.querySelectorAll('[data-testid="diff-split"] .srow').length).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole('button', { name: /Una columna/ }));
+    await waitFor(() => expect(screen.getByTestId('diff-unified')).toBeInTheDocument());
+    expect(localStorage.getItem('ariadna.diffLayout.v1')).toBe('unified');
+  });
+
   it('preparar un hunk lo mueve a Preparados sin tocar el otro', async () => {
     const { tab, api } = await loadedTab();
     const entry = pick(tab, 'unstaged', 'src/lib/api/types.ts');

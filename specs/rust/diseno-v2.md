@@ -16,6 +16,7 @@ Capturas en `specs/rust/diseno-v2/`: `antes-*` (maqueta anterior) y `v2-*` (esta
 | Tres capas de navegación (pestañas de repo, lista de ramas, pestañas Cambios/Historial/Ramas/Stashes/PR) | La misma rama aparecía en dos columnas y «Ramas» duplicaba la lista del sidebar |
 | Pestaña «Ramas» con lista + detalle + crear + remotos + etiquetas | Para cambiar de rama hacía falta ir al centro; el árbol del sidebar solo seleccionaba |
 | «Ramas» era una vista más, no una herramienta | Al cambiar a Historial o Stashes la gestión de ramas desaparecía |
+| Diff en una sola columna | Difícil de leer cuando se reescribe un bloque entero | Selector **Una columna / Dos columnas** (antiguo a la izquierda, nuevo a la derecha), recordado entre sesiones; en las PR se mantiene la unificada porque los comentarios van anclados a una línea |
 | Barra de título con pestañas anchas y buscador de 200 px | Poca información de contexto (rama actual) y ruido en la zona de arrastre |
 | Columna central de 400 px con pestañas subrayadas | Pestañas y barra de herramientas competían en la misma franja |
 

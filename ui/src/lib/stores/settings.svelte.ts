@@ -45,6 +45,18 @@ function loadView(): ChangesView {
   }
 }
 
+/** Cómo se ve el diff: una sola columna (unificado) o antiguo | nuevo en paralelo. */
+export type DiffLayout = 'unified' | 'split';
+const LAYOUT_KEY = 'ariadna.diffLayout.v1';
+
+function loadLayout(): DiffLayout {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === 'split' ? 'split' : 'unified';
+  } catch {
+    return 'unified';
+  }
+}
+
 class Settings {
   theme = $state<ThemeMode>('system');
   density = $state<Density>('comfortable');
@@ -56,6 +68,8 @@ class Settings {
   onChange: ((s: { theme: ThemeMode; diffFontSize: number; language: LanguagePref }) => void) | null = null;
   /** Vista de la lista de cambios: plana o en árbol por carpetas (se recuerda). */
   changesView = $state<ChangesView>(loadView());
+  /** Vista del diff: unificada o partida en dos columnas (se recuerda). */
+  diffLayout = $state<DiffLayout>(loadLayout());
 
   constructor() {
     const s = load();
@@ -65,6 +79,15 @@ class Settings {
     this.language = s.language;
     // El idioma del espejo local se aplica ya: el primer render sale en el idioma correcto.
     applyLanguage(this.language);
+  }
+
+  setDiffLayout(v: DiffLayout): void {
+    this.diffLayout = v;
+    try {
+      localStorage.setItem(LAYOUT_KEY, v);
+    } catch {
+      /* ignorar */
+    }
   }
 
   setChangesView(v: ChangesView): void {
