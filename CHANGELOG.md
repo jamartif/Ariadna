@@ -9,6 +9,12 @@ usa [versionado semántico](https://semver.org/lang/es/).
 
 Lo que hay encima de `v0.1.0-alpha.3`.
 
+### Corregido
+- **Botón de tema de la barra de título**: ahora alterna claro ↔ oscuro con dos estados e icono de la acción (luna/sol). Antes pasaba por «sistema» como tercer estado, donde el icono se convertía en un monitor y parecía que el botón había desaparecido. «Sistema» sigue en Ajustes › General y en la paleta de comandos. Con prueba E2E (seis pulsaciones comprobando que el botón sigue visible y con icono) y pruebas unitarias del ciclo.
+
+### Verificado
+- **Codex CLI**: verificado el 2026-11-17 con `codex-cli 0.169.0` ejecutando el CLI real: `codex exec --json --sandbox read-only --skip-git-repo-check -` con el prompt por stdin, JSONL (`item.completed`/`agent_message`) y `codex login status` («Logged in using ChatGPT»). **`CODEX_HOME` sí aísla la sesión** (directorio vacío → «Not logged in»), así que Codex deja de ser experimental y puede tener sesión propia en el perfil Empresa. Documentado en [`docs/ia-codex.md`](docs/ia-codex.md).
+
 ### Decidido
 - **D16 (perfiles): la IA se permite directamente en el perfil Empresa** (Codex y Copilot), con un aviso permanente en Ajustes › IA de que esos proveedores comparten la sesión con el perfil Personal y de que el código del trabajo se enviaría a la cuenta personal del CLI. Se prioriza el uso real en el trabajo, ya que el aislamiento no es posible con esos CLI (solo Claude lo soporta y no está disponible en la empresa).
 

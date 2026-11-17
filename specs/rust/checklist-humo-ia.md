@@ -26,7 +26,8 @@ detección; lo que sigue sin verificar se marca con su motivo.
 
 Pendiente de la propia spec: RF-IA10 queda **cerrado** con [`terminos-ia.md`](terminos-ia.md)
 (consulta del 2026-11-13, con fechas y cláusulas). Copilot ya **no** se publica como
-experimental: `ProviderId::is_experimental()` solo devuelve `true` para Codex. Lo único que
+experimental: **ningún proveedor** se publica ya como experimental (`is_experimental()` = `false`
+para los tres). Lo único que
 sigue en `verified = false` es el comando de login de Copilot, porque el flujo OAuth del
 navegador no se ha recorrido a mano (ver §3).
 
@@ -74,10 +75,12 @@ capturas se guardaron en `crates/ariadna-ai/tests/fixtures/copilot_*.jsonl`.
 - [ ] Cerrar sesión en un perfil (en su terminal, con su `CLAUDE_CONFIG_DIR`) no cierra la del otro.
 - [ ] Un repo con regla → Empresa genera con la cuenta de Empresa aunque el perfil de Ajustes sea Personal, y la hoja de propuesta lo muestra (perfil y cuenta).
 
-**Codex — NO VERIFICADO (comprobar y anotar)**
-- [ ] `codex login --help`, `codex login status` (¿existe? ¿qué imprime? ¿expone cuenta/organización?). Si lo expone, abrir tarea para `account_args(Codex)` y su parser; mientras tanto la UI dice «Cuenta no disponible».
-- [ ] ¿`CODEX_HOME` aísla de verdad la sesión? Con un directorio vacío, `codex login status` debe dar «sin sesión»; tras login en Empresa, la sesión normal no cambia. Si no, marcar `isolationVerified` y el aviso de «comparte sesión» para Codex.
-- [ ] `codex login` abre el flujo oficial desde «Abrir terminal»; ¿pide algo por la propia terminal?
+**Codex — verificado el 2026-11-17 con `codex-cli 0.169.0` (Windows 11, sesión con ChatGPT)**
+- [x] Flags reales: `codex exec --json --sandbox read-only --skip-git-repo-check -` responde en JSONL (`item.completed`/`agent_message` + `turn.completed`). El prompt va por **stdin** con el marcador `-`; no hace falta `-p`.
+- [x] `codex login status` existe e imprime `Logged in using ChatGPT` (método de sesión, **no** correo ni organización). `codex login` abre el flujo oficial.
+- [x] **`CODEX_HOME` sí aísla**: con un directorio vacío `codex login status` dice `Not logged in` y la sesión normal sigue autenticada → `isolation(Codex).verified = true`, `shares_login_between_profiles(Codex) = false`. Aviso: con `CODEX_HOME` dentro de `%TEMP%` el CLI avisa de que no puede crear alias de PATH; usar un directorio estable bajo los datos de la app.
+- [ ] **NO VERIFICADO**: cuenta/organización real (el CLI no la expone), política de empresa que bloquee el CLI, cuota agotada y sesión caducada con textos reales, y macOS.
+- Nota de desarrollo (WSL): el shim de Windows `codex.cmd` **no** funciona dentro de Linux (`Missing optional dependency @openai/codex-linux-x64`); para probar desde WSL hay que llamar al de Windows con un lanzador (`cmd.exe /c`), como con Claude y Copilot.
 
 **Copilot — verificado el 2026-11-14 con `GitHub Copilot CLI 1.0.112` (lo que queda, aparte)**
 - [x] `copilot login` existe (`copilot login --help`) y `copilot login --with-token` procesa el token que recibe por stdin (con un PAT clásico responde «Login failed: Error: Classic personal access tokens (ghp_) are not supported…»).

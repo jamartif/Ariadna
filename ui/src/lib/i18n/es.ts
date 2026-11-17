@@ -376,6 +376,8 @@ export const es = {
   'palette.group.recents': 'Recientes',
 
   // Ajustes
+  'titlebar.themeToDark': 'Cambiar a modo oscuro',
+  'titlebar.themeToLight': 'Cambiar a modo claro',
   'settings.themeButton': 'Tema: {mode}. Pulsa para cambiar.',
   'settings.theme.system': 'sistema',
   'settings.theme.light': 'claro',

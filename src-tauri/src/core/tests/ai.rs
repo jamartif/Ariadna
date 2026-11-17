@@ -531,7 +531,8 @@ async fn el_estado_avisa_de_los_proveedores_que_comparten_login() {
     )
     .await;
     assert!(st.profile.isolated);
-    assert!(by_state(&st, "codex").isolated && !by_state(&st, "codex").isolation_verified);
+    // Codex también aísla de verdad desde el 2026-11-17 (codex-cli 0.169.0, `CODEX_HOME`).
+    assert!(by_state(&st, "codex").isolated && by_state(&st, "codex").isolation_verified);
     assert!(by_state(&st, "claude").isolation_verified);
     // Copilot nunca se marca aislado aunque el perfil lo esté: comparte login.
     assert!(by_state(&st, "copilot").shares_login && !by_state(&st, "copilot").isolated);
