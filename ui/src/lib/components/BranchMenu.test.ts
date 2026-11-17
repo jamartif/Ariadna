@@ -269,7 +269,16 @@ describe('Menú contextual del riel: acciones', () => {
     const names = within(m)
       .getAllByRole('menuitem')
       .map((x) => x.textContent?.trim());
-    expect(names).toEqual(['Volver', 'rust-migration', 'feature/command-palette', 'origin/rust-migration', 'origin/main']);
+    expect(names).toEqual([
+      'Volver',
+      'rust-migration',
+      'feature/command-palette',
+      'origin/rust-migration',
+      'origin/main',
+      // Ramas anidadas del mock (`origin/release/1.0/hotfix`): el menú las lista tal cual.
+      'origin/release/1.0',
+      'origin/release/1.0/hotfix'
+    ]);
 
     await userEvent.click(item('cmp:feature/command-palette'));
     await waitFor(() => expect(b.diff).not.toBeNull());

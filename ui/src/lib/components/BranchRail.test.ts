@@ -75,6 +75,40 @@ describe('Riel de ramas: lista y jerarquía', () => {
     expect(screen.queryByRole('group', { name: 'Rama seleccionada' })).toBeNull();
   });
 
+  it('anida las ramas del remoto por carpetas (`origin/release/1.0/hotfix`) y las pliega', async () => {
+    await setup();
+    const nav = await screen.findByRole('navigation', { name: 'Árbol de ramas' });
+    /** Botones de carpeta del árbol (`.subhead`), en orden de pintado. */
+    const folders = () => [...nav.querySelectorAll<HTMLElement>('.subhead')];
+    const folder = (text: string) => {
+      const el = folders().find((b) => (b.textContent ?? '').includes(text));
+      if (!el) throw new Error(`no hay carpeta «${text}»: ${folders().map((b) => b.textContent?.trim()).join(' | ')}`);
+      return el;
+    };
+
+    // `release/` es una carpeta con sus dos ramas dentro, no una rama suelta.
+    const release = folder('release/');
+    expect(release.textContent).toContain('2'); // 1.0 y 1.0/hotfix
+    expect(release).toHaveAttribute('aria-expanded', 'true');
+    expect(row('origin/release/1.0/hotfix')).toBeInTheDocument();
+
+    // La carpeta `1.0/` cuelga de `release/`: más sangría y solo su rama.
+    const uno = folder('1.0/');
+    expect(uno.style.paddingLeft).toContain('24px');
+    expect(release.style.paddingLeft).toContain('12px');
+
+    // Plegar `release/` esconde lo suyo sin tocar el resto del árbol.
+    await userEvent.click(release);
+    expect(document.querySelector('[data-brail-name="origin/release/1.0"]')).toBeNull();
+    expect(document.querySelector('[data-brail-name="origin/release/1.0/hotfix"]')).toBeNull();
+    expect(row('origin/main')).toBeInTheDocument();
+    expect(folder('release/')).toHaveAttribute('aria-expanded', 'false');
+
+    // Y se vuelve a abrir.
+    await userEvent.click(folder('release/'));
+    expect(row('origin/release/1.0/hotfix')).toBeInTheDocument();
+  });
+
   it('filtra al instante y explica cuando no hay coincidencias', async () => {
     await setup();
     const filter = screen.getByLabelText('Buscar rama');
