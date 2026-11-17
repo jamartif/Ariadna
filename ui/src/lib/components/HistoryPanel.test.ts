@@ -31,6 +31,23 @@ describe('Historial', () => {
     expect(first.querySelector('time')).not.toBeNull();
   });
 
+  it('con clic derecho se puede crear una etiqueta en ese commit', async () => {
+    const { tab } = await setup();
+    const list = await screen.findByRole('listbox', { name: 'Lista de commits' });
+    await waitFor(() => expect(within(list).getAllByRole('option').length).toBeGreaterThan(2));
+    const second = within(list).getAllByRole('option')[1]!;
+    const c = historyOf(tab).commits[1]!;
+
+    await userEvent.pointer({ keys: '[MouseRight]', target: second });
+    const menu = await screen.findByRole('menu', { name: 'Acciones del commit' });
+    // El clic derecho también selecciona el commit sobre el que se actúa.
+    expect(historyOf(tab).selected?.sha).toBe(c.sha);
+
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Crear etiqueta…' }));
+    const dlg = await screen.findByTestId('tag-dialog');
+    expect(dlg).toHaveTextContent(c.sha.slice(0, 7));
+  });
+
   it('seleccionar un commit muestra sus archivos y el diff', async () => {
     const { tab } = await setup();
     const list = await screen.findByRole('listbox', { name: 'Lista de commits' });

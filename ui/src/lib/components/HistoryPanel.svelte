@@ -7,6 +7,8 @@
   import { relativeTime } from '$lib/util/time';
   import Banner from './Banner.svelte';
   import CommitGraph from './CommitGraph.svelte';
+  import CommitMenu from './CommitMenu.svelte';
+  import TagDialog from './TagDialog.svelte';
   import EmptyState from './EmptyState.svelte';
   import Icon from './Icon.svelte';
   import VirtualList from './VirtualList.svelte';
@@ -16,6 +18,9 @@
   const h = $derived(historyOf(tab));
   const ROW_H = 46;
   let list = $state<ReturnType<typeof VirtualList<Commit>>>();
+  /** Menú contextual del commit (clic derecho o Mayús+F10) y la ventana de etiqueta. */
+  let menu = $state<{ commit: Commit; x: number; y: number } | null>(null);
+  let tagFor = $state<Commit | null>(null);
 
   onMount(() => {
     void historyOf(tab).reload();
@@ -123,7 +128,19 @@
             style:height="{ROW_H}px"
             tabindex="-1"
             onclick={() => h.select(c)}
-            onkeydown={(e) => (e.key === 'Enter' ? h.select(c) : undefined)}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') h.select(c);
+              else if (e.key === 'F10' && e.shiftKey) {
+                e.preventDefault();
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                menu = { commit: c, x: r.left + 24, y: r.top + 12 };
+              }
+            }}
+            oncontextmenu={(e) => {
+              e.preventDefault();
+              h.select(c);
+              menu = { commit: c, x: e.clientX, y: e.clientY };
+            }}
           >
             {#if !h.searching && h.rows[i]}
               <CommitGraph row={h.rows[i]} columns={h.graphWidth} height={ROW_H} merge={c.parents.length > 1} />
@@ -151,6 +168,21 @@
       </VirtualList>
     </div>
     {#if h.loadingMore}<div class="more-loading" role="status"><Icon name="loader" size={13} spin />{t('history.loadingMore')}</div>{/if}
+  {/if}
+
+  {#if menu}
+    <CommitMenu
+      {tab}
+      commit={menu.commit}
+      x={menu.x}
+      y={menu.y}
+      onclose={() => (menu = null)}
+      oncreatetag={(c) => (tagFor = c)}
+    />
+  {/if}
+
+  {#if tagFor}
+    <TagDialog {tab} target={tagFor.sha} onclose={() => (tagFor = null)} />
   {/if}
 </section>
 

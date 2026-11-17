@@ -38,6 +38,22 @@ function row(name: string): HTMLElement {
 
 const current = (tab: Awaited<ReturnType<typeof setup>>['tab']) => tab.snapshot!.branches.find((b) => b.isHead)!;
 
+describe('Riel de ramas: menú contextual', () => {
+  it('«Crear etiqueta…» abre la ventana de etiqueta apuntando al commit de la rama', async () => {
+    const { tab } = await setup();
+    const fila = row('main');
+    await userEvent.pointer({ keys: '[MouseRight]', target: fila, coords: { clientX: 100, clientY: 160 } });
+    const menu = await screen.findByRole('menu');
+    const oid = tab.snapshot!.branches.find((b) => b.name === 'main')!.oid;
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Crear etiqueta…' }));
+
+    const dlg = await screen.findByTestId('tag-dialog');
+    // El formulario dice en qué commit se va a crear (los 7 primeros del SHA de la rama).
+    expect(dlg).toHaveTextContent(oid.slice(0, 7));
+    expect(within(dlg).getByRole('textbox', { name: 'Nombre' })).toBeInTheDocument();
+  });
+});
+
 describe('Riel de ramas: lista y jerarquía', () => {
   it('agrupa locales y remotas, destaca la actual y muestra el inspector', async () => {
     const { tab } = await setup();

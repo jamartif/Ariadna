@@ -40,7 +40,8 @@ no hace nada.
 | Escribir | **Renombrar…** | Abre el formulario de renombrado del inspector con el nombre actual | — | Rama local |
 | | **Borrar la rama** | `git branch -d/-D` con confirmación nativa (segunda confirmación si no está fusionada) | — | Rama local y no actual |
 | | **Borrar en el remoto «x»** | Borra la rama **en el servidor**; confirmación nativa | — | Rama del remoto |
-| Copiar / comparar | **Copiar el nombre** / **Copiar el SHA** | Portapapeles del sistema; aviso con el valor copiado. Si el portapapeles falla, aviso de error | — | Nada |
+| Etiqueta / copiar | **Crear etiqueta…** | Abre la ventana de nueva etiqueta apuntando al commit de esa rama (`git tag`); la etiqueta se crea sin mover nada y se ve en la pestaña de etiquetas y en el historial | — | Que no haya otra operación en curso |
+| | **Copiar el nombre** / **Copiar el SHA** | Portapapeles del sistema; aviso con el valor copiado. Si el portapapeles falla, aviso de error | — | Nada |
 | | **Ver el diff contra «actual»** | Pinta en el panel derecho `git diff actual...esta` (lista de archivos + visor de solo lectura) | — | Que la rama no sea la actual |
 | | **Comparar con…** | Segundo paso **en el mismo menú**: «Volver» y la lista de ramas (la propia no aparece). Al elegir una, hace el mismo diff `A...B` | → para entrar, ← para volver | Que exista al menos otra rama |
 | Web | **Abrir en el navegador** | Abre la página de la rama en GitHub / Azure DevOps / GitLab / Bitbucket. La URL la construye **Rust** desde la configuración real del remoto (solo `https`, host del propio remoto) | — | Que el remoto tenga página web y esté reconocido |

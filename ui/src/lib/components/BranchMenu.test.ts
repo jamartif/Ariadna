@@ -52,7 +52,7 @@ describe('Menú contextual del riel: abrir y navegar', () => {
     const labels = within(m)
       .getAllByRole('menuitem')
       .map((x) => x.textContent?.trim());
-    // Los cinco grupos, en orden: cambiar/crear/fusionar/rebasar · red · escribir · copiar/comparar · web.
+    // Los cinco grupos, en orden: cambiar/crear/fusionar/rebasar · red · escribir · etiqueta/copiar/comparar · web.
     expect(labels).toEqual([
       'Cambiar a esta rama',
       'Crear una rama desde esta…',
@@ -64,6 +64,7 @@ describe('Menú contextual del riel: abrir y navegar', () => {
       'Renombrar…',
       'Borrar la rama',
       'Borrar en el remoto «origin»',
+      'Crear etiqueta…',
       'Copiar el nombre',
       'Copiar el SHA',
       'Ver el diff contra «rust-migration»',

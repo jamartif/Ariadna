@@ -10,6 +10,7 @@ usa [versionado semántico](https://semver.org/lang/es/).
 Lo que hay encima de `v0.1.0-alpha.3`.
 
 ### Añadido
+- **Crear etiquetas con el botón derecho**: el menú contextual de una rama del riel trae **«Crear etiqueta…»**, que abre la ventana de nueva etiqueta apuntando al commit de esa rama. En el **historial**, el botón derecho (o `Mayús+F10`) sobre un commit abre un menú con **«Crear etiqueta…»**, «Copiar el SHA» y «Copiar el asunto». No se mueve nada del repositorio: la etiqueta se crea donde se ha pedido.
 - **El diff se puede ver en dos columnas**: además de la vista de siempre (una columna), hay un selector **Una columna / Dos columnas** en la cabecera del diff y en el detalle de commits y stashes, con lo antiguo a la izquierda y lo nuevo a la derecha. Se recuerda entre sesiones (`ariadna.diffLayout.v1`). Las líneas iguales salen en las dos columnas y un bloque de borradas se empareja con el de añadidas. En las pull requests la vista partida no se ofrece: los comentarios se anclan a una línea concreta.
 
 ### Cambiado
