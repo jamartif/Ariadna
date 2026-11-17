@@ -32,6 +32,8 @@ export const en: Record<MessageKey, string> = {
   // Tabs
   'tabs.list': 'Open repositories',
   'tabs.new': 'New tab',
+  'tabs.resize': 'Resize the {name} tab',
+  'tabs.resizeHint': 'Drag to change the width · double click to go back to automatic',
   'tabs.newTab': 'New tab',
   'tabs.close': 'Close {name}',
   'tabs.closeHint': 'Close tab (Ctrl/⌘+W)',
