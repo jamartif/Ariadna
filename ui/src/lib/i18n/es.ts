@@ -31,6 +31,8 @@ export const es = {
   // Pestañas
   'tabs.list': 'Repositorios abiertos',
   'tabs.new': 'Nueva pestaña',
+  'tabs.resize': 'Ajustar el ancho de la pestaña {name}',
+  'tabs.resizeHint': 'Arrastra para cambiar el ancho · doble clic para volver al automático',
   'tabs.newTab': 'Nueva pestaña',
   'tabs.close': 'Cerrar {name}',
   'tabs.closeHint': 'Cerrar pestaña (Ctrl/⌘+W)',
