@@ -37,7 +37,7 @@
    * MAQUETA v2: riel de ramas + vista central + detalle.
    *
    *  ┌───────────────────────────────────────────────────────────┐
-   *  │ barra superior (TitleBar): repo · rama actual · paleta     │
+   *  │ barra superior (TitleBar): repo · paleta     │
    *  ├────────────┬───────────────────────────┬──────────────────┤
    *  │ riel       │ vista (Cambios · Historial │ detalle / diff   │
    *  │ de ramas   │ · PR · Stashes · Conflictos)│ cabecera fija    │

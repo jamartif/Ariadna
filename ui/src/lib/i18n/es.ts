@@ -27,9 +27,6 @@ export const es = {
   'common.retry': 'Reintentar',
 
   // Barra superior
-  'titlebar.branch': 'Cambiar de rama',
-  'titlebar.branchLabel': 'Rama',
-  'titlebar.branchHint': 'Cambiar de rama ({combo})',
 
   // Pestañas
   'tabs.list': 'Repositorios abiertos',

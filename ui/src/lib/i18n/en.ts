@@ -28,9 +28,6 @@ export const en: Record<MessageKey, string> = {
   'common.retry': 'Retry',
 
   // Title bar
-  'titlebar.branch': 'Switch branch',
-  'titlebar.branchLabel': 'Branch',
-  'titlebar.branchHint': 'Switch branch ({combo})',
 
   // Tabs
   'tabs.list': 'Open repositories',

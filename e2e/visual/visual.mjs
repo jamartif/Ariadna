@@ -64,7 +64,6 @@ async function main() {
 
   cleanupFixtures();
   isolateAppState();
-  setFixture(createRepoFixture({ name: 'repo-visual' }));
 
   await startDriver();
 
@@ -80,8 +79,11 @@ async function main() {
   }
 
   for (const theme of THEMES) {
-    // Cada tema arranca la app de cero: las pantallas que preparan archivos dejan
-    // el panel de diferencias esperando contenido y contaminarían el siguiente tema.
+    // Cada tema arranca de cero **también el repositorio**: las pantallas que preparan
+    // archivos dejan el índice sucio (`src/app.js` pasa a «Preparados») y en el tema
+    // siguiente ya no se puede seleccionar en la lista de cambios.
+    cleanupFixtures();
+    setFixture(createRepoFixture({ name: 'repo-visual' }));
     await connect();
     await assertPackaged();
     await waitLocale();

@@ -22,7 +22,8 @@ Capturas en `specs/rust/diseno-v2/`: `antes-*` (maqueta anterior) y `v2-*` (esta
 ## Decisiones
 
 1. **Barra superior compacta** (`TitleBar`): marca, pestañas de repositorio (necesarias para
-   multi-repo), separador y **chip de la rama actual** («RAMA», nombre, `↑`/`↓`).
+   multi-repo) y la paleta. **Sin chip de rama**: se quitó porque el riel de la izquierda ya
+   muestra la rama actual (y con muchas pestañas abiertas el chip se solapaba).
    El chip es la acción de cambio rápido: al pulsarlo ejecuta `rail.focus` y lleva el foco al
    buscador del riel (`Ctrl/⌘+Mayús+B`). Después, paleta, tema, densidad, ajustes y controles
    de ventana. La pestaña de repo sigue siendo el selector de repositorio; el chip es contexto
