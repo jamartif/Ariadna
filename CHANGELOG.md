@@ -9,6 +9,9 @@ usa [versionado semántico](https://semver.org/lang/es/).
 
 Lo que hay encima de `v0.1.0-alpha.3`.
 
+### Cambiado
+- **La barra superior ya no muestra la rama**: era información duplicada (el riel de la izquierda la muestra siempre, con su seguimiento y sus acciones) y con muchas pestañas de repos abiertas el chip se solapaba con el resto. La barra queda con las pestañas, el buscador de la paleta y los botones de tema, densidad y ajustes. El atajo para saltar al buscador del riel sigue funcionando.
+
 ### Corregido
 - **Botón de tema de la barra de título**: ahora alterna claro ↔ oscuro con dos estados e icono de la acción (luna/sol). Antes pasaba por «sistema» como tercer estado, donde el icono se convertía en un monitor y parecía que el botón había desaparecido. «Sistema» sigue en Ajustes › General y en la paleta de comandos. Con prueba E2E (seis pulsaciones comprobando que el botón sigue visible y con icono) y pruebas unitarias del ciclo.
 

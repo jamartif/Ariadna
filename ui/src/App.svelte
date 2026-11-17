@@ -9,7 +9,7 @@
   import Welcome from '$lib/components/Welcome.svelte';
   import Workspace from '$lib/components/Workspace.svelte';
   import { t } from '$lib/i18n';
-  import { installShortcuts, registerHandlers, runShortcut } from '$lib/shortcuts/registry';
+  import { installShortcuts, registerHandlers } from '$lib/shortcuts/registry';
   import { HIBERNATE_CHECK_MS, type AppStore } from '$lib/stores/app.svelte';
   import { buildActions } from '$lib/stores/commands';
   import { settings } from '$lib/stores/settings.svelte';
@@ -21,9 +21,6 @@
   const entry = $derived(app.activeEntry);
   const title = $derived(entry?.kind === 'repo' ? `${entry.info.name}${entry.info.branch ? ` — ${entry.info.branch}` : ''}` : '');
   /** Contexto del repo activo para la barra superior (rama actual y acción de cambio rápido). */
-  const activeTab = $derived(entry?.kind === 'repo' ? app.tabState(entry.id) : null);
-  const status = $derived(activeTab?.snapshot?.status ?? null);
-  const branch = $derived(status?.branchName ?? (entry?.kind === 'repo' ? entry.info.branch : null));
 
   // El título de la ventana (barra de tareas, Alt+Tab) refleja el repo activo.
   $effect(() => {
@@ -95,11 +92,6 @@
     onreorder={(ids) => app.reorder(ids)}
     onpalette={() => (app.paletteOpen = true)}
     onsettings={() => settingsUi.open()}
-    {branch}
-    detached={status?.isDetached ?? false}
-    ahead={status?.ahead ?? 0}
-    behind={status?.behind ?? 0}
-    onbranches={() => runShortcut('rail.focus')}
   />
 
   <main class="main">
