@@ -66,7 +66,7 @@ impl ProviderId {
         match self {
             ProviderId::Claude => Some("claude 2.1.319"),
             ProviderId::Copilot => Some("GitHub Copilot CLI 1.0.112"),
-            ProviderId::Codex => None,
+            ProviderId::Codex => Some("codex-cli 0.169.0"),
         }
     }
 
@@ -75,7 +75,7 @@ impl ProviderId {
         match self {
             ProviderId::Claude => Some("2026-11-11"),
             ProviderId::Copilot => Some("2026-11-14"),
-            ProviderId::Codex => None,
+            ProviderId::Codex => Some("2026-11-17"),
         }
     }
 
@@ -525,7 +525,7 @@ mod tests {
         assert_eq!(ProviderId::Claude.login_invocation(), "claude auth login");
         assert_eq!(ProviderId::Codex.login_invocation(), "codex login");
         assert_eq!(ProviderId::Copilot.login_invocation(), "copilot login");
-        assert!(ProviderId::Codex.is_experimental());
+        assert!(!ProviderId::Codex.is_experimental());
         assert!(!ProviderId::Claude.is_experimental());
         // Copilot dejó de ser experimental el 2026-11-14 (GitHub Copilot CLI 1.0.112).
         assert!(!ProviderId::Copilot.is_experimental());
@@ -534,8 +534,9 @@ mod tests {
             Some("GitHub Copilot CLI 1.0.112")
         );
         assert_eq!(ProviderId::Copilot.verified_on(), Some("2026-11-14"));
-        assert_eq!(ProviderId::Codex.verified_with(), None);
-        assert_eq!(ProviderId::Codex.verified_on(), None);
+        // Codex dejó de ser experimental el 2026-11-17 (codex-cli 0.169.0).
+        assert_eq!(ProviderId::Codex.verified_with(), Some("codex-cli 0.169.0"));
+        assert_eq!(ProviderId::Codex.verified_on(), Some("2026-11-17"));
         assert!(ProviderId::Claude.verified_with().is_some());
         for p in ProviderId::AUTO_ORDER {
             assert_eq!(p.is_experimental(), p.verified_with().is_none());

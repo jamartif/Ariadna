@@ -56,8 +56,10 @@
   const paletteCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'palette.open')?.combo ?? 'Mod+K', mac));
   const settingsCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'settings.open')?.combo ?? 'Mod+,', mac));
   const branchCombo = $derived(formatCombo(SHORTCUTS.find((s) => s.id === 'rail.focus')?.combo ?? 'Mod+Shift+B', mac));
-  const themeIcon = $derived<IconName>(settings.theme === 'light' ? 'sun' : settings.theme === 'dark' ? 'moon' : 'monitor');
-  const themeLabel = $derived(t(`settings.theme.${settings.theme}`));
+  // El botón alterna claro ↔ oscuro: el icono muestra la acción, no el estado actual.
+  // «Sistema» se elige en Ajustes y en la paleta.
+  const themeIcon = $derived<IconName>(settings.effectiveTheme === 'dark' ? 'sun' : 'moon');
+  const themeLabel = $derived(t(settings.effectiveTheme === 'dark' ? 'titlebar.themeToLight' : 'titlebar.themeToDark'));
 
   // Doble clic en la zona vacía: maximizar. Se resuelve aquí (y se corta la propagación)
   // para que el manejador interno de Tauri no lo alterne una segunda vez.
@@ -120,8 +122,9 @@
       type="button"
       class="btn btn-ghost btn-icon tool"
       onclick={() => settings.cycleTheme()}
-      aria-label={t('settings.themeButton', { mode: themeLabel })}
-      title={t('settings.themeButton', { mode: themeLabel })}
+      data-testid="theme-toggle"
+      aria-label={themeLabel}
+      title={themeLabel}
     >
       <Icon name={themeIcon} size={16} />
     </button>

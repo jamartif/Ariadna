@@ -377,6 +377,8 @@ export const en: Record<MessageKey, string> = {
   'palette.group.recents': 'Recent',
 
   // Settings
+  'titlebar.themeToDark': 'Switch to dark mode',
+  'titlebar.themeToLight': 'Switch to light mode',
   'settings.themeButton': 'Theme: {mode}. Click to change.',
   'settings.theme.system': 'system',
   'settings.theme.light': 'light',

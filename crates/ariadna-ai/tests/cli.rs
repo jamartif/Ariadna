@@ -444,6 +444,55 @@ async fn copilot_mensaje_de_commit_sin_git_ni_escritura() {
     assert!(stdin.contains("Do not run tools") && stdin.contains("+hola"));
 }
 
+/// Prueba opcional contra el CLI **real** de Codex (no entra en CI: `#[ignore]`).
+///
+/// `ARIADNA_REAL_CODEX=1 cargo test -p ariadna-ai -- --ignored codex_real`
+///
+/// Comprueba la cadena completa con la configuración de producción: detección → `--version`
+/// → args (`exec --json --sandbox read-only --skip-git-repo-check -`) → prompt por stdin →
+/// JSONL. Necesita `codex` instalado y con sesión; gasta una petición.
+#[tokio::test]
+#[ignore = "habla con el CLI real: requiere codex instalado y con sesión"]
+async fn codex_real_instalado_responde_por_stdin() {
+    if std::env::var_os("ARIADNA_REAL_CODEX").is_none() {
+        return;
+    }
+    let sandbox = std::env::temp_dir().join("ariadna-ai-real-codex");
+    let mut cfg = CliProviderConfig::new(ProviderId::Codex, &sandbox);
+    cfg.search = ariadna_ai::resolve::SearchEnv::from_process();
+    cfg.timeout = Duration::from_secs(180);
+    let p = CliProvider::new(cfg);
+
+    match p.availability().await {
+        Availability::Available { version, binary } => {
+            assert!(
+                version.chars().any(|c| c.is_ascii_digit()),
+                "sin versión: {version} ({binary:?})"
+            );
+            println!("codex detectado: {version} en {binary:?}");
+        }
+        other => panic!("codex debería estar disponible: {other:?}"),
+    }
+
+    let s = p
+        .suggest_commit_message(
+            &ctx(),
+            "diff --git a/a.rs b/a.rs
++let x = 1;
+",
+            None,
+        )
+        .await
+        .expect("codex debe responder");
+    assert_eq!(s.provider, ProviderId::Codex);
+    assert!(
+        s.subject.as_deref().is_some_and(|t| !t.trim().is_empty()),
+        "sin asunto: {s:?}"
+    );
+    println!("codex propuso: {:?}", s.subject);
+    let _ = std::fs::remove_dir_all(&sandbox);
+}
+
 /// Prueba opcional contra el CLI **real** (no entra en CI: `#[ignore]`).
 ///
 /// `ARIADNA_REAL_COPILOT=1 cargo test -p ariadna-ai -- --ignored copilot_real`

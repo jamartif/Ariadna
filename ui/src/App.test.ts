@@ -104,12 +104,18 @@ describe('App (integración con mockApi)', () => {
   it('el tema y la densidad se aplican al documento', async () => {
     boot();
     await screen.findByRole('tab', { name: /ariadna/ });
-    await userEvent.click(screen.getByRole('button', { name: /^Tema:/ }));
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-    await userEvent.click(screen.getByRole('button', { name: /^Tema:/ }));
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    await userEvent.click(screen.getByRole('button', { name: /^Tema:/ }));
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false); // sistema
+    // El botón de la barra de título alterna claro ↔ oscuro; «sistema» se elige en Ajustes.
+    // Se parte del tema visible para no depender de la preferencia que simule el entorno.
+    const boton = screen.getByRole('button', { name: /^Cambiar a modo/ });
+    const primero = document.documentElement.getAttribute('data-theme');
+    await userEvent.click(boton);
+    const segundo = document.documentElement.getAttribute('data-theme');
+    expect(segundo).not.toBe(primero);
+    expect(['light', 'dark']).toContain(segundo);
+    await userEvent.click(boton);
+    const tercero = document.documentElement.getAttribute('data-theme');
+    expect(tercero).not.toBe(segundo);
+    expect(['light', 'dark']).toContain(tercero);
     await userEvent.click(screen.getByRole('button', { name: 'Alternar densidad compacta' }));
     expect(document.documentElement.getAttribute('data-density')).toBe('compact');
   });

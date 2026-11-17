@@ -133,8 +133,24 @@ class Settings {
     this.save();
   }
 
+  /** Tema que se está viendo ahora (`system` se resuelve con la preferencia del sistema). */
+  get effectiveTheme(): 'light' | 'dark' {
+    if (this.theme !== 'system') return this.theme;
+    const prefiereOscuro =
+      typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : true;
+    return prefiereOscuro ? 'dark' : 'light';
+  }
+
+  /**
+   * Alterna claro ↔ oscuro, que es lo que espera cualquiera al ver un sol o una luna.
+   *
+   * «Sistema» sigue disponible en Ajustes y en la paleta. Antes el botón pasaba por un tercer
+   * estado y el icono cambiaba a un monitor, y parecía que el botón había desaparecido.
+   */
   cycleTheme(): void {
-    this.setTheme(this.theme === 'system' ? 'light' : this.theme === 'light' ? 'dark' : 'system');
+    this.setTheme(this.effectiveTheme === 'dark' ? 'light' : 'dark');
   }
 
   toggleDensity(): void {

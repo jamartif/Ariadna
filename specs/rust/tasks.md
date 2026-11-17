@@ -4,7 +4,7 @@
 
 ## M0 — Preparación
 - [x] Spec v1 revisada con EGM (3 revisores de contexto limpio): `revision-egm.md`
-- [x] Spike CLI de IA: **Copilot verificado** (`GitHub Copilot CLI 1.0.112`, 2026-11-14: flags, stdin sin `-p`, JSONL, herramientas denegadas; `docs/ia-copilot.md`); `claude` verificado (`claude 2.1.319`). **Codex sigue sin verificar** (CLI no instalado): ver la tarea abierta de M6
+- [x] Spike CLI de IA: **Copilot verificado** (`GitHub Copilot CLI 1.0.112`, 2026-11-14: flags, stdin sin `-p`, JSONL, herramientas denegadas; `docs/ia-copilot.md`); `claude` verificado (`claude 2.1.319`). **Codex verificado** (`codex-cli 0.169.0`, 2026-11-17: flags de `exec`, stdin con `-`, JSONL y aislamiento con `CODEX_HOME`)
 - [x] Spike `claude`: probar `--setting-sources ""`, salida JSON, detección de sesión sin leer credenciales — verificado: `--tools ""`, `--output-format json`, `claude auth status --json`
 - [ ] Spike WebView2: bootstrapper en NSIS y Ctrl+Tab en WebView2
 - [x] Leer y citar con fecha los términos de Anthropic, OpenAI y GitHub **para uso en empresa**: planes individuales vs organización, y apps de terceros que lanzan el CLI oficial (RF-IA10) — [`terminos-ia.md`](terminos-ia.md), consulta del 2026-11-13
@@ -111,27 +111,27 @@
 
 ## M6 — IA (→ alpha.2)
 
-> Estado: la capa `crates/ariadna-ai` está implementada y probada con un CLI falso y contra los CLI reales que están instalados. **Verificados**: Claude (`claude 2.1.319`) y **Copilot** (`GitHub Copilot CLI 1.0.112`, 2026-11-14: flags, prompt por stdin sin `-p`, JSONL real como fixture, herramientas denegadas, detección del binario; [`docs/ia-copilot.md`](../../docs/ia-copilot.md)). Copilot **ya no es experimental** (`ProviderId::is_experimental` = `false`). **Pendiente de verificar: Codex** (CLI no instalado en la máquina de desarrollo: `codex exec --json --sandbox read-only` y `CODEX_HOME` siguen como constantes `SPIKE`).
+> Estado: la capa `crates/ariadna-ai` está implementada y probada con un CLI falso y contra los CLI reales que están instalados. **Verificados**: Claude (`claude 2.1.319`) y **Copilot** (`GitHub Copilot CLI 1.0.112`, 2026-11-14: flags, prompt por stdin sin `-p`, JSONL real como fixture, herramientas denegadas, detección del binario; [`docs/ia-copilot.md`](../../docs/ia-copilot.md)). Copilot **ya no es experimental** (`ProviderId::is_experimental` = `false`). **Codex verificado** el 2026-11-17 con `codex-cli 0.169.0` (`codex exec --json --sandbox read-only --skip-git-repo-check -`, aislamiento real con `CODEX_HOME`).
 - [x] Trait `AiProvider`, `AiSuggestion` con `revision` y estado obsoleto
 - [x] Consentimiento por proveedor, vista previa, exclusión de sensibles, redactor de secretos, marcado de contenido no fiable (§5.1)
 - [x] `ClaudeCli` (RF-IA1/3/5/6/7)
-- [x] `CodexCli` · `CopilotCli`: Copilot **verificado** (1.0.112); Codex implementado sobre flags documentados pero **no verificado**
+- [x] `CodexCli` · `CopilotCli`: Copilot **verificado** (1.0.112) y Codex **verificado** (0.169.0, 2026-11-17)
 - [x] Resolución de binarios en Windows y shims (RF-IA2); test de lista blanca de argumentos
 - [x] Entorno por lista blanca y variables prohibidas (RF-IA3)
 - [x] Detección de disponibilidad, versión y sesión ejecutando el CLI (RF-IA4)
 - [x] Cola de IA: 2 simultáneas, límite por minuto, cancelación al cerrar pestaña (RF-IA8)
 - [x] Modo Auto con reglas de RF-IA9
 - [ ] Perfiles Personal/Empresa (D16): modelo, reglas repo → perfil por remoto, consentimiento por perfil, aislamiento de sesión y perfil visible en la hoja de propuesta **hechos**; falta la **confirmación al cambiar el perfil de un repo** y el perfil visible en la pestaña, y la decisión D16
-- [x] Directorio de configuración aislado por perfil y proveedor (`ai-profiles/<perfil>/<proveedor>` con `CLAUDE_CONFIG_DIR` / `CODEX_HOME`; Empresa aísla por defecto, Personal usa la sesión normal y puede aislar) y botón «Iniciar sesión» (`ai_login`). **Verificado con Claude** (`CLAUDE_CONFIG_DIR` vacío → `loggedIn: false`); Codex según documentación; en **Copilot verificado que no se puede aislar** (`COPILOT_HOME` no mueve el token del llavero): comparte login y la UI lo avisa
+- [x] Directorio de configuración aislado por perfil y proveedor (`ai-profiles/<perfil>/<proveedor>` con `CLAUDE_CONFIG_DIR` / `CODEX_HOME`; Empresa aísla por defecto, Personal usa la sesión normal y puede aislar) y botón «Iniciar sesión» (`ai_login`). **Verificado con Claude** (`CLAUDE_CONFIG_DIR` vacío → `loggedIn: false`); Codex **verificado** (`CODEX_HOME` vacío → «Not logged in»); en **Copilot verificado que no se puede aislar** (`COPILOT_HOME` no mueve el token del llavero): comparte login y la UI lo avisa
 - [x] Consentimiento por perfil y proveedor; Claude desactivado por defecto en Empresa
-- [x] Mostrar cuenta activa por proveedor cuando el CLI la exponga (RF-IA12): `ai_accounts` con `claude auth status --json` (verificado); Copilot **no tiene** subcomando de cuenta y Codex no está verificado: «no disponible» sin ejecutar nada ni leer credenciales
+- [x] Mostrar cuenta activa por proveedor cuando el CLI la exponga (RF-IA12): `ai_accounts` con `claude auth status --json` (verificado); Copilot **no tiene** subcomando de cuenta y Codex solo expone el método (`Logged in using ChatGPT`), no el correo: «no disponible» sin leer credenciales
 - [x] Acciones: mensaje de commit, resumen, explicar commit, propuesta de conflicto y título/descripción de PR
 - [x] Rechazo de propuestas de conflicto que salen de los hunks
 - [x] **Resolver conflictos con IA**: `ai_resolve_conflict(tabId, path)` propone el archivo completo desde base/nuestra/suya con los mismos filtros y garantías, y valida que no queden marcadores; botón ✨ «Resolver con IA» (`Alt+R`) en el editor de conflictos con panel de revisión (justificación, diferencias y «Usar» sin escribir nada), «Regenerar» y «Descartar»
 - [x] Hoja de propuesta reutilizable (`ProposalSheet`): copiar, usar, regenerar, descartar; integrada en `CommitBar` («Ver propuesta») sin cambiar el flujo de relleno + «Deshacer»
 - [x] `ai_generate_pull_request` (backend, sin botón en el panel de PR todavía): título y descripción a partir de rama, commits y diff contra el ancestro común; solo propone; mismos filtros, redacción y consentimiento que el commit
 - [x] CLI falso en CI: entorno, argv, stdin, secreto de prueba · AITests
-- [ ] **Codex**: humo con el CLI real (instalarlo, `codex --version`, flags de `exec`, stdin con `-`, `codex login` y si `CODEX_HOME` aísla la sesión). Mientras no se haga, Codex se publica como experimental
+- [x] **Codex**: humo con el CLI real hecho el **2026-11-17** (`codex-cli 0.169.0`): flags de `exec`, prompt por stdin con `-`, JSONL, `codex login status` y **`CODEX_HOME` sí aísla** la sesión (directorio vacío → «Not logged in»). Codex ya no se publica como experimental
 - [ ] Humo manual con CLI reales en macOS y con cuentas de organización: [checklist-humo-ia.md](checklist-humo-ia.md) — hecho para Copilot en Windows (flags, stdin, herramientas); faltan macOS, la organización y el flujo OAuth del navegador de `copilot login` (`ai_login.verified` sigue en `false`)
 - [x] Publicar `0.1.0-alpha.2`
 
@@ -186,7 +186,7 @@ Lo que queda de verdad, en orden de riesgo:
 3. **NVDA y VoiceOver**: revisión manual de las pantallas principales (axe ya pasa en jsdom y falta en E2E); además `axe` contra la app real con `tauri-driver`.
 4. **Baselines de `darwin` y `win32`** y una pasada de E2E en macOS y Windows x64.
 5. **Decisión D16** (perfiles Personal/Empresa): confirmar el alcance de la confirmación al cambiar el perfil de un repo y el perfil en la pestaña.
-6. Codex: instalarlo y verificar flags, stdin, `codex login` y si `CODEX_HOME` aísla la sesión (si no, marcarlo como comparte login).
+6. ~~Codex~~: **hecho** el 2026-11-17 (`codex-cli 0.169.0`): flags, stdin con `-`, JSONL y `CODEX_HOME` sí aísla.
 7. Flujo OAuth del navegador de `copilot login` para poder poner `ai_login.verified = true` también en Copilot.
 
 ## Después de v0.1 (no entra en esta entrega)

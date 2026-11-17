@@ -79,14 +79,15 @@ pub struct Isolation {
 }
 
 /// Aislamiento disponible. Claude: **verificado** (`CLAUDE_CONFIG_DIR` cambia `configDirectory`
-/// y deja `loggedIn: false` en un directorio vacío, claude 2.1.319). Codex: `CODEX_HOME` según
-/// la documentación de OpenAI, **no verificado** (CLI no instalado). Copilot: **verificado que
-/// no se puede aislar el login** (`COPILOT_HOME` solo mueve configuración; el token está en el
-/// llavero del sistema).
+/// y deja `loggedIn: false` en un directorio vacío, claude 2.1.319). Codex: **verificado el
+/// 2026-11-17** con codex-cli 0.169.0 (`CODEX_HOME` vacío → `codex login status` dice
+/// «Not logged in» y la sesión normal sigue «Logged in using ChatGPT»). Copilot: **verificado
+/// que no se puede aislar el login** (`COPILOT_HOME` solo mueve configuración; el token está en
+/// el llavero del sistema).
 pub fn isolation(provider: ProviderId) -> Isolation {
     Isolation {
         var: config_dir_var(provider),
-        verified: provider == ProviderId::Claude,
+        verified: matches!(provider, ProviderId::Claude | ProviderId::Codex),
     }
 }
 
@@ -267,7 +268,8 @@ mod tests {
             }
         );
         assert_eq!(isolation(ProviderId::Codex).var, Some("CODEX_HOME"));
-        assert!(!isolation(ProviderId::Codex).verified);
+        // Verificado el 2026-11-17 con codex-cli 0.169.0 (CODEX_HOME vacío → «Not logged in»).
+        assert!(isolation(ProviderId::Codex).verified);
         assert_eq!(isolation(ProviderId::Copilot).var, None);
         // La candidata de Copilot no se aplica nunca: movería la configuración pero no la
         // sesión, y la interfaz daría por aislado un login que sigue siendo el mismo.
