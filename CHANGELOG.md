@@ -9,6 +9,9 @@ usa [versionado semántico](https://semver.org/lang/es/).
 
 Lo que hay encima de `v0.1.0-alpha.3`.
 
+### Añadido
+- **El diff se puede ver en dos columnas**: además de la vista de siempre (una columna), hay un selector **Una columna / Dos columnas** en la cabecera del diff y en el detalle de commits y stashes, con lo antiguo a la izquierda y lo nuevo a la derecha. Se recuerda entre sesiones (`ariadna.diffLayout.v1`). Las líneas iguales salen en las dos columnas y un bloque de borradas se empareja con el de añadidas. En las pull requests la vista partida no se ofrece: los comentarios se anclan a una línea concreta.
+
 ### Cambiado
 - **La barra superior ya no muestra la rama**: era información duplicada (el riel de la izquierda la muestra siempre, con su seguimiento y sus acciones) y con muchas pestañas de repos abiertas el chip se solapaba con el resto. La barra queda con las pestañas, el buscador de la paleta y los botones de tema, densidad y ajustes. El atajo para saltar al buscador del riel sigue funcionando.
 

@@ -49,6 +49,47 @@ export function flattenDiff(d: FileDiff): DiffRow[] {
   return rows;
 }
 
+/** Fila de la vista partida: un tramo igual a los dos lados o un par borrada/añadida. */
+export type SplitRow =
+  | { type: 'hunk'; hunkIndex: number; hunk: DiffHunk }
+  | { type: 'pair'; hunkIndex: number; left: DiffLine | null; right: DiffLine | null };
+
+const esBorrada = (l: DiffLine) => l.kind === 'deletion';
+const esAnnadida = (l: DiffLine) => l.kind === 'addition';
+
+/**
+ * Convierte los hunks en filas de dos columnas (antiguo a la izquierda, nuevo a la derecha).
+ *
+ * Las líneas iguales van en las dos columnas; un bloque de borradas seguido de uno de añadidas se
+ * empareja línea a línea, y si un lado tiene más líneas las sobrantes salen con el otro lado vacío.
+ * No cambia el contenido: es la misma información que la vista unificada, colocada en paralelo.
+ */
+export function splitDiff(d: FileDiff): SplitRow[] {
+  const rows: SplitRow[] = [];
+  d.hunks.forEach((hunk, hunkIndex) => {
+    rows.push({ type: 'hunk', hunkIndex, hunk });
+    let i = 0;
+    const lines = hunk.lines;
+    while (i < lines.length) {
+      const line = lines[i] as DiffLine;
+      if (esBorrada(line) || esAnnadida(line)) {
+        const borradas: DiffLine[] = [];
+        const annadidas: DiffLine[] = [];
+        while (i < lines.length && esBorrada(lines[i] as DiffLine)) borradas.push(lines[i++] as DiffLine);
+        while (i < lines.length && esAnnadida(lines[i] as DiffLine)) annadidas.push(lines[i++] as DiffLine);
+        const n = Math.max(borradas.length, annadidas.length);
+        for (let k = 0; k < n; k++) {
+          rows.push({ type: 'pair', hunkIndex, left: borradas[k] ?? null, right: annadidas[k] ?? null });
+        }
+        continue;
+      }
+      rows.push({ type: 'pair', hunkIndex, left: line, right: line });
+      i++;
+    }
+  });
+  return rows;
+}
+
 export function hunkHeader(h: DiffHunk): string {
   return `@@ -${h.oldStart},${h.oldCount} +${h.newStart},${h.newCount} @@`;
 }

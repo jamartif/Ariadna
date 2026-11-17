@@ -35,6 +35,9 @@ export function resetGlobals() {
   settings.theme = 'system';
   settings.density = 'comfortable';
   settings.language = 'es';
+  // La vista del diff y la de la lista de cambios también son estado de módulo.
+  settings.diffLayout = 'unified';
+  settings.changesView = 'list';
   // El idioma es estado de módulo: se devuelve a español para que un test no contamine al resto.
   setLocale('es');
   document.documentElement.lang = 'es';
