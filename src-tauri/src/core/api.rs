@@ -333,6 +333,11 @@ pub struct AiProviderState {
     /// `true` si el mecanismo de aislamiento se ha comprobado con el CLI real (Claude); `false`
     /// = según la documentación, no verificado (Codex).
     pub isolation_verified: bool,
+    /// Modelo elegido para este proveedor; `None` = el del CLI.
+    pub model: Option<String>,
+    /// Alias/modelos que se ofrecen en el desplegable. Ningún CLI publica una lista, así que
+    /// suele ser una lista corta: lo que no esté aquí se escribe a mano.
+    pub models: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -369,8 +374,43 @@ pub struct AiSettingsPatch {
     pub profile: Option<String>,
     pub provider_enabled: Option<ProviderEnabledPatch>,
     pub binary_path: Option<BinaryPathPatch>,
+    /// Modelo de un proveedor; `model: null` vuelve al del CLI.
+    pub model: Option<ModelPatch>,
     /// Aislar (o no) el login del perfil activo por proveedor.
     pub isolated: Option<bool>,
+}
+
+/// Modelo elegido para un proveedor (`None` = el que use el CLI por defecto).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ModelPatch {
+    pub id: String,
+    pub model: Option<String>,
+}
+
+/// Informe de cambios de un commit (propuesta de la IA, Markdown).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiCommitReport {
+    pub markdown: String,
+    pub sha: String,
+    pub subject: String,
+    /// Nombre del binario del proveedor que respondió (`claude`, `codex`, `copilot`).
+    pub provider: String,
+    pub command_summary: String,
+    pub files_changed: usize,
+    /// `true` si el diff se recortó al tope de contexto.
+    pub truncated: bool,
+    pub repo_revision: u64,
+}
+
+/// Informe guardado en el repositorio.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedReport {
+    /// Ruta absoluta del `.md` escrito.
+    pub path: String,
+    pub bytes: usize,
 }
 
 /// Opciones de `ai_generate_commit_message`.

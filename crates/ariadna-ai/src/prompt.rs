@@ -384,11 +384,30 @@ screenshots or links.
     /// Explicación de un commit.
     pub fn explain(sha: &str, subject: &str, patch: &str) -> PromptPreview {
         let task = "\
-Explain the Git commit in the untrusted data below in plain language for a developer \
-reading the history. Mention behavior changes and possible risks. Output only the explanation.";
+Write a CHANGE REPORT in Markdown for the Git commit described in the untrusted data below, \
+aimed at a developer who has to review or test it. Use exactly these four sections, in Spanish, \
+with these headings:
+
+## Qué cambia
+What the commit changes at a functional level (behaviour, data, UI, API), not a line-by-line \
+diff. Group by area if it touches several.
+
+## Riesgos y zonas sensibles
+What it touches that could break: shared code, configuration, migrations, permissions, \
+concurrency, error paths, public interfaces. Say explicitly when you cannot tell.
+
+## Posibles bugs
+Concrete defects that could follow from the change (edge cases, assumptions that may not hold). \
+Do not invent; if nothing looks risky, say so.
+
+## Qué probar
+A short checklist of checks that would validate it: commands, scenarios, and what result to expect.
+
+Rules: be concrete and brief, no filler, do not repeat the diff, do not mention that you are an \
+AI, and output only the Markdown report.";
         let mut d = Data::default();
         d.section("COMMIT", sha, false);
-        d.section("SUBJECT", subject, false);
+        d.section("SUBJECT DETAILS", subject, false);
         d.section("PATCH", patch, true);
         assemble(task, d)
     }
@@ -763,7 +782,20 @@ mod tests {
     #[test]
     fn explicar_y_resumir_pr() {
         let e = PromptBuilder::explain("abc123", "fix: algo", "diff --git a/x b/x\n+1\n");
-        assert!(e.text.contains("COMMIT:\nabc123") && e.text.contains("SUBJECT:\nfix: algo"));
+        assert!(
+            e.text.contains("COMMIT:\nabc123") && e.text.contains("SUBJECT DETAILS:\nfix: algo"),
+            "{}",
+            e.text
+        );
+        // El informe pide las cuatro secciones, en Markdown.
+        assert!(e.text.contains("## Qué cambia"), "{}", e.text);
+        assert!(
+            e.text.contains("## Riesgos y zonas sensibles"),
+            "{}",
+            e.text
+        );
+        assert!(e.text.contains("## Posibles bugs"), "{}", e.text);
+        assert!(e.text.contains("## Qué probar"), "{}", e.text);
         let s = PromptBuilder::summarize("d", SummaryStyle::PullRequest);
         assert!(s.text.contains("pull request description"));
     }

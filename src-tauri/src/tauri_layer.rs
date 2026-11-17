@@ -19,13 +19,13 @@ use tokio::sync::oneshot;
 use crate::core::menu::{app_menu, effect_of, Effect, Entry, Role};
 use crate::core::{
     default_data_dir, locate_git, validate_external_url, AiAccounts, AiAccountsRequest,
-    AiCommitOptions, AiCommitSuggestion, AiConflictSuggestion, AiContextPreview, AiLoginInfo,
-    AiLoginRequest, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState,
-    AmendDraft, ApiError, ApiSnapshot, AppConfig, AppCore, AppEvent, AppState, AuthOptions,
-    CliStatus, CloneAuthArg, CloneMethod, Closed, CommitResult, ConflictResolution, ContinueResult,
-    CredentialTest, DeviceLoginPoll, DeviceLoginStart, Done, EventSink, GitDetect, GitIdentity,
-    HunkArg, MergeStartResult, MergeState, OpenResult, Prompter, PushBranchResult, RebaseOutcome,
-    RemoteView, Settings, SettingsView, WebTarget,
+    AiCommitOptions, AiCommitReport, AiCommitSuggestion, AiConflictSuggestion, AiContextPreview,
+    AiLoginInfo, AiLoginRequest, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch,
+    AiState, AmendDraft, ApiError, ApiSnapshot, AppConfig, AppCore, AppEvent, AppState,
+    AuthOptions, CliStatus, CloneAuthArg, CloneMethod, Closed, CommitResult, ConflictResolution,
+    ContinueResult, CredentialTest, DeviceLoginPoll, DeviceLoginStart, Done, EventSink, GitDetect,
+    GitIdentity, HunkArg, MergeStartResult, MergeState, OpenResult, Prompter, PushBranchResult,
+    RebaseOutcome, RemoteView, SavedReport, Settings, SettingsView, WebTarget,
 };
 
 use crate::core::{CommentInput, PrAction, PrCheckout, PrDiff, PrSupport};
@@ -625,6 +625,27 @@ async fn ai_resolve_conflict(
     core.ai_resolve_conflict(&tab_id, path).await
 }
 
+/// Informe de cambios de un commit concreto (Markdown, solo propuesta).
+#[tauri::command]
+async fn ai_commit_report(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    sha: String,
+) -> Cmd<AiCommitReport> {
+    core.ai_commit_report(&tab_id, sha).await
+}
+
+/// Guarda el informe en el repositorio (solo cuando el usuario lo pide).
+#[tauri::command]
+fn save_commit_report(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    file_name: String,
+    markdown: String,
+) -> Cmd<SavedReport> {
+    core.save_commit_report(&tab_id, file_name, markdown)
+}
+
 // --- comandos de pestaña ------------------------------------------------------------------
 
 #[tauri::command]
@@ -1158,6 +1179,8 @@ pub fn run() {
             ai_accounts,
             ai_login,
             ai_generate_pull_request,
+            ai_commit_report,
+            save_commit_report,
             ai_resolve_conflict,
             get_snapshot,
             refresh,

@@ -16,9 +16,11 @@
     onclose: () => void;
     /** «Crear etiqueta…»: abre el formulario apuntando a este commit. */
     oncreatetag: (commit: Commit) => void;
+    /** «Generar informe de cambios…»: pide a la IA el informe en Markdown de este commit. */
+    onreport: (commit: Commit) => void;
   }
 
-  let { tab, commit, x, y, onclose, oncreatetag }: CommitMenuProps = $props();
+  let { tab, commit, x, y, onclose, oncreatetag, onreport }: CommitMenuProps = $props();
 
   interface Item {
     id: string;
@@ -38,6 +40,7 @@
   }
 
   const groups = $derived<Item[][]>([
+    [{ id: 'report', label: t('history.menu.report'), icon: 'sparkles', run: () => { onreport(commit); onclose(); } }],
     [{ id: 'tag', label: t('history.menu.createTag'), icon: 'tag', run: () => { oncreatetag(commit); onclose(); } }],
     [
       { id: 'sha', label: t('history.menu.copySha'), icon: 'clipboard', run: () => void copy(commit.sha, 'history.menu.copyShaDone') },

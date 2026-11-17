@@ -186,14 +186,22 @@ fn los_codigos_cubren_exactamente_el_contrato() {
         assert!(expected.remove(c), "{c}");
     }
     // Los de pull requests los produce `ariadna-hosting` (ver `pr_ops`).
-    for c in AI_CODES
-        .iter()
-        .chain(["POLICY", "RATE_LIMITED", "NOT_FOUND", "NETWORK", "CONFLICT"].iter())
-    {
+    for c in AI_CODES.iter().chain(
+        [
+            "POLICY",
+            "RATE_LIMITED",
+            "NOT_FOUND",
+            "NETWORK",
+            "CONFLICT",
+            // Validación del modelo elegido en Ajustes: la decide el núcleo, no git.
+            "INVALID_MODEL",
+        ]
+        .iter(),
+    ) {
         assert!(expected.remove(c), "{c}");
     }
     assert_eq!(mapped, expected);
-    assert_eq!(ALL_CODES.len(), 52);
+    assert_eq!(ALL_CODES.len(), 53);
 }
 
 #[test]

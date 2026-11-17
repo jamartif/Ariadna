@@ -330,6 +330,33 @@ describe('Ajustes: IA con perfiles aislados, cuenta e inicio de sesión (alpha.2
     expect(screen.getByRole('checkbox', { name: /Sesión propia para este perfil/ })).not.toBeChecked();
   });
 
+  it('el modelo se elige de la lista del CLI o se escribe a mano, y se guarda', async () => {
+    const { api } = await open();
+    const claude = claudeBox();
+    const sel = within(claude).getByLabelText('Modelo de Claude');
+    // Por defecto, el del CLI.
+    expect(sel).toHaveValue('');
+    await userEvent.selectOptions(sel, 'sonnet');
+    await waitFor(async () => {
+      const st = await api.aiState('tab-ariadna');
+      const p = st.providers.find((x) => x.id === 'claude')!;
+      expect(p.model).toBe('sonnet');
+    });
+
+    // Codex no publica alias: queda el campo de texto con validación básica.
+    const codex = screen.getByText('Codex').closest('.provwrap') as HTMLElement;
+    const input = within(codex).getByLabelText('Nombre del modelo');
+    await userEvent.type(input, 'o3{Enter}');
+    await waitFor(async () => {
+      const st = await api.aiState('tab-ariadna');
+      expect(st.providers.find((x) => x.id === 'codex')!.model).toBe('o3');
+    });
+
+    await userEvent.clear(input);
+    await userEvent.type(input, 'dos palabras{Enter}');
+    expect(within(codex).getByRole('alert')).toHaveTextContent('Nombre no válido');
+  });
+
   it('Empresa aísla la sesión de cada CLI que lo permite y avisa de Copilot, que comparte login', async () => {
     const { api } = await open();
     await userEvent.click(screen.getByLabelText('Empresa', { selector: 'input[type=radio]' }));

@@ -1,6 +1,7 @@
 import type {
   AiAccounts,
   AiAccountsRequest,
+  AiCommitReport,
   AiCommitSuggestion,
   AiConflictSuggestion,
   AiGenerateOptions,
@@ -10,6 +11,7 @@ import type {
   AiPullRequestSuggestion,
   AiSettingsPatch,
   AiState,
+  SavedReport,
   AmendDraft,
   ApiEvents,
   AppSettings,
@@ -217,6 +219,13 @@ export interface Api extends PullRequestApi, TagApi {
    * partir de las tres versiones. Solo propone: no escribe el archivo ni lo marca como resuelto.
    */
   aiResolveConflict(tabId: string, path: GitPath): Promise<AiConflictSuggestion>;
+  /**
+   * Informe de cambios en Markdown de un commit concreto: qué cambia a nivel funcional,
+   * riesgos, posibles bugs y qué probar. Solo propone: no escribe ningún archivo.
+   */
+  aiCommitReport(tabId: string, sha: string): Promise<AiCommitReport>;
+  /** Guarda el informe en `<repo>/informes-cambios/<file_name>` tras confirmarlo el usuario. */
+  saveCommitReport(tabId: string, fileName: string, markdown: string): Promise<SavedReport>;
 
   // Eventos Rust → UI
   listen<K extends keyof ApiEvents>(event: K, handler: (payload: ApiEvents[K]) => void): Promise<Unlisten>;

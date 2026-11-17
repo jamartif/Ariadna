@@ -404,6 +404,13 @@ pub struct AiSettings {
     pub claude_binary: Option<PathBuf>,
     pub codex_binary: Option<PathBuf>,
     pub copilot_binary: Option<PathBuf>,
+    /// Modelo elegido por proveedor; `None` = el que use el CLI por defecto.
+    ///
+    /// Ninguno de los tres CLI publica una lista de modelos, así que el valor se elige de una
+    /// lista corta de alias conocidos o se escribe a mano (se valida con [`is_valid_model_name`]).
+    pub claude_model: Option<String>,
+    pub codex_model: Option<String>,
+    pub copilot_model: Option<String>,
 }
 
 impl Default for AiSettings {
@@ -415,8 +422,37 @@ impl Default for AiSettings {
             claude_binary: None,
             codex_binary: None,
             copilot_binary: None,
+            claude_model: None,
+            codex_model: None,
+            copilot_model: None,
         }
     }
+}
+
+/// Modelos que se ofrecen en el desplegable de cada proveedor.
+///
+/// **Ninguno de los tres CLI publica una lista de modelos** (comprobado en `claude --help`,
+/// `codex --help` y `copilot --help`: solo aceptan `--model`/`-m` con un nombre). Por eso la
+/// lista es corta y consiste en alias documentados por el propio CLI; el usuario puede
+/// escribir cualquier otro nombre a mano.
+pub fn suggested_models(provider: ProviderId) -> &'static [&'static str] {
+    match provider {
+        // `claude --help`: «Use an alias for the latest model (e.g. 'fable', 'opus', 'sonnet')».
+        ProviderId::Claude => &["sonnet", "opus", "haiku", "fable"],
+        // `copilot --help`: `--model <model>` admite `auto`.
+        ProviderId::Copilot => &["auto"],
+        // `codex --help`: `-m, --model <MODEL>`, sin alias publicados.
+        ProviderId::Codex => &[],
+    }
+}
+
+/// Validación básica del nombre de un modelo: 1–64 caracteres, sin espacios ni controles.
+pub fn is_valid_model_name(name: &str) -> bool {
+    let n = name.trim();
+    !n.is_empty()
+        && n.len() <= 64
+        && n.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':' | '/'))
 }
 
 impl AiSettings {
@@ -427,6 +463,25 @@ impl AiSettings {
             ProviderId::Codex => self.codex_binary.as_deref(),
             ProviderId::Copilot => self.copilot_binary.as_deref(),
         }
+    }
+
+    /// Modelo configurado para un proveedor (`None` = el del CLI).
+    pub fn model_for(&self, p: ProviderId) -> Option<&str> {
+        match p {
+            ProviderId::Claude => self.claude_model.as_deref(),
+            ProviderId::Codex => self.codex_model.as_deref(),
+            ProviderId::Copilot => self.copilot_model.as_deref(),
+        }
+    }
+
+    /// Guarda (o borra, con `None`) el modelo de un proveedor.
+    pub fn set_model(&mut self, p: ProviderId, model: Option<String>) {
+        let slot = match p {
+            ProviderId::Claude => &mut self.claude_model,
+            ProviderId::Codex => &mut self.codex_model,
+            ProviderId::Copilot => &mut self.copilot_model,
+        };
+        *slot = model.filter(|m| !m.trim().is_empty());
     }
 
     /// Carga los ajustes; si el fichero no existe devuelve los valores por defecto.
@@ -452,6 +507,38 @@ impl AiSettings {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn el_modelo_se_valida_y_se_guarda_por_proveedor() {
+        assert!(is_valid_model_name("sonnet"));
+        assert!(is_valid_model_name("gpt-5-codex"));
+        assert!(is_valid_model_name("claude-sonnet-4:2025/01"));
+        assert!(!is_valid_model_name(""));
+        assert!(!is_valid_model_name("sonnet 4"));
+        assert!(!is_valid_model_name(&"x".repeat(65)));
+        assert!(!is_valid_model_name("sonnet;rm"));
+
+        let mut s = AiSettings::default();
+        assert!(s.model_for(ProviderId::Claude).is_none());
+        s.set_model(ProviderId::Claude, Some(" sonnet ".into()));
+        assert_eq!(s.model_for(ProviderId::Claude), Some(" sonnet "));
+        s.set_model(ProviderId::Claude, Some("   ".into()));
+        assert!(
+            s.model_for(ProviderId::Claude).is_none(),
+            "solo espacios = sin modelo"
+        );
+        s.set_model(ProviderId::Codex, Some("o3".into()));
+        assert_eq!(s.model_for(ProviderId::Codex), Some("o3"));
+        assert!(s.model_for(ProviderId::Claude).is_none());
+    }
+
+    #[test]
+    fn la_lista_de_modelos_es_la_que_publica_cada_cli() {
+        assert!(suggested_models(ProviderId::Claude).contains(&"sonnet"));
+        assert!(suggested_models(ProviderId::Copilot).contains(&"auto"));
+        // Codex no publica alias: queda el campo de texto.
+        assert!(suggested_models(ProviderId::Codex).is_empty());
+    }
 
     fn sample() -> AiSuggestion {
         AiSuggestion {

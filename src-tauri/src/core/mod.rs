@@ -26,12 +26,13 @@ mod tests;
 
 pub use ai::{AiSettingsLoad, AiStore, StoredAi};
 pub use api::{
-    AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitSuggestion, AiConflictSuggestion,
-    AiContextPreview, AiExcludeReason, AiExcludedFile, AiLoginInfo, AiLoginRequest, AiPreviewFile,
-    AiProfileInfo, AiProviderState, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch,
-    AiState, AmendDraft, ApiSessionEvent, ApiSessionEventKind, ApiSnapshot, AppEvent, AppState,
-    CloneProgressEvent, Closed, CommitResult, CredentialTest, Done, EventSink, GitInfo, HunkArg,
-    NoticeEvent, OpenResult, SnapshotEvent, TabInfo,
+    AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitReport, AiCommitSuggestion,
+    AiConflictSuggestion, AiContextPreview, AiExcludeReason, AiExcludedFile, AiLoginInfo,
+    AiLoginRequest, AiPreviewFile, AiProfileInfo, AiProviderState, AiPullRequestOptions,
+    AiPullRequestSuggestion, AiSettingsPatch, AiState, AmendDraft, ApiSessionEvent,
+    ApiSessionEventKind, ApiSnapshot, AppEvent, AppState, CloneProgressEvent, Closed, CommitResult,
+    CredentialTest, Done, EventSink, GitInfo, HunkArg, ModelPatch, NoticeEvent, OpenResult,
+    SavedReport, SnapshotEvent, TabInfo,
 };
 pub use app::{default_data_dir, locate_git, AppConfig, AppCore, CLOSE_GRACE, SOFT_TAB_LIMIT};
 pub use auth_ops::{
