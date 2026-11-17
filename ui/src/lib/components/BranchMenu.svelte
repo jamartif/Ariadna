@@ -36,8 +36,10 @@
     onrename: (name: string) => void;
     /** Abre el detalle de la rama en el panel derecho. */
     oninspect: (name: string) => void;
+    /** «Crear etiqueta…»: abre el formulario con el commit de esta rama. */
+    oncreatetag: (name: string, oid: string) => void;
   }
-  let { tab, branch, remote, x, y, onclose, oncreatefrom, onrename, oninspect }: Props = $props();
+  let { tab, branch, remote, x, y, onclose, oncreatefrom, onrename, oninspect, oncreatetag }: Props = $props();
 
   interface Item {
     id: string;
@@ -172,6 +174,13 @@
       }
     ],
     [
+      {
+        id: 'tag',
+        label: t('rail.menu.createTag'),
+        icon: 'tag',
+        blocked: busyReason,
+        run: () => oncreatetag(branch.name, branch.oid)
+      },
       { id: 'copy-name', label: t('rail.menu.copyName'), icon: 'copy', run: () => copy(branch.name, 'rail.menu.copiedName', { name: branch.name }) },
       { id: 'copy-sha', label: t('rail.menu.copySha'), icon: 'clipboard', run: () => copy(branch.oid, 'rail.menu.copiedSha', { sha: branch.oid.slice(0, 7) }) },
       {

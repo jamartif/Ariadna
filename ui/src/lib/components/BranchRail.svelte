@@ -8,6 +8,7 @@
   import { branchNameProblem } from '$lib/util/branchName';
   import { formatCombo, isMac, registerHandlers, SHORTCUTS } from '$lib/shortcuts/registry';
   import BranchMenu from './BranchMenu.svelte';
+  import TagDialog from './TagDialog.svelte';
   import Icon from './Icon.svelte';
 
   /**
@@ -214,6 +215,9 @@
   }
 
   /** «Renombrar…»: abre el formulario del inspector con esa rama seleccionada. */
+  /** Rama cuyo commit se va a etiquetar desde el menú contextual (`null` = ventana cerrada). */
+  let tagFor = $state<{ name: string; oid: string } | null>(null);
+
   async function renameFrom(name: string): Promise<void> {
     b.select(name);
     await tick();
@@ -714,9 +718,14 @@
       y={menu.y}
       onclose={closeMenu}
       oncreatefrom={(sp) => void createFrom(sp)}
+      oncreatetag={(name, oid) => (tagFor = { name, oid })}
       onrename={(n) => void renameFrom(n)}
       {oninspect}
     />
+  {/if}
+
+  {#if tagFor}
+    <TagDialog {tab} target={tagFor.oid} onclose={() => (tagFor = null)} />
   {/if}
 {/if}
 

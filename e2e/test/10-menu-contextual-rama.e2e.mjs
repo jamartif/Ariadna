@@ -152,4 +152,20 @@ describe('Flujo 10 · menú contextual de una rama', () => {
       timeoutMsg: 'el diff no se cerró'
     });
   });
+
+  it('«Crear etiqueta…» abre la ventana de etiqueta en el commit de esa rama', async () => {
+    await showView('changes');
+    const { other } = await twoLocalBranches();
+    assert.ok(other, 'hace falta otra rama local');
+    await openBranchMenuByRightClick(other);
+    const item = await branchMenuItem('tag');
+    assert.equal(item.disabled, false, '«Crear etiqueta…» debería estar disponible');
+    await clickTestId('branch-menu-tag');
+    await waitTestId('tag-dialog', { timeout: 10_000 });
+    // El formulario dice en qué commit se creará: los 7 primeros del SHA de la rama.
+    const texto = await getBrowser().execute(() => document.querySelector('[data-testid="tag-dialog"]')?.textContent ?? '');
+    assert.match(texto, /[0-9a-f]{7}/, `debería citar el SHA corto: ${texto.slice(0, 120)}`);
+    await getBrowser().keys(['Escape']);
+    assert.equal(await hasTestId('tag-dialog'), false, 'Escape debería cerrar la ventana');
+  });
 });

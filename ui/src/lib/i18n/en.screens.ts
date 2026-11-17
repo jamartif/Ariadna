@@ -85,6 +85,13 @@ export const enScreens: Record<keyof typeof esScreens, string> = {
   'clone.checkFailed': 'No access with this method.',
 
   // History
+  'history.menu.label': 'Commit actions',
+  'history.menu.createTag': 'Create tag…',
+  'history.menu.copyFailed': 'Could not copy to the clipboard',
+  'history.menu.copySha': 'Copy the SHA',
+  'history.menu.copyShaDone': 'Commit SHA copied',
+  'history.menu.copySubject': 'Copy the subject',
+  'history.menu.copySubjectDone': 'Commit subject copied',
   'history.region': 'Commit history',
   'history.search': 'Search the history',
   'history.searchPlaceholder': 'Search by message, author or hash',
@@ -235,6 +242,7 @@ export const enScreens: Record<keyof typeof esScreens, string> = {
   'rail.menu.delete': 'Delete the branch',
   'rail.menu.deleteRemote': 'Delete on “{remote}”',
   'rail.menu.deleteRemoteGeneric': 'Delete on the remote',
+  'rail.menu.createTag': 'Create tag…',
   'rail.menu.copyName': 'Copy the name',
   'rail.menu.copySha': 'Copy the SHA',
   'rail.menu.diffAgainst': 'Show the diff against “{base}”',

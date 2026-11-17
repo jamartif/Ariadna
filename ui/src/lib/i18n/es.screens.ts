@@ -86,6 +86,13 @@ export const esScreens = {
   'clone.checkFailed': 'Sin acceso con este método.',
 
   // Historial
+  'history.menu.label': 'Acciones del commit',
+  'history.menu.createTag': 'Crear etiqueta…',
+  'history.menu.copyFailed': 'No se pudo copiar al portapapeles',
+  'history.menu.copySha': 'Copiar el SHA',
+  'history.menu.copyShaDone': 'SHA del commit copiado',
+  'history.menu.copySubject': 'Copiar el asunto',
+  'history.menu.copySubjectDone': 'Asunto del commit copiado',
   'history.region': 'Historial de commits',
   'history.search': 'Buscar en el historial',
   'history.searchPlaceholder': 'Buscar por mensaje, autor o hash',
@@ -236,6 +243,7 @@ export const esScreens = {
   'rail.menu.delete': 'Borrar la rama',
   'rail.menu.deleteRemote': 'Borrar en el remoto «{remote}»',
   'rail.menu.deleteRemoteGeneric': 'Borrar en el remoto',
+  'rail.menu.createTag': 'Crear etiqueta…',
   'rail.menu.copyName': 'Copiar el nombre',
   'rail.menu.copySha': 'Copiar el SHA',
   'rail.menu.diffAgainst': 'Ver el diff contra «{base}»',
