@@ -177,7 +177,7 @@ pub fn login_args(provider: ProviderId) -> Vec<&'static str> {
 ///
 /// Copilot: `copilot login` existe y su ruta `--with-token` se ejecutó (1.0.112), pero el
 /// flujo OAuth del navegador no se ha recorrido a mano, así que sigue en `false` y la UI
-/// avisa. Queda anotado en `specs/rust/checklist-humo-ia.md`.
+/// avisa. Queda anotado en `docs/checklist-humo-ia.md`.
 pub fn login_verified(provider: ProviderId) -> bool {
     provider == ProviderId::Claude
 }

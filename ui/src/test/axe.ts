@@ -6,7 +6,7 @@ import { expect } from 'vitest';
  *
  * - Falla con violaciones de impacto `serious` o `critical`.
  * - `color-contrast` está desactivada: jsdom no calcula estilos de layout ni de color reales, así que
- *   el contraste (AA) se revisa en navegador (specs/rust/qa-alpha2.md) y en `styles/tokens.test.ts`.
+ *   el contraste (AA) se revisa en navegador (`docs/contraste.md`) y en `styles/tokens.test.ts`.
  * - `region`/`landmark-*` se desactivan al auditar componentes sueltos: la página completa aporta
  *   los landmarks (se comprueban en el test de la aplicación entera).
  */

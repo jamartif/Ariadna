@@ -146,10 +146,9 @@ instale la versión firmada y notarizada. No hay atajo que lo evite, y conviene 
 
 ## 3. Qué cambia cuando haya firma
 
-La decisión de producto está en
-[`specs/rust/spec.md` §10, D17](../specs/rust/spec.md): las alfas salen sin firmar; para la
-0.1.0 se solicita **SignPath Foundation** (gratis para proyectos de código abierto; el repo
-es público y tiene licencia MIT).
+Las alfas salen sin firmar; para la 0.1.0 se solicita **SignPath Foundation** (gratis para
+proyectos de código abierto; el repo es público y tiene licencia MIT). El detalle de la
+política y de lo que falta está en [`firma-de-codigo.md`](firma-de-codigo.md).
 
 | Plataforma | Firma prevista | Efecto |
 |---|---|---|

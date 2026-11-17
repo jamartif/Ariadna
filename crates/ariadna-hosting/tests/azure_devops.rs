@@ -1,5 +1,5 @@
 //! Azure DevOps contra un servidor simulado (`wiremock`) con JSON de ejemplo reconstruido de la
-//! documentación de la API REST 7.1. **NO VERIFICADO con servidor real** (`specs/rust/spike-pr.md`).
+//! documentación de la API REST 7.1. **NO VERIFICADO con servidor real** (`docs/pull-requests.md`).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod common;

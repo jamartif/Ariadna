@@ -1,5 +1,5 @@
 /**
- * Tipos de pull request del contrato IPC (`specs/rust/ipc.md`, «Pull requests»). Son los de
+ * Tipos de pull request del contrato IPC (`docs/ipc.md`, «Pull requests»). Son los de
  * `crates/ariadna-hosting` serializados en camelCase; los fixtures reales de Rust
  * (`fixtures-pr/`) se comprueban contra ellos en `pr.contract.test.ts`.
  *

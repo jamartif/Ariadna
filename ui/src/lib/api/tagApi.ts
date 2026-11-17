@@ -19,7 +19,7 @@ export interface Tag {
 }
 
 /**
- * Comandos de etiquetas (`specs/rust/ipc.md`, «Etiquetas»). Errores tipados: `INVALID_TAG_NAME`
+ * Comandos de etiquetas (`docs/ipc.md`, «Etiquetas»). Errores tipados: `INVALID_TAG_NAME`
  * (nombre no válido, motivo en `message`), `TAG_EXISTS`, `TAG_NOT_FOUND`, `INVALID_REFERENCE`
  * (commit inexistente o remoto no válido), `AUTH` / `COMMAND_FAILED` al publicar.
  * Borrar (local o en el remoto) abre una confirmación nativa en Rust: `{ done: false }` si se cancela.

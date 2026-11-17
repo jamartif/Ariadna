@@ -11,7 +11,7 @@ export const MAX_CURSOR = 1000;
  * incremental (se actualiza con cada página en vez de recorrer todo).
  *
  * En un historial lineal es solo el padre del último commit. Con merges son varios: no basta
- * con el último hash porque se perderían las ramas aún pendientes (ver `specs/rust/rendimiento.md`).
+ * con el último hash porque se perderían las ramas aún pendientes (ver `docs/rendimiento.md`).
  */
 export class Frontier {
   private loaded = new Set<string>();

@@ -14,7 +14,7 @@ import type {
 } from './prTypes';
 
 /**
- * Comandos de pull request (`specs/rust/ipc.md`, «Pull requests»). Todos rechazan con `ApiError`
+ * Comandos de pull request (`docs/ipc.md`, «Pull requests»). Todos rechazan con `ApiError`
  * (`AUTH` con el permiso que falta en `detail`, `NOT_FOUND`, `POLICY`, `CONFLICT`,
  * `RATE_LIMITED`, `NETWORK`…). El token NO pasa por la UI: Rust lo obtiene con
  * `git credential fill` en cada llamada y lo borra.

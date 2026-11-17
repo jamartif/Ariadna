@@ -1,7 +1,7 @@
 //! Azure DevOps (`dev.azure.com`, `{org}.visualstudio.com` y SSH → HTTPS).
 //!
 //! **NO VERIFICADO con servidor real**: los endpoints, cuerpos y formas de respuesta salen de la
-//! documentación de Azure DevOps Services REST 7.1 (`specs/rust/spike-pr.md`). Las pruebas
+//! documentación de Azure DevOps Services REST 7.1 (`docs/pull-requests.md`). Las pruebas
 //! usan un servidor simulado con JSON de ejemplo reconstruido de esa documentación.
 
 use std::sync::Arc;

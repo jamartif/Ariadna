@@ -32,7 +32,7 @@ use crate::serving::Confirmation;
 
 /// A partir de este número de rutas, `stage`/`unstage` dejan de usar pathspecs: la
 /// coincidencia de pathspecs de git es cuadrática (≈ 35 s con 50 000 rutas) y las órdenes
-/// de índice (`update-index`) son lineales. Ver `specs/rust/rendimiento.md`.
+/// de índice (`update-index`) son lineales. Ver `docs/rendimiento.md`.
 const BULK_PATHS: usize = 2_000;
 
 /// Máximo de commits que devuelven `log` y `search_log`.

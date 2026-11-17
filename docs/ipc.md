@@ -226,7 +226,7 @@ Tras cualquier mutación con éxito, Rust ya ha programado un refresco: la UI no
 
 ### Pull requests (M8)
 
-Spec §4.4, D21/D22. Crate `ariadna-hosting` (`trait PullRequestProvider` con Azure DevOps y GitHub); el núcleo (`core/pr_ops.rs`) solo elige el remoto y confirma. **Estado: probado contra un servidor simulado; los endpoints reales NO están verificados** (`specs/rust/spike-pr.md`, con el checklist para el spike con PAT reales).
+Pull requests (Azure DevOps y GitHub). Crate `ariadna-hosting` (`trait PullRequestProvider` con Azure DevOps y GitHub); el núcleo (`core/pr_ops.rs`) solo elige el remoto y confirma. **Estado: probado contra un servidor simulado; los endpoints reales NO están verificados** (`docs/pull-requests.md`, con el checklist para el spike con PAT reales).
 
 - **Proveedor y remoto**: lo decide Rust, nunca la UI. Se usa `origin` si su proveedor admite PR (Azure DevOps o GitHub, incluidos GitHub Enterprise por host, `{org}.visualstudio.com` y SSH → HTTPS); si no, el primer remoto que las admita. GitLab, Bitbucket y `other`: `POLICY` («se abren en el navegador») y `pull_request_support.supported = false`.
 - **Sin secretos en el IPC**: ningún comando recibe, devuelve ni guarda un token. En **cada** llamada Rust obtiene la credencial con `git credential fill` (stdin/stdout, `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`, entorno saneado), la usa en memoria (`zeroize`) y la suelta. Nunca aparece en `argv`, URL, registro, `Debug` ni mensaje de error (los textos del servidor se redactan). Si el helper no tiene token: `AUTH` y la UI abre el formulario de credenciales de «Clonar y PAT».

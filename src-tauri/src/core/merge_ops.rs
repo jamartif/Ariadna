@@ -1,4 +1,4 @@
-//! Merge (o cherry-pick/rebase) en curso y resolución de conflictos (`specs/rust/ipc.md`).
+//! Merge (o cherry-pick/rebase) en curso y resolución de conflictos (`docs/ipc.md`).
 //!
 //! El estado de la integración sigue siendo el de git (MERGE_HEAD, índice con etapas 1/2/3);
 //! aquí solo se resume para la UI y se aplican resoluciones **tras confirmación nativa**:

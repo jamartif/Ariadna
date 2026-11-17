@@ -1,4 +1,4 @@
-//! Tipos que cruzan el IPC y no existen en `ariadna-git` (spec `specs/rust/ipc.md`).
+//! Tipos que cruzan el IPC y no existen en `ariadna-git` (spec `docs/ipc.md`).
 //! Todo en camelCase. Los modelos de dominio se reenvían tal cual.
 
 use std::sync::Arc;
@@ -292,7 +292,7 @@ pub trait EventSink: Send + Sync {
     fn emit(&self, event: AppEvent);
 }
 
-// --- IA (specs/rust/ipc.md «Comandos de IA») ----------------------------------------------
+// --- IA (docs/ipc.md «Comandos de IA») ----------------------------------------------
 
 /// Perfil activo de IA.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

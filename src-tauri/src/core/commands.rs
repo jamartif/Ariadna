@@ -1,4 +1,4 @@
-//! Comandos de pestaña (todos con `tabId`) del contrato `specs/rust/ipc.md`. Los destructivos
+//! Comandos de pestaña (todos con `tabId`) del contrato `docs/ipc.md`. Los destructivos
 //! preguntan por el [`Prompter`](super::prompter::Prompter) y solo después construyen la
 //! `Confirmation` de `ariadna-git`.
 

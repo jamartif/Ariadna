@@ -71,7 +71,7 @@ Detalles que conviene saber:
 
 ## Contrato y pruebas
 
-- Contrato IPC: [`specs/rust/ipc.md`](../specs/rust/ipc.md) «Menú contextual del riel de ramas».
+- Contrato IPC: [`docs/ipc.md`](ipc.md) «Menú contextual del riel de ramas».
 - Componente: `ui/src/lib/components/BranchMenu.svelte` (lo abre `BranchRail.svelte`).
 - Pruebas: `ui/src/lib/components/BranchMenu.test.ts` (ratón y teclado, foco, acciones
   deshabilitadas, reposicionamiento, segundo paso, portapapeles, enlaces y axe),
@@ -80,4 +80,4 @@ Detalles que conviene saber:
 - E2E: `e2e/test/10-menu-contextual-rama.e2e.mjs` sobre la app empaquetada (clic derecho,
   `Mayús+F10`, `Esc` con el foco de vuelta, acciones deshabilitadas, «Copiar el nombre» y el
   diff en el panel derecho).
-- Capturas de la revisión visual: [`specs/rust/contextmenu/`](../specs/rust/contextmenu/README.md).
+- Capturas de la revisión visual: [`docs/capturas/menu-ramas/`](capturas/menu-ramas/README.md).
