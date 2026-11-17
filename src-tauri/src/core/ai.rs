@@ -1,4 +1,4 @@
-//! IA en el núcleo (spec §5, `specs/rust/ipc.md` «Comandos de IA»): ajustes persistidos,
+//! IA en el núcleo (spec §5, `docs/ipc.md` «Comandos de IA»): ajustes persistidos,
 //! contexto a partir del diff PREPARADO, consentimiento por perfil y proveedor, selección
 //! de proveedor y una sola generación por pestaña, cancelable de verdad.
 //!

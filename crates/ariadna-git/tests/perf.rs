@@ -7,7 +7,7 @@
 //! ```
 //!
 //! Cada prueba imprime líneas `PERF <nombre> <valor> <unidad>` que se copian a
-//! `specs/rust/rendimiento.md`. Los umbrales de NF-3 se afirman con `assert!`.
+//! `docs/rendimiento.md`. Los umbrales de NF-3 se afirman con `assert!`.
 //! `ARIADNA_PERF_FILES` (por defecto 50 000) y `ARIADNA_PERF_COMMITS` (10 000) cambian el
 //! tamaño de los repos sintéticos; `ARIADNA_PERF_COMMIT_GRAPH=1` escribe el commit-graph.
 #![allow(clippy::unwrap_used)]

@@ -1,6 +1,6 @@
 # Ariadna · interfaz (Svelte 5 + TypeScript + Vite)
 
-La interfaz es una **vista**: el estado vive en Rust (`specs/rust/ipc.md`). Esta carpeta no toca `src-tauri/` ni `crates/`.
+La interfaz es una **vista**: el estado vive en Rust (`docs/ipc.md`). Esta carpeta no toca `src-tauri/` ni `crates/`.
 
 ## Comandos
 

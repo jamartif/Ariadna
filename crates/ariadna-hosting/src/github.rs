@@ -1,7 +1,7 @@
 //! GitHub (`github.com`, GitHub Enterprise Server por host y `*.ghe.com`).
 //!
 //! Verificado contra GitHub real el 2026-11-11 (`tests/github_real.rs`, ignorado; resultados en
-//! `specs/rust/spike-pr.md`). Las pruebas normales usan un servidor simulado.
+//! `docs/pull-requests.md`). Las pruebas normales usan un servidor simulado.
 //!
 //! La API REST no puede listar ni resolver los hilos de revisión, así que los hilos en línea
 //! van por GraphQL (`reviewThreads`, `resolveReviewThread`) y los comentarios generales por

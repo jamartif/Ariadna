@@ -48,7 +48,7 @@ pub enum HostingError {
 }
 
 impl HostingError {
-    /// Código estable del contrato IPC (`specs/rust/ipc.md`).
+    /// Código estable del contrato IPC (`docs/ipc.md`).
     pub fn code(&self) -> &'static str {
         match self {
             HostingError::Auth { .. } => "AUTH",

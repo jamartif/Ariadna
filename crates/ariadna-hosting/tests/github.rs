@@ -1,6 +1,6 @@
 //! GitHub contra un servidor simulado (`wiremock`) con JSON de ejemplo reconstruido de la
 //! documentación de la API REST/GraphQL. **NO VERIFICADO con servidor real**
-//! (`specs/rust/spike-pr.md`).
+//! (`docs/pull-requests.md`).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod common;

@@ -1,6 +1,6 @@
 /**
  * Tipos de la interfaz, espejo de `crates/ariadna-git/src/models.rs` y `session.rs`
- * serializados con serde en camelCase (contrato: specs/rust/ipc.md).
+ * serializados con serde en camelCase (contrato: docs/ipc.md).
  *
  * Reglas de serde que se respetan aquí:
  *  - `ChangeStatus` viaja como la letra de porcelain (`"M"`, `"."`, `"?"`…).
@@ -251,7 +251,7 @@ export interface Snapshot {
   conflicts: ConflictFile[];
 }
 
-// ---- Tipos del IPC (specs/rust/ipc.md) ------------------------------------
+// ---- Tipos del IPC (docs/ipc.md) ------------------------------------
 
 export interface TabInfo {
   tabId: string;

@@ -5,9 +5,9 @@ izquierda**, el centro se queda con las vistas de trabajo y el panel derecho man
 detalle/diff con cabecera fija. Sustituye la maqueta de «barra de título con pestañas +
 columna de ramas + pestañas del centro + diff».
 
-Capturas en `specs/rust/diseno-v2/`: `antes-*` (maqueta anterior) y `v2-*` (esta), incluidos
-`v2-1440-riel-inspector`, `v2-1440-historial`, `v2-1440-riel-contraido`, `v2-1440-paleta-ramas` y
-`v2-1440-forced-colors`.
+Las capturas actuales de la interfaz son las de la **regresión visual**
+(`e2e/baselines/linux/`: 8 pantallas × 2 temas, regeneradas en CI), y las del menú contextual
+están en [`capturas/menu-ramas/`](capturas/menu-ramas/README.md).
 
 ## Diagnóstico de la maqueta anterior
 

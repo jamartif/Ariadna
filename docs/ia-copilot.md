@@ -80,7 +80,7 @@ termina solo: es la única forma verificada.
 | Ajustes por repositorio (`copilot-instructions.md`, plugins, MCP propios) | No aplican: el catálogo de herramientas está vacío y la carpeta de trabajo es la vacía de Ariadna |
 
 Checklist completa, con el resto de proveedores:
-[`specs/rust/checklist-humo-ia.md`](../specs/rust/checklist-humo-ia.md) (§0 y §2.1 son las
+[`docs/checklist-humo-ia.md`](checklist-humo-ia.md) (§0 y §2.1 son las
 mediciones de Copilot).
 
 ## Cómo volver a verificar tras actualizar el CLI

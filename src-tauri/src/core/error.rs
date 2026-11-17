@@ -1,4 +1,4 @@
-//! `GitError` → `ApiError` (contrato `specs/rust/ipc.md`). Los códigos son estables y la UI
+//! `GitError` → `ApiError` (contrato `docs/ipc.md`). Los códigos son estables y la UI
 //! nunca interpreta `message`.
 
 use ariadna_ai::AiError;

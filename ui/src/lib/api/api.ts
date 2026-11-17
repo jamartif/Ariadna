@@ -58,7 +58,7 @@ export type Unlisten = () => void;
 
 /**
  * Interfaz única entre la UI y el backend. La implementan `tauriApi` (invoke/listen)
- * y `mockApi` (en memoria). Un método por comando de `specs/rust/ipc.md`.
+ * y `mockApi` (en memoria). Un método por comando de `docs/ipc.md`.
  * Todos rechazan con `ApiError`.
  */
 export interface Api extends PullRequestApi, TagApi {

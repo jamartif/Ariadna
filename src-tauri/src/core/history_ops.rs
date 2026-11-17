@@ -1,4 +1,4 @@
-//! Historial paginado y ramas con confirmación (`specs/rust/ipc.md`).
+//! Historial paginado y ramas con confirmación (`docs/ipc.md`).
 
 use ariadna_git::{Commit, IntegrationState, MergeFastForward, MergeResult};
 

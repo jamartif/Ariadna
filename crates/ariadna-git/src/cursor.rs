@@ -1,7 +1,7 @@
 //! Cursor de paginación del historial.
 //!
 //! `git log --skip=N` recorre los N commits saltados: el coste de una página crece con la
-//! profundidad (481 ms en la última página de 100 000 commits, `specs/rust/rendimiento.md`).
+//! profundidad (481 ms en la última página de 100 000 commits, `docs/rendimiento.md`).
 //! El cursor lo evita: la página siguiente se pide como `git log <frontera>`, que empieza justo
 //! donde acabó la anterior y cuesta lo mismo en cualquier profundidad.
 //!

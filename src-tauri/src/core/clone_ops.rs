@@ -1,4 +1,4 @@
-//! Clonar desde URL y credenciales (`specs/rust/ipc.md`, D20).
+//! Clonar desde URL y credenciales (`docs/ipc.md`, D20).
 //!
 //! # El secreto no se guarda
 //!

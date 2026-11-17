@@ -9,7 +9,7 @@
 
 No hay fixture de «sin sesión» de Copilot: cerrar la sesión exigiría tocar el llavero del
 usuario. El clasificador se prueba con textos de patrón en `parse.rs` y queda **NO VERIFICADO**
-en `specs/rust/checklist-humo-ia.md`.
+en `docs/checklist-humo-ia.md`.
 
 Cuando se verifiquen los CLI reales (spike M0), reemplazar estos ficheros por salida real
 y actualizar esta tabla.

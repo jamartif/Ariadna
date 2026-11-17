@@ -53,7 +53,7 @@ Lo que hay encima de `v0.1.0-alpha.3`.
   ramas, remotos, conflictos, rutas): ninguno entra en pánico con bytes arbitrarios, UTF-8
   inválido o entrada truncada, y `diff → reconstruir` reproduce la entrada byte a byte.
 - Pruebas de rendimiento (`#[ignore]`) con repos sintéticos de 50 000 archivos, 10 000
-  commits y diffs grandes, y el informe `specs/rust/rendimiento.md` con las medidas contra
+  commits y diffs grandes, y el informe `docs/rendimiento.md` con las medidas contra
   NF-3, NF-4 y NF-5.
 - Etiquetas (tags): lista (ligeras y anotadas, con mensaje y commit), crear en HEAD o en un
   commit del historial (con mensaje es anotada), borrar en local, publicar y borrar en el

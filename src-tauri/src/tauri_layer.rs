@@ -328,7 +328,7 @@ async fn remove_remote(core: State<'_, AppCore>, tab_id: String, name: String) -
     core.remove_remote(&tab_id, name).await
 }
 
-// --- pull requests (M8; contrato en `specs/rust/ipc.md`) -------------------------------------
+// --- pull requests (M8; contrato en `docs/ipc.md`) -------------------------------------
 // Solo hay red cuando la UI llama a estos comandos (sin sondeo). El token nunca pasa por aquí:
 // lo obtiene `ariadna-hosting` con `git credential fill` en cada operación.
 
@@ -533,7 +533,7 @@ fn on_menu_event(app: &AppHandle, id: &str) {
 
 // --- comandos de IA -----------------------------------------------------------------------
 
-// --- ajustes (specs/rust/ipc.md «Ajustes») ---------------------------------------------------
+// --- ajustes (docs/ipc.md «Ajustes») ---------------------------------------------------
 
 #[tauri::command]
 async fn get_settings(core: State<'_, AppCore>) -> Cmd<SettingsView> {
@@ -796,7 +796,7 @@ async fn log_page(
     }
 }
 
-// --- etiquetas (contrato en `specs/rust/ipc.md`, «Etiquetas») --------------------------------
+// --- etiquetas (contrato en `docs/ipc.md`, «Etiquetas») --------------------------------
 
 #[tauri::command]
 async fn list_tags(core: State<'_, AppCore>, tab_id: String) -> Cmd<Vec<ariadna_git::Tag>> {
