@@ -20,6 +20,8 @@
   }
 </script>
 
+<svelte:window onkeydown={key} />
+
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="backdrop" onclick={onclose}>
   <div
@@ -31,7 +33,6 @@
     data-testid="tag-dialog"
     use:focusTrap
     onclick={(e) => e.stopPropagation()}
-    onkeydown={key}
   >
     <header class="head">
       <span class="badge"><Icon name="tag" size={16} /></span>
