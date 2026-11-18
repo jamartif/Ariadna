@@ -466,6 +466,8 @@ export type MockApi = Api & {
   __openedUrls: () => string[];
   /** Solo pruebas: inicios de sesión de IA pedidos, en orden. */
   __aiLogins: () => AiLoginInfo[];
+  /** Solo pruebas: informes de cambios guardados, en orden. */
+  __reports: () => { path: string; markdown: string }[];
   /** Solo pruebas: etiquetas publicadas en remotos (`remoto/nombre`), ordenadas. */
   __publishedTags: (tabId: string) => string[];
   /** Simula un elemento del menú nativo (`menu-action`). */

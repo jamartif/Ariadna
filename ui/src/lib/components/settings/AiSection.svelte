@@ -32,7 +32,7 @@
   function selectModel(id: string, value: string): void {
     if (value === '__other') {
       manualModel = { ...manualModel, [id]: true };
-      modelDraft = { ...modelDraft, [id]: panel.ai.providers.find((p) => p.id === id)?.model ?? '' };
+      modelDraft = { ...modelDraft, [id]: ai?.providers.find((p) => p.id === id)?.model ?? '' };
       return;
     }
     manualModel = { ...manualModel, [id]: false };

@@ -721,7 +721,8 @@ export const API_ERROR_CODES = [
   'POLICY',
   'RATE_LIMITED',
   'NETWORK',
-  'CONFLICT'
+  'CONFLICT',
+  'INVALID_MODEL'
 ] as const;
 
 /**
@@ -754,8 +755,7 @@ export const CODES_ADDED_IN_WAVE_2: readonly ApiErrorCode[] = [
   'POLICY',
   'RATE_LIMITED',
   'NETWORK',
-  'CONFLICT',
-  'INVALID_MODEL'
+  'CONFLICT'
 ];
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];

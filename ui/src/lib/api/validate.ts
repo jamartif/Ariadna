@@ -226,7 +226,10 @@ export const providerState = obj({
   loginCommand: str,
   sharesLogin: bool,
   isolated: bool,
-  isolationVerified: bool
+  isolationVerified: bool,
+  // Modelo elegido en Ajustes y alias que se ofrecen en el desplegable.
+  model: nullable(str),
+  models: arr(str)
 });
 
 export const aiState = obj({
@@ -251,6 +254,18 @@ export const aiCommitSuggestion = obj({
   body: str,
   provider: str,
   commandSummary: str,
+  repoRevision: int
+});
+
+/** Informe de cambios de un commit (propuesta en Markdown). */
+export const aiCommitReport = obj({
+  markdown: str,
+  sha: str,
+  subject: str,
+  provider: str,
+  commandSummary: str,
+  filesChanged: int,
+  truncated: bool,
   repoRevision: int
 });
 

@@ -18,7 +18,7 @@
   let error = $state<string | null>(null);
   let busy = $state(true);
   let saving = $state(false);
-  let fileName = $state(`${commit.sha.slice(0, 7)}-informe.md`);
+  let fileName = $state('');
   let savedTo = $state<string | null>(null);
 
   void start();
