@@ -11,9 +11,9 @@ the official AI CLIs you already pay for.
 Hard rule: **nothing that rewrites your repository happens without your confirmation**, and
 the AI **only proposes**.
 
-> **Version 0.1.0-alpha.8** — the current build. Installers are on the
-> [releases page](https://github.com/jamartif/Ariadna/releases): `Ariadna_0.1.0-alpha.8_x64-setup.exe`
-> (Windows), `Ariadna_0.1.0-alpha.8_universal.dmg` (macOS), a portable ZIP and `SHA256SUMS.txt`.
+> **Version 0.1.0-alpha.9** — the current build. Installers are on the
+> [releases page](https://github.com/jamartif/Ariadna/releases): `Ariadna_0.1.0-alpha.9_x64-setup.exe`
+> (Windows), `Ariadna_0.1.0-alpha.9_universal.dmg` (macOS), a portable ZIP and `SHA256SUMS.txt`.
 > They are **unsigned** alphas: read [Installation](#installation) first.
 
 ## Verification status
