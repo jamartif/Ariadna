@@ -125,6 +125,9 @@ export function createTauriApi(): Api {
     aiLogin: (request) => call('ai_login', { request }),
     aiGeneratePullRequest: (tabId, options) => call('ai_generate_pull_request', { tabId, options: options ?? null }),
     aiResolveConflict: (tabId, path) => call('ai_resolve_conflict', { tabId, path }),
+    aiCommitReport: (tabId, sha) => call('ai_commit_report', { tabId, sha }),
+    saveCommitReport: (tabId, fileName, markdown) =>
+      call('save_commit_report', { tabId, fileName, markdown }),
 
     ...createTauriPullRequests(),
     ...createTauriTags(),

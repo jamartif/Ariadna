@@ -1158,3 +1158,127 @@ async fn un_cli_colgado_en_un_conflicto_acaba_en_timeout() {
     assert!(t.elapsed() < Duration::from_secs(10));
     assert!(!ai.env.core.inner.ai.is_running(&ai.tab), "se da de baja");
 }
+
+// --- Modelo del proveedor y informe de cambios -------------------------------------------
+
+#[tokio::test]
+async fn el_modelo_configurado_llega_al_cli_y_se_guarda() {
+    let ai = Ai::new(ok_script).await;
+    let st = ai
+        .env
+        .core
+        .ai_update_settings(AiSettingsPatch {
+            model: Some(crate::core::api::ModelPatch {
+                id: "claude".into(),
+                model: Some("sonnet".into()),
+            }),
+            ..AiSettingsPatch::default()
+        })
+        .await
+        .unwrap();
+    let claude = st
+        .providers
+        .iter()
+        .find(|x| x.id == ariadna_ai::ProviderId::Claude)
+        .expect("Claude en el estado");
+    assert_eq!(claude.model.as_deref(), Some("sonnet"));
+    assert!(claude.models.contains(&"sonnet".to_owned()));
+    assert_eq!(
+        ai.env
+            .core
+            .inner
+            .ai
+            .snapshot()
+            .settings
+            .claude_model
+            .as_deref(),
+        Some("sonnet"),
+        "queda guardado en los ajustes"
+    );
+
+    ai.stage("saludo.txt", b"hola mundo\n").await;
+    ai.generate().await.unwrap();
+    let args = std::fs::read_to_string(ai.env.root.join("stdin.txt.args")).unwrap_or_default();
+    assert!(args.contains("--model"), "argumentos: {args}");
+    assert!(args.contains("sonnet"), "argumentos: {args}");
+}
+
+#[tokio::test]
+async fn un_nombre_de_modelo_invalido_no_se_guarda() {
+    let ai = Ai::new(ok_script).await;
+    let e = ai
+        .env
+        .core
+        .ai_update_settings(AiSettingsPatch {
+            model: Some(crate::core::api::ModelPatch {
+                id: "claude".into(),
+                model: Some("dos palabras".into()),
+            }),
+            ..AiSettingsPatch::default()
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "INVALID_MODEL", "{e:?}");
+    assert!(
+        ai.env
+            .core
+            .inner
+            .ai
+            .snapshot()
+            .settings
+            .claude_model
+            .is_none(),
+        "no se guardó nada"
+    );
+}
+
+#[tokio::test]
+async fn el_informe_solo_se_escribe_en_el_repo_cuando_lo_pides() {
+    let ai = Ai::new(ok_script).await;
+    let markdown = "# Informe\n\n## Qué cambia\n\nNada, es una prueba.\n";
+    let saved = ai
+        .env
+        .core
+        .save_commit_report(
+            &ai.tab,
+            "abc1234-informe.md".to_owned(),
+            markdown.to_owned(),
+        )
+        .unwrap();
+    assert!(
+        saved.path.ends_with("informes-cambios/abc1234-informe.md"),
+        "{}",
+        saved.path
+    );
+    assert_eq!(saved.bytes, markdown.len());
+    assert_eq!(
+        std::fs::read_to_string(&saved.path).unwrap(),
+        markdown,
+        "contenido íntegro"
+    );
+
+    let again = ai
+        .env
+        .core
+        .save_commit_report(
+            &ai.tab,
+            "abc1234-informe.md".to_owned(),
+            markdown.to_owned(),
+        )
+        .unwrap_err();
+    assert_eq!(again.code, "CONFLICT", "{again:?}");
+    assert_eq!(
+        std::fs::read_to_string(&saved.path).unwrap(),
+        markdown,
+        "no se sobrescribe"
+    );
+
+    for bad in ["../fuera.md", "sin-extension", ".oculto.md", "carpeta/x.md"] {
+        let e = ai
+            .env
+            .core
+            .save_commit_report(&ai.tab, bad.to_owned(), markdown.to_owned())
+            .unwrap_err();
+        assert_eq!(e.code, "INVALID_REFERENCE", "{bad}: {e:?}");
+    }
+}

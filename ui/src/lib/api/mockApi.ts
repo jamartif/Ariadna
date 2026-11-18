@@ -24,11 +24,13 @@ import {
   ApiError,
   type AiAccount,
   type AiAccounts,
+  type AiCommitReport,
   type AiCommitSuggestion,
   type AiConflictSuggestion,
   type AiLoginInfo,
   type AiPullRequestSuggestion,
   type AiState,
+  type SavedReport,
   type AmendDraft,
   type ApiErrorCode,
   type ApiEvents,
@@ -464,6 +466,8 @@ export type MockApi = Api & {
   __openedUrls: () => string[];
   /** Solo pruebas: inicios de sesión de IA pedidos, en orden. */
   __aiLogins: () => AiLoginInfo[];
+  /** Solo pruebas: informes de cambios guardados, en orden. */
+  __reports: () => { path: string; markdown: string }[];
   /** Solo pruebas: etiquetas publicadas en remotos (`remoto/nombre`), ordenadas. */
   __publishedTags: (tabId: string) => string[];
   /** Simula un elemento del menú nativo (`menu-action`). */
@@ -496,15 +500,17 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         : { name: 'Personal', kind: 'personal', isolated: false },
     choice: 'auto',
     providers: [
-      { id: 'claude', displayName: 'Claude', availability: scenario === 'ai-not-installed' ? 'missing' : 'available', version: scenario === 'ai-not-installed' ? null : '2.1.319', hint: scenario === 'ai-not-logged' ? 'Sin sesión iniciada' : null, enabled: true, consented: false, loginCommand: 'claude auth login', sharesLogin: false, isolated: false, isolationVerified: true },
-      { id: 'codex', displayName: 'Codex', availability: 'missing', version: null, hint: 'No se encontró el comando «codex»', enabled: true, consented: false, loginCommand: 'codex login', sharesLogin: false, isolated: false, isolationVerified: false },
-      { id: 'copilot', displayName: 'Copilot', availability: 'failed', version: '1.0.4', hint: 'Sin sesión iniciada', enabled: true, consented: false, loginCommand: 'copilot login', sharesLogin: true, isolated: false, isolationVerified: false }
+      { id: 'claude', displayName: 'Claude', availability: scenario === 'ai-not-installed' ? 'missing' : 'available', version: scenario === 'ai-not-installed' ? null : '2.1.319', hint: scenario === 'ai-not-logged' ? 'Sin sesión iniciada' : null, enabled: true, consented: false, loginCommand: 'claude auth login', sharesLogin: false, isolated: false, isolationVerified: true, model: null, models: ['sonnet', 'opus', 'haiku', 'fable'] },
+      { id: 'codex', displayName: 'Codex', availability: 'missing', version: null, hint: 'No se encontró el comando «codex»', enabled: true, consented: false, loginCommand: 'codex login', sharesLogin: false, isolated: false, isolationVerified: false, model: null, models: [] },
+      { id: 'copilot', displayName: 'Copilot', availability: 'failed', version: '1.0.4', hint: 'Sin sesión iniciada', enabled: true, consented: false, loginCommand: 'copilot login', sharesLogin: true, isolated: false, isolationVerified: false, model: null, models: ['auto'] }
     ]
   };
   /** Aislamiento de sesión por perfil: Personal conserva el login normal, Empresa usa el suyo. */
   const isolationPref: Record<'personal' | 'empresa', boolean> = { personal: false, empresa: true };
   /** Inicios de sesión pedidos (solo pruebas). */
   const aiLogins: AiLoginInfo[] = [];
+  /** Informes de cambios guardados (solo pruebas). */
+  const mockReports: { path: string; markdown: string }[] = [];
   const withIsolation = (st: AiState): AiState => {
     const on = isolationPref[st.profile.kind];
     return { ...st, profile: { ...st.profile, isolated: on }, providers: st.providers.map((p) => ({ ...p, isolated: on && !p.sharesLogin })) };
@@ -1866,6 +1872,14 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         ai.providers = ai.providers.map((p) => (p.id === id ? { ...p, enabled } : p));
       }
       if (patch.isolated !== undefined) isolationPref[ai.profile.kind] = patch.isolated;
+      if (patch.model) {
+        const { id, model } = patch.model;
+        const name = model?.trim() || null;
+        if (name !== null && !/^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,63}$/.test(name)) {
+          throw err('INVALID_MODEL', 'El nombre del modelo solo admite letras, números y - _ . : / (máximo 64).', name);
+        }
+        ai.providers = ai.providers.map((p) => (p.id === id ? { ...p, model: name } : p));
+      }
       return withRule(patch.tabId);
     },
     // Ajustes
@@ -2155,9 +2169,107 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         emit('session-event', { sessionId: r.tabId, revision: r.revision, kind: { type: 'operationFinished', operationId: op, label: `Resolviendo ${shown} con ${provider.displayName}`, ok: true, error: null } });
       }
     },
+    async aiCommitReport(tabId, sha): Promise<AiCommitReport> {
+      const r = repoOf(tabId);
+      if (!ai.enabled) throw err('AI_DISABLED', 'La IA está desactivada en los ajustes de Ariadna.');
+      const commit = r.commits.find((c) => c.sha === sha || c.sha.startsWith(sha));
+      if (!commit) throw err('NOT_FOUND', 'No encuentro ese commit en el repositorio.', sha);
+      const wanted =
+        ai.choice === 'auto'
+          ? (ai.providers.find((p) => p.enabled && p.availability !== 'missing') ?? ai.providers[0])
+          : ai.providers.find((p) => p.id === ai.choice);
+      const provider = wanted as AiState['providers'][number];
+      if (provider.availability === 'missing') {
+        throw err('AI_NOT_INSTALLED', `No se encontró el comando «${provider.id}» en el equipo.`, provider.loginCommand);
+      }
+      if (!provider.consented) {
+        const ok =
+          scenario === 'ai-consent-denied'
+            ? false
+            : confirmFn(
+                `¿Permites que Ariadna envíe a ${provider.displayName} los datos y el diff de «${commit.subject}» para generar un informe de cambios? Se excluyen archivos sensibles y se redactan secretos.`
+              );
+        if (!ok) throw err('AI_CONSENT_REQUIRED', 'Sin tu permiso Ariadna no envía nada a la IA.');
+        ai.providers = ai.providers.map((p) => (p.id === provider.id ? { ...p, consented: true } : p));
+      }
+      const op = ++opCounter;
+      emit('session-event', {
+        sessionId: r.tabId,
+        revision: r.revision,
+        kind: { type: 'operationStarted', operationId: op, label: `Informe de cambios con ${provider.displayName}` }
+      });
+      const think = scenario === 'ai-slow' ? 9000 : Math.max(latency * 8, latency === 0 ? 0 : 800);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, think);
+          aiCancelled.set(tabId, () => {
+            clearTimeout(timer);
+            reject(err('CANCELLED', 'Generación cancelada.'));
+          });
+        });
+        if (scenario === 'ai-timeout') throw err('AI_TIMEOUT', `${provider.displayName} no respondió en 120 s.`);
+        if (scenario === 'ai-quota') throw err('AI_QUOTA', `${provider.displayName} ha alcanzado su límite de uso.`);
+        const model = provider.model ?? 'el del CLI';
+        const markdown = [
+          `# Informe de cambios: ${commit.subject}`,
+          '',
+          `Commit \`${commit.sha.slice(0, 7)}\` · ${commit.authorName}`,
+          '',
+          '## Qué cambia',
+          '',
+          `El commit «${commit.subject}» modifica el comportamiento de la aplicación en las rutas que toca.`,
+          '',
+          '## Riesgos y zonas sensibles',
+          '',
+          '- Código compartido por varias vistas: un cambio aquí se nota en todas.',
+          '',
+          '## Posibles bugs',
+          '',
+          '- Un caso límite que el commit no contempla (valores vacíos o rutas largas).',
+          '',
+          '## Qué probar',
+          '',
+          '- Abrir la vista afectada y confirmar que sigue funcionando con datos reales.',
+          ''
+        ].join('\n');
+        return {
+          markdown,
+          sha: commit.sha,
+          subject: commit.subject,
+          provider: provider.id,
+          commandSummary: `${provider.id} --model ${model} (stdin)`,
+          filesChanged: 1,
+          truncated: false,
+          repoRevision: r.revision
+        };
+      } finally {
+        aiCancelled.delete(tabId);
+        emit('session-event', {
+          sessionId: r.tabId,
+          revision: r.revision,
+          kind: { type: 'operationFinished', operationId: op, label: `Informe de cambios con ${provider.displayName}`, ok: true, error: null }
+        });
+      }
+    },
+    async saveCommitReport(tabId, fileName, markdown): Promise<SavedReport> {
+      await delay(Math.min(latency, 60));
+      repoOf(tabId);
+      const name = fileName.trim();
+      if (!/^[A-Za-z0-9][A-Za-z0-9._ -]{0,90}\.md$/.test(name) || name.includes('..')) {
+        throw err('INVALID_REFERENCE', 'El nombre del informe no es válido: tiene que acabar en .md.', fileName);
+      }
+      if (!markdown.trim()) throw err('INVALID_REFERENCE', 'El informe está vacío: no hay nada que guardar.');
+      if (mockReports.some((rep) => rep.path.endsWith(`/${name}`))) {
+        throw err('CONFLICT', 'Ya existe un informe con ese nombre. Cambia el nombre para no sobrescribirlo.', name);
+      }
+      const path = `informes-cambios/${name}`;
+      mockReports.push({ path, markdown });
+      return { path, bytes: markdown.length };
+    },
+    /** Solo pruebas: informes guardados, en orden. */
+    __reports: () => [...mockReports],
     /** Solo pruebas: inicios de sesión pedidos, en orden. */
     __aiLogins: () => [...aiLogins],
-
     // Etiquetas: viven en los `refs` de los commits simulados (se ven también en el historial).
     ...createMockTags({
       repoOf: (tabId) => repoOf(tabId),

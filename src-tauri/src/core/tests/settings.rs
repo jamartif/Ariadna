@@ -495,6 +495,8 @@ async fn formas_json_del_contrato_con_la_ui() {
             "isolated",
             "isolationVerified",
             "loginCommand",
+            "model",
+            "models",
             "sharesLogin",
             "version"
         ]

@@ -18,7 +18,7 @@ pub struct ApiError {
 pub type ApiResult<T> = Result<T, ApiError>;
 
 /// Todos los códigos del contrato (para tests y documentación).
-pub const ALL_CODES: [&str; 52] = [
+pub const ALL_CODES: [&str; 53] = [
     "MERGE_CONFLICTS",
     "CONFLICTS_PENDING",
     "CONFLICT_MARKERS_REMAIN",
@@ -71,6 +71,7 @@ pub const ALL_CODES: [&str; 52] = [
     "NOT_FOUND",
     "NETWORK",
     "CONFLICT",
+    "INVALID_MODEL",
 ];
 
 /// Códigos `AI_*` del contrato (los produce [`From<AiError>`] y el servicio de IA).

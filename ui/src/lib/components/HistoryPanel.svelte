@@ -8,6 +8,7 @@
   import Banner from './Banner.svelte';
   import CommitGraph from './CommitGraph.svelte';
   import CommitMenu from './CommitMenu.svelte';
+  import CommitReportDialog from './CommitReportDialog.svelte';
   import TagDialog from './TagDialog.svelte';
   import EmptyState from './EmptyState.svelte';
   import Icon from './Icon.svelte';
@@ -21,6 +22,8 @@
   /** Menú contextual del commit (clic derecho o Mayús+F10) y la ventana de etiqueta. */
   let menu = $state<{ commit: Commit; x: number; y: number } | null>(null);
   let tagFor = $state<Commit | null>(null);
+  /** Commit cuyo informe de cambios (Markdown) se está pidiendo a la IA. */
+  let reportFor = $state<Commit | null>(null);
 
   onMount(() => {
     void historyOf(tab).reload();
@@ -178,7 +181,12 @@
       y={menu.y}
       onclose={() => (menu = null)}
       oncreatetag={(c) => (tagFor = c)}
+      onreport={(c) => (reportFor = c)}
     />
+  {/if}
+
+  {#if reportFor}
+    <CommitReportDialog {tab} commit={reportFor} onclose={() => (reportFor = null)} />
   {/if}
 
   {#if tagFor}

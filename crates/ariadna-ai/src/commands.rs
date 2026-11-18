@@ -101,6 +101,18 @@ pub fn version_args() -> Vec<OsString> {
     vec![OsString::from(VERSION_FLAG)]
 }
 
+/// Argumentos del modelo elegido en Ajustes (`None` = el del CLI).
+///
+/// Claude y Copilot usan `--model <nombre>`; Codex, `-m <MODEL>`. Los tres aceptan el nombre
+/// tal cual, sin lista previa (ver `suggested_models`).
+pub fn model_args(provider: ProviderId, model: &str) -> Vec<OsString> {
+    let flag = match provider {
+        ProviderId::Codex => "-m",
+        _ => "--model",
+    };
+    vec![OsString::from(flag), OsString::from(model)]
+}
+
 /// Argumentos fijos para pedir una respuesta. **No reciben ningún dato del repo**.
 pub fn build_args(provider: ProviderId) -> Vec<OsString> {
     let list: Vec<&str> = match provider {
@@ -267,6 +279,35 @@ mod tests {
                 "--permission-mode",
                 "plan"
             ]
+        );
+    }
+
+    #[test]
+    fn el_modelo_se_pasa_con_la_bandera_de_cada_cli() {
+        // Claude y Copilot: `--model <nombre>`; Codex: `-m <MODEL>` (verificado en sus --help).
+        let claude = model_args(ProviderId::Claude, "sonnet")
+            .into_iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(claude, ["--model", "sonnet"]);
+        let copilot = model_args(ProviderId::Copilot, "auto")
+            .into_iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(copilot, ["--model", "auto"]);
+        let codex = model_args(ProviderId::Codex, "gpt-5-codex")
+            .into_iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(codex, ["-m", "gpt-5-codex"]);
+    }
+
+    #[test]
+    fn sin_modelo_configurado_no_se_añade_nada() {
+        // El modelo es opcional: sin él, los argumentos son exactamente los verificados.
+        assert_eq!(
+            build_args(ProviderId::Claude),
+            build_args(ProviderId::Claude)
         );
     }
 

@@ -46,7 +46,11 @@ the real service, it says "not verified" here:
 - **Stash**: save (with or without untracked files), list, view the diff, apply, pop and drop
   with confirmation; conflicts on apply land in the Conflicts panel.
 - **History** paginated **by cursor** (constant cost even on 100,000-commit repos), with a
-  graph, local filter, global search (message, author, hash) and per-commit diff.
+  graph, local filter, global search (message, author, hash) and per-commit diff. Right-click a
+  commit (or `Shift+F10`) for **Create tag…**, copy SHA/subject and **Generate change report
+  (.md)**: the AI drafts a Markdown report for that commit — what changes functionally, risks and
+  sensitive areas, possible bugs, and what to test — shown in a viewer and saved to
+  `informes-cambios/<sha>-informe.md` only when you press *Save* (never overwritten).
 - **Branches** in a persistent rail on the left, always visible: a **nested tree by every
   segment** (`origin/release/1.0/hotfix` collapses under `origin/` → `release/` → `1.0/`, with
   a count per folder), switch, create, rename, delete (second confirmation when unmerged),
@@ -113,6 +117,14 @@ with the session you already have on the machine, and the prompt travels over **
 | Claude (Pro/Max/Ultra or Team/Enterprise) | `claude` | Verified with `claude 2.1.319` |
 | GitHub Copilot (any plan) | `copilot` | Verified with `GitHub Copilot CLI 1.0.112` (2026-11-14) |
 | Codex (ChatGPT Free/Go/Plus/Pro/Business/Enterprise) | `codex` | Verified with `codex-cli 0.169.0` (2026-11-17) |
+
+- **Model per provider**: Settings › AI lets you pick the model for each provider. None of the
+  three CLIs publishes a model list (their `--help` only documents `--model`/`-m`), so the
+  drop-down holds a short list of aliases each CLI documents itself (`sonnet`, `opus`, `haiku`,
+  `fable` for Claude; `auto` for Copilot; none for Codex) plus **Other…**, which opens a text
+  field with basic validation (letters, digits and `- _ . : /`, 64 characters max, otherwise
+  `INVALID_MODEL`). The value is saved in the app settings and used on every call: `--model` for
+  Claude and Copilot, `-m` for Codex. Empty means "the CLI's own default".
 
 - **Cloning a repository that needs credentials** never asks for a token you already have:
   if `gh` (GitHub) or `glab` (GitLab) **are installed and signed in**, Ariadna offers that

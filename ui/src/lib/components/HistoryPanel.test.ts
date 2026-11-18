@@ -104,4 +104,33 @@ describe('Historial', () => {
     render(HistoryPanel, { props: { tab } });
     expect(await screen.findByText('Todavía no hay commits')).toBeInTheDocument();
   });
+
+  it('el menú del commit genera un informe de cambios en Markdown y lo guarda solo al pedirlo', async () => {
+    const { tab, api } = await setup();
+    const list = await screen.findByRole('listbox', { name: 'Lista de commits' });
+    await waitFor(() => expect(within(list).getAllByRole('option').length).toBeGreaterThan(2));
+    const second = within(list).getAllByRole('option')[1]!;
+    const c = historyOf(tab).commits[1]!;
+
+    await userEvent.pointer({ keys: '[MouseRight]', target: second });
+    const menu = await screen.findByRole('menu', { name: 'Acciones del commit' });
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Generar informe de cambios (.md)…' }));
+
+    const dlg = await screen.findByTestId('report-dialog');
+    // Antes de pulsar «Guardar» no se escribe nada.
+    expect((api as unknown as { __reports: () => unknown[] }).__reports()).toHaveLength(0);
+
+    const body = await within(dlg).findByTestId('report-body');
+    expect(body).toHaveTextContent('Qué cambia');
+    expect(body).toHaveTextContent('Riesgos y zonas sensibles');
+    expect(body).toHaveTextContent('Posibles bugs');
+    expect(body).toHaveTextContent('Qué probar');
+
+    await userEvent.click(within(dlg).getByTestId('report-save'));
+    await waitFor(() => expect(within(dlg).getByTestId('report-saved')).toBeInTheDocument());
+    const saved = (api as unknown as { __reports: () => { path: string; markdown: string }[] }).__reports();
+    expect(saved).toHaveLength(1);
+    expect(saved[0]!.path).toBe(`informes-cambios/${c.sha.slice(0, 7)}-informe.md`);
+    expect(saved[0]!.markdown).toContain('## Qué cambia');
+  });
 });

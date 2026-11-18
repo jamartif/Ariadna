@@ -23,8 +23,9 @@ use ariadna_ai::prompt::{
 use ariadna_ai::provider::DEFAULT_TIMEOUT;
 use ariadna_ai::resolve::{resolve_binary, SearchEnv};
 use ariadna_ai::{
-    AiContextPolicy, AiError, AiProvider, AiSettings, Availability, CallContext, CliProvider,
-    CliProviderConfig, CommitLanguage, CommitOptions, ProviderChoice, ProviderId,
+    is_valid_model_name, suggested_models, AiContextPolicy, AiError, AiProvider, AiSettings,
+    Availability, CallContext, CliProvider, CliProviderConfig, CommitLanguage, CommitOptions,
+    ProviderChoice, ProviderId,
 };
 use ariadna_git::{
     CommandKind, ConflictFile, ConflictKind, ConflictSide, DiffScope, FileDiff, GitPath,
@@ -33,10 +34,11 @@ use ariadna_process::CancellationToken;
 use serde::{Deserialize, Serialize};
 
 use super::api::{
-    AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitSuggestion, AiConflictSuggestion,
-    AiContextPreview, AiExcludeReason, AiExcludedFile, AiLoginInfo, AiLoginRequest, AiPreviewFile,
-    AiProfileInfo, AiProviderState, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch,
-    AiState, ApiSessionEvent, ApiSessionEventKind, AppEvent,
+    AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitReport, AiCommitSuggestion,
+    AiConflictSuggestion, AiContextPreview, AiExcludeReason, AiExcludedFile, AiLoginInfo,
+    AiLoginRequest, AiPreviewFile, AiProfileInfo, AiProviderState, AiPullRequestOptions,
+    AiPullRequestSuggestion, AiSettingsPatch, AiState, ApiSessionEvent, ApiSessionEventKind,
+    AppEvent, SavedReport,
 };
 use super::app::AppCore;
 use super::error::{ApiError, ApiResult};
@@ -342,6 +344,20 @@ impl AiService {
             let id = parse_provider(&pe.id)?;
             next.profile_mut().set_enabled(id, pe.enabled);
         }
+        if let Some(m) = &patch.model {
+            let id = parse_provider(&m.id)?;
+            let name = m.model.as_deref().map(str::trim).filter(|s| !s.is_empty());
+            if let Some(n) = name {
+                if !is_valid_model_name(n) {
+                    return Err(ApiError::new(
+                        "INVALID_MODEL",
+                        "el nombre del modelo solo admite letras, números y - _ . : / (máximo 64)",
+                        None,
+                    ));
+                }
+            }
+            next.settings.set_model(id, name.map(str::to_owned));
+        }
         if let Some(iso) = patch.isolated {
             next.profile_mut().isolated = Some(iso);
         }
@@ -502,6 +518,8 @@ impl AiService {
         cfg.search = self.search();
         cfg.timeout = self.timeout();
         cfg.policy = AiContextPolicy::new(st.settings.max_context_bytes);
+        // Modelo global por proveedor (el CLI real valida el nombre al arrancar).
+        cfg.model = st.settings.model_for(id).map(str::to_owned);
         CliProvider::new(cfg)
     }
 
@@ -598,6 +616,8 @@ enum Purpose {
     Commit,
     PullRequest,
     Conflict,
+    /// Informe de cambios de un commit concreto (menú del historial).
+    ChangeReport,
 }
 
 impl Purpose {
@@ -619,6 +639,11 @@ impl Purpose {
                 "proponer el archivo completo ya resuelto",
                 "La IA solo propone: no escribe el archivo ni lo marca como resuelto.",
             ),
+            Self::ChangeReport => (
+                "los datos y el diff de ese commit",
+                "generar un informe de cambios en Markdown",
+                "La IA solo propone: no escribe ningún archivo ni toca el repositorio.",
+            ),
         }
     }
 }
@@ -630,6 +655,58 @@ struct Consent<'a> {
     excluded: usize,
     context_bytes: usize,
     purpose: Purpose,
+}
+
+/// Carpeta (relativa a la raíz del repo) donde se guardan los informes de cambios.
+pub(crate) const REPORT_DIR: &str = "informes-cambios";
+
+/// Datos de un commit leídos de git, tal como los necesita el informe.
+struct CommitRaw {
+    sha: String,
+    author: String,
+    date: String,
+    subject: String,
+    stats: String,
+    files_changed: usize,
+    patch: String,
+}
+
+/// Recorta el diff al tope de contexto sin partir un carácter.
+fn clamp_patch(patch: &str, max_bytes: usize) -> (String, bool) {
+    if patch.len() <= max_bytes {
+        return (patch.to_owned(), false);
+    }
+    let mut end = 0;
+    for (i, c) in patch.char_indices() {
+        if i >= max_bytes {
+            break;
+        }
+        end = i + c.len_utf8();
+    }
+    (
+        format!(
+            "{}\n…(diff recortado al tope de contexto de IA)\n",
+            &patch[..end]
+        ),
+        true,
+    )
+}
+
+/// Archivos que verá el diálogo de consentimiento: uno por bloque del diff recortado.
+fn report_files(clamped: &str) -> Vec<AiPreviewFile> {
+    clamped
+        .split("diff --git ")
+        .skip(1)
+        .take(200)
+        .map(|chunk| {
+            let head = chunk.lines().next().unwrap_or("");
+            let path = head.split(" b/").nth(1).unwrap_or(head).trim().to_owned();
+            AiPreviewFile {
+                path: GitPath::new(path.into_bytes()),
+                bytes: chunk.len(),
+            }
+        })
+        .collect()
 }
 
 /// Datos de una rama frente a su base, tal como los leyó git.
@@ -858,6 +935,11 @@ pub(crate) fn compose_state(st: &StoredAi, avail: &[(ProviderId, Availability)])
                 shares_login: shares_login_between_profiles(*id),
                 isolated: profile.is_isolated() && !shares_login_between_profiles(*id),
                 isolation_verified: isolation(*id).verified,
+                model: st.settings.model_for(*id).map(str::to_owned),
+                models: suggested_models(*id)
+                    .iter()
+                    .map(|m| (*m).to_owned())
+                    .collect(),
             }
         })
         .collect();
@@ -1812,6 +1894,276 @@ impl AppCore {
             base: base_name,
             head,
             commit_count,
+        })
+    }
+
+    /// `ai_commit_report`: informe de cambios en Markdown de un commit concreto.
+    ///
+    /// Solo propone: no escribe nada. El guardado (si el usuario lo pide) es otra llamada.
+    pub async fn ai_commit_report(&self, tab_id: &str, sha: String) -> ApiResult<AiCommitReport> {
+        let st = self.ai().snapshot();
+        if !st.settings.enabled {
+            return Err(ApiError::from(AiError::AiDisabled));
+        }
+        self.live(tab_id)?;
+        let run = self.ai().begin(tab_id);
+        let label = "IA: informe de cambios".to_owned();
+        self.ai_event(
+            tab_id,
+            ApiSessionEventKind::OperationStarted {
+                operation_id: run.op_id,
+                label: label.clone(),
+            },
+        );
+        let result = self.ai_report_inner(tab_id, &sha, &run).await;
+        self.ai_event(
+            tab_id,
+            ApiSessionEventKind::OperationFinished {
+                operation_id: run.op_id,
+                label,
+                ok: result.is_ok(),
+                error: result.as_ref().err().cloned(),
+            },
+        );
+        result
+    }
+
+    async fn ai_report_inner(
+        &self,
+        tab_id: &str,
+        sha: &str,
+        run: &Run,
+    ) -> ApiResult<AiCommitReport> {
+        let svc = self.ai();
+        let rule = self.rule_for_tab(tab_id);
+        let mut st = svc.snapshot_with(rule.as_ref());
+        let max_bytes = st.settings.max_context_bytes;
+
+        let (session, _) = self.live(tab_id)?;
+        let revision = Self::fresh_snapshot(&session).await.revision;
+        let raw = self.ai_read_commit(tab_id, sha).await?;
+        if run.token.is_cancelled() {
+            return Err(AiError::Cancelled.into());
+        }
+
+        let (patch, truncated) = clamp_patch(&raw.patch, max_bytes);
+        let files = report_files(&patch);
+        let details = format!(
+            "{}\nAutor: {}\nFecha: {}\nCambios: {}",
+            raw.subject,
+            raw.author,
+            raw.date,
+            raw.stats.trim().replace('\n', "; ")
+        );
+        let prompt = PromptBuilder::explain(&raw.sha, &details, &patch);
+        let gathered = Gathered {
+            diff: patch,
+            files,
+            excluded: Vec::new(),
+            opts: CommitOptions::default(),
+            prompt,
+            revision,
+            max_bytes,
+            largest_too_large: 0,
+            nothing_staged: false,
+        };
+        AiContextPolicy::new(gathered.max_bytes)
+            .validate_len(gathered.prompt.context_bytes)
+            .map_err(ApiError::from)?;
+
+        if let Plan::NeedConsent(provider) = svc.plan(&st)? {
+            self.ai_ask_consent(
+                provider,
+                st.active_profile,
+                Consent {
+                    files: &gathered.files,
+                    excluded: 0,
+                    context_bytes: gathered.prompt.context_bytes,
+                    purpose: Purpose::ChangeReport,
+                },
+                run,
+            )
+            .await?;
+            st = svc.snapshot_with(rule.as_ref());
+        }
+        if run.token.is_cancelled() {
+            return Err(AiError::Cancelled.into());
+        }
+
+        let providers: Vec<Arc<dyn AiProvider>> = ProviderId::AUTO_ORDER
+            .into_iter()
+            .map(|id| Arc::new(svc.provider(id, &st)) as Arc<dyn AiProvider>)
+            .collect();
+        let orchestrator = Orchestrator::new(providers, Arc::clone(&svc.shared.limiter));
+        let call = CallContext::new(revision.to_string()).with_cancel(run.token.clone());
+        let suggestion = orchestrator
+            .explain_commit(
+                &svc.call_profile(&st),
+                st.settings.provider,
+                &call,
+                &raw.sha,
+                &gathered.diff,
+                &details,
+            )
+            .await
+            .map_err(ApiError::from)?;
+
+        Ok(AiCommitReport {
+            markdown: suggestion.body.clone(),
+            sha: raw.sha,
+            subject: raw.subject,
+            provider: suggestion.provider.binary_name().to_owned(),
+            command_summary: suggestion.command_summary.clone(),
+            files_changed: raw.files_changed,
+            truncated,
+            repo_revision: revision,
+        })
+    }
+
+    /// Lee un commit del repositorio: datos, stat y diff (sin tocar nada).
+    async fn ai_read_commit(&self, tab_id: &str, sha: &str) -> ApiResult<CommitRaw> {
+        let trimmed = sha.trim().to_owned();
+        let ok =
+            (4..=64).contains(&trimmed.len()) && trimmed.chars().all(|c| c.is_ascii_hexdigit());
+        if !ok {
+            return Err(ApiError::new(
+                "INVALID_REFERENCE",
+                "Ese identificador no parece un commit.",
+                Some(trimmed),
+            ));
+        }
+        let Some(runner) = self.git_runner() else {
+            return Err(ApiError::new(
+                "GIT_NOT_FOUND",
+                "No hay un git utilizable para leer el commit.",
+                None,
+            ));
+        };
+        let want = trimmed.clone();
+        self.read_op(tab_id, "commit para el informe de cambios", move |_e, r| {
+            Box::pin(async move {
+                let cwd = r.path.clone();
+                let meta = git_text(
+                    &runner,
+                    &cwd,
+                    &[
+                        "show",
+                        "-s",
+                        "--no-color",
+                        "--no-show-signature",
+                        "--format=%H%x1f%an%x1f%ad%x1f%s%x1f%b",
+                        &want,
+                    ],
+                )
+                .await;
+                let Some(meta) = meta else {
+                    return Err(ariadna_git::GitError::InvalidReference(want.clone()));
+                };
+                let mut parts = meta.split('\u{1f}');
+                let sha = parts.next().unwrap_or(&want).trim().to_owned();
+                let author = parts.next().unwrap_or("").trim().to_owned();
+                let date = parts.next().unwrap_or("").trim().to_owned();
+                let subject = parts.next().unwrap_or("").trim().to_owned();
+                let body = parts.next().unwrap_or("").trim().to_owned();
+                let stats = git_text(
+                    &runner,
+                    &cwd,
+                    &[
+                        "show",
+                        "--stat",
+                        "--no-color",
+                        "--no-show-signature",
+                        "--format=",
+                        &sha,
+                    ],
+                )
+                .await
+                .unwrap_or_default();
+                let files_changed = stats.lines().filter(|l| l.contains('|')).count();
+                let mut patch = git_text(
+                    &runner,
+                    &cwd,
+                    &[
+                        "show",
+                        "--format=",
+                        "--no-color",
+                        "--no-show-signature",
+                        "--no-ext-diff",
+                        "--unified=3",
+                        &sha,
+                    ],
+                )
+                .await
+                .unwrap_or_default();
+                if !body.is_empty() {
+                    patch = format!("__MENSAJE__\n{body}\n__FIN_MENSAJE__\n{patch}");
+                }
+                Ok(CommitRaw {
+                    sha,
+                    author,
+                    date,
+                    subject,
+                    stats,
+                    files_changed,
+                    patch,
+                })
+            })
+        })
+        .await
+    }
+
+    /// Guarda el informe en `<repo>/informes-cambios/<nombre>.md` (nunca lo sobrescribe).
+    ///
+    /// Escribir dentro del repositorio solo ocurre cuando el usuario pulsa «Guardar»: la
+    /// generación nunca toca el disco.
+    pub fn save_commit_report(
+        &self,
+        tab_id: &str,
+        file_name: String,
+        markdown: String,
+    ) -> ApiResult<SavedReport> {
+        let name = file_name.trim().to_owned();
+        let valid = !name.is_empty()
+            && name.len() <= 96
+            && name.ends_with(".md")
+            && !name.starts_with('.')
+            && !name.contains('/')
+            && !name.contains('\\')
+            && !name.contains("..")
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ' '));
+        if !valid {
+            return Err(ApiError::new(
+                "INVALID_REFERENCE",
+                "El nombre del informe solo admite letras, números, guion, guion bajo, punto y espacios, y tiene que acabar en .md",
+                Some(file_name),
+            ));
+        }
+        if markdown.trim().is_empty() {
+            return Err(ApiError::new(
+                "INVALID_REFERENCE",
+                "El informe está vacío: no hay nada que guardar.",
+                None,
+            ));
+        }
+        let (_, meta) = self.live(tab_id)?;
+        let dir = PathBuf::from(&meta.path).join(REPORT_DIR);
+        let path = dir.join(&name);
+        if path.exists() {
+            return Err(ApiError::new(
+                "CONFLICT",
+                "Ya existe un informe con ese nombre. Cambia el nombre para no sobrescribirlo.",
+                Some(path.to_string_lossy().into_owned()),
+            ));
+        }
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| ApiError::io(format!("no se pudo crear {REPORT_DIR}: {e}")))?;
+        std::fs::write(&path, markdown.as_bytes())
+            .map_err(|e| ApiError::io(format!("no se pudo escribir el informe: {e}")))?;
+        Ok(SavedReport {
+            path: path.to_string_lossy().into_owned(),
+            bytes: markdown.len(),
         })
     }
 

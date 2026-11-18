@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMockApi } from './mockApi';
 import { toApiError, ApiError, API_ERROR_CODES, CODES_ADDED_IN_WAVE_2 } from './types';
-import { aiCommitSuggestion, aiState, appState, authOptions, check, cloneProgress, contextPreview, credentialTest, detect, deviceLoginPoll, deviceLoginStart, diffScope, fileDiff, gitPath, mergeResult, notice, openResult, recentRepository, snapshot } from './validate';
+import { aiCommitReport, aiCommitSuggestion, aiState, appState, authOptions, check, cloneProgress, contextPreview, credentialTest, detect, deviceLoginPoll, deviceLoginStart, diffScope, fileDiff, gitPath, mergeResult, notice, openResult, recentRepository, snapshot } from './validate';
 
 // Fixtures REALES generados por `src-tauri` desde el motor de Rust (ipc.md, «Verificación del contrato»).
 const fixtureModules = import.meta.glob('./fixtures/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
@@ -120,6 +120,9 @@ describe('contrato: IA, clonado y credenciales (sin fixtures de Rust todavía)',
     expect(check(contextPreview, await api.aiPreviewContext('tab-ariadna'))).toEqual([]);
     const sug = await api.aiGenerateCommitMessage('tab-ariadna', { template: null, language: 'auto', style: 'plain' });
     expect(check(aiCommitSuggestion, sug)).toEqual([]);
+    // Informe de cambios de un commit real del mock (misma forma que devuelve Rust).
+    const first = (await api.logPage('tab-ariadna', 0, 1, null))[0]!;
+    expect(check(aiCommitReport, await api.aiCommitReport('tab-ariadna', first.sha))).toEqual([]);
     expect(check(credentialTest, await api.testCredential('https://github.com/o/r.git'))).toEqual([]);
     // Métodos de acceso: estado del CLI y del OAuth, sin tokens.
     expect(check(authOptions, await api.cloneAuthOptions('https://github.com/o/r.git'))).toEqual([]);

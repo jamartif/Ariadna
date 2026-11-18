@@ -441,6 +441,10 @@ export interface ProviderState {
   isolated: boolean;
   /** `true` = mecanismo de aislamiento comprobado con el CLI real; `false` = según su documentación. */
   isolationVerified: boolean;
+  /** Modelo elegido en Ajustes para este proveedor (`null` = el que use el CLI). */
+  model: string | null;
+  /** Alias que se ofrecen en el desplegable; ninguno de los CLI publica la lista completa. */
+  models: string[];
 }
 
 export interface AiState {
@@ -459,6 +463,8 @@ export interface AiSettingsPatch {
   profile?: AiProfileKind;
   providerEnabled?: { id: string; enabled: boolean };
   binaryPath?: { id: string; path: string | null };
+  /** Modelo de un proveedor (`model: null` = volver al del CLI). */
+  model?: { id: string; model: string | null };
   /** Aislar (o no) la sesión del perfil activo por proveedor. */
   isolated?: boolean;
 }
@@ -487,6 +493,28 @@ export interface AiCommitSuggestion {
   provider: string;
   commandSummary: string;
   repoRevision: number;
+}
+
+/**
+ * Informe de cambios de un commit (`ai_commit_report`): Markdown con qué cambia a nivel
+ * funcional, riesgos, posibles bugs y qué probar. Solo es una propuesta: no escribe nada.
+ */
+export interface AiCommitReport {
+  markdown: string;
+  sha: string;
+  subject: string;
+  provider: string;
+  commandSummary: string;
+  filesChanged: number;
+  /** El diff se recortó al tope de contexto de IA. */
+  truncated: boolean;
+  repoRevision: number;
+}
+
+/** Informe guardado en el repositorio (`<repo>/informes-cambios/<nombre>.md`). */
+export interface SavedReport {
+  path: string;
+  bytes: number;
 }
 
 /**
@@ -693,7 +721,8 @@ export const API_ERROR_CODES = [
   'POLICY',
   'RATE_LIMITED',
   'NETWORK',
-  'CONFLICT'
+  'CONFLICT',
+  'INVALID_MODEL'
 ] as const;
 
 /**
@@ -704,6 +733,7 @@ export const API_ERROR_CODES = [
 export const CODES_ADDED_IN_WAVE_2: readonly ApiErrorCode[] = [
   'AI_NO_BRANCH_CHANGES',
   'AI_BASE_NOT_FOUND',
+  'INVALID_MODEL',
   'MERGE_CONFLICTS',
   'CONFLICTS_PENDING',
   'CONFLICT_MARKERS_REMAIN',

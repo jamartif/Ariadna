@@ -19,6 +19,41 @@
   let newPattern = $state('');
   let newProfile = $state<AiProfileKind>('empresa');
   let newProblem = $state<RuleProblem | null>(null);
+  /** Proveedores con el campo de modelo escrito a mano abierto («Otro…»). */
+  let manualModel = $state<Record<string, boolean>>({});
+  /** Texto tecleado por proveedor (borrador hasta Confirmar/Enter). */
+  let modelDraft = $state<Record<string, string>>({});
+  /** Error de validación básica del nombre tecleado. */
+  let modelProblem = $state<Record<string, string | null>>({});
+
+  /** Misma regla que el núcleo (`is_valid_model_name`): 1–64, sin espacios ni controles. */
+  const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,63}$/;
+
+  function selectModel(id: string, value: string): void {
+    if (value === '__other') {
+      manualModel = { ...manualModel, [id]: true };
+      modelDraft = { ...modelDraft, [id]: ai?.providers.find((p) => p.id === id)?.model ?? '' };
+      return;
+    }
+    manualModel = { ...manualModel, [id]: false };
+    void panel.patchAi({ model: { id, model: value === '' ? null : value } });
+  }
+
+  function saveManualModel(id: string): void {
+    const text = (modelDraft[id] ?? '').trim();
+    if (text === '') {
+      modelProblem = { ...modelProblem, [id]: null };
+      void panel.patchAi({ model: { id, model: null } });
+      return;
+    }
+    if (!MODEL_RE.test(text)) {
+      modelProblem = { ...modelProblem, [id]: t('settings.ai.modelInvalid') };
+      return;
+    }
+    modelProblem = { ...modelProblem, [id]: null };
+    void panel.patchAi({ model: { id, model: text } });
+    manualModel = { ...manualModel, [id]: false };
+  }
 
   function cliText(c: CliStatus | undefined): string {
     if (!c) return t('settings.ai.checking');
@@ -162,6 +197,51 @@
                 >
                   <Icon name="terminal" size={13} />{loginFor === p.id ? t('settings.ai.hideLogin') : t('settings.ai.login')}
                 </button>
+              </div>
+              <div class="modelrow" data-testid="model-{p.id}">
+                <label class="mini">
+                  <span>{t('settings.ai.model')}</span>
+                  <select
+                    class="field modelsel"
+                    aria-label={t('settings.ai.modelFor', { name: p.displayName })}
+                    disabled={panel.aiBusy || !p.enabled}
+                    value={manualModel[p.id] ? '__other' : (p.model ?? '')}
+                    onchange={(e) => selectModel(p.id, e.currentTarget.value)}
+                  >
+                    <option value="">{t('settings.ai.modelDefault')}</option>
+                    {#each p.models as m (m)}
+                      <option value={m}>{m}</option>
+                    {/each}
+                    <option value="__other">{t('settings.ai.modelOther')}</option>
+                  </select>
+                </label>
+                {#if manualModel[p.id] || p.models.length === 0}
+                  <label class="mini">
+                    <span>{t('settings.ai.modelName')}</span>
+                    <input
+                      class="field"
+                      type="text"
+                      maxlength={64}
+                      placeholder={t('settings.ai.modelPlaceholder')}
+                      value={modelDraft[p.id] ?? p.model ?? ''}
+                      disabled={panel.aiBusy || !p.enabled}
+                      aria-invalid={modelProblem[p.id] ? 'true' : undefined}
+                      oninput={(e) => (modelDraft = { ...modelDraft, [p.id]: e.currentTarget.value })}
+                      onchange={() => saveManualModel(p.id)}
+                      onkeydown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          saveManualModel(p.id);
+                        }
+                      }}
+                    />
+                  </label>
+                {/if}
+                {#if modelProblem[p.id]}
+                  <p class="hint bad" role="alert">{modelProblem[p.id]}</p>
+                {:else}
+                  <p class="hint">{t('settings.ai.modelHint', { name: p.displayName })}</p>
+                {/if}
               </div>
               {#if loginFor === p.id}
                 <div class="login" id="set-login-{p.id}" role="group" aria-label={t('settings.ai.loginTitle', { name: p.displayName })}>
@@ -338,6 +418,28 @@
   .mini input:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
+  }
+  .modelrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0 var(--space-1) var(--space-1);
+  }
+  .modelrow .mini {
+    gap: var(--space-2);
+  }
+  .modelrow .modelsel {
+    min-width: 12rem;
+  }
+  .modelrow .field {
+    font-size: var(--text-xs);
+    padding: 2px var(--space-2);
+    min-height: 28px;
+  }
+  .modelrow .hint {
+    flex-basis: 100%;
+    margin: 0;
   }
   .login {
     padding: var(--space-3);

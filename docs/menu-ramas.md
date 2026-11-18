@@ -48,6 +48,22 @@ no hace nada.
 | Web | **Abrir en el navegador** | Abre la página de la rama en GitHub / Azure DevOps / GitLab / Bitbucket. La URL la construye **Rust** desde la configuración real del remoto (solo `https`, host del propio remoto) | — | Que el remoto tenga página web y esté reconocido |
 | | **Crear pull request** | Abre la página de nueva PR/comparación del proveedor (es un enlace; la API de PR vive en el panel de pull requests) | — | Que el proveedor del remoto admita PR (Azure DevOps, GitHub y GHE) |
 
+## Menú contextual de un commit (historial)
+
+Clic derecho sobre una fila del historial, o `Mayús+F10` con la fila enfocada. Grupos:
+
+| Grupo | Acción | Qué hace |
+|---|---|---|
+| IA | **Generar informe de cambios (.md)…** | Pide a la IA un Markdown del commit con cuatro secciones (`## Qué cambia`, `## Riesgos y zonas sensibles`, `## Posibles bugs`, `## Qué probar`). Se **pinta en el visor**; no se escribe nada hasta pulsar «Guardar en el repositorio», que crea `informes-cambios/<sha>-informe.md` (nunca sobrescribe: si existe, `CONFLICT`). También se puede copiar al portapapeles |
+| Etiqueta | **Crear etiqueta…** | Abre la ventana de nueva etiqueta apuntando a ese commit |
+| Copiar | **Copiar el SHA** / **Copiar el asunto** | Portapapeles del sistema |
+
+El informe sale del commit **leído por Rust** (`git show`), no de lo que pinta la interfaz: se envían
+los datos del commit, el `--stat` y el diff, recortado al tope de contexto de IA (`truncated: true`
+en la respuesta cuando se recorta). Mismos filtros que el resto de la IA: archivos sensibles fuera,
+secretos redactados, consentimiento por perfil y proveedor («los datos y el diff de ese commit»),
+una generación por pestaña, cancelable, con `session-event` (`IA: informe de cambios`).
+
 ## Árbol de ramas
 
 El riel agrupa **Locales** y **Remotas** y, dentro, anida por **todos** los segmentos del nombre:

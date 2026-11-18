@@ -14,7 +14,9 @@ use std::time::Duration;
 use ariadna_process::{CancellationToken, ProcessError, ProcessSpec};
 use async_trait::async_trait;
 
-use crate::commands::{account_args, build_args, command_summary, prompt_via_stdin, version_args};
+use crate::commands::{
+    account_args, build_args, command_summary, model_args, prompt_via_stdin, version_args,
+};
 use crate::env::{provider_env, EnvOptions};
 use crate::models::{
     new_suggestion_id, now_millis, AccountInfo, AiContextPolicy, AiError, AiSuggestion,
@@ -137,6 +139,8 @@ pub struct CliProviderConfig {
     pub version_timeout: Duration,
     pub max_output_bytes: usize,
     pub env: EnvOptions,
+    /// Modelo elegido en Ajustes para este proveedor (`None` = el del CLI).
+    pub model: Option<String>,
     /// Variables fijas añadidas tras la lista blanca (ganchos de prueba).
     pub extra_env: Vec<(OsString, OsString)>,
 }
@@ -153,6 +157,7 @@ impl CliProviderConfig {
             version_timeout: VERSION_TIMEOUT,
             max_output_bytes: DEFAULT_MAX_OUTPUT,
             env: EnvOptions::default(),
+            model: None,
             extra_env: Vec::new(),
         }
     }
@@ -185,6 +190,15 @@ impl Drop for CallDir {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
+}
+
+/// Argumentos fijos del proveedor más los del modelo elegido, si hay uno.
+fn args_with_model(provider: ProviderId, model: Option<&str>) -> Vec<std::ffi::OsString> {
+    let mut args = build_args(provider);
+    if let Some(m) = model.map(str::trim).filter(|m| !m.is_empty()) {
+        args.extend(model_args(provider, m));
+    }
+    args
 }
 
 impl CliProvider {
@@ -277,7 +291,12 @@ impl CliProvider {
         }
         let resolved = self.resolve()?;
         let dir = CallDir::create(&self.cfg.sandbox_dir)?;
-        let mut spec = self.spec(&resolved, &build_args(id), &dir.0, Some(ctx))?;
+        let mut spec = self.spec(
+            &resolved,
+            &args_with_model(id, self.cfg.model.as_deref()),
+            &dir.0,
+            Some(ctx),
+        )?;
         spec = spec
             .stdin(preview.text.as_bytes().to_vec())
             .timeout(Some(self.cfg.timeout));
