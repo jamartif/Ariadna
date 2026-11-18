@@ -5,9 +5,13 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [0.1.0-alpha.9] - 2026-11-18
 
-Lo que hay encima de `v0.1.0-alpha.8`.
+Entra lo que llegó después de la alpha.8.
+
+**Respecto a `v0.1.0-alpha.8`:** el **historial muestra el grafo completo** (todas las ramas
+locales y remotas y las etiquetas, en orden topológico) con un filtro para acotar a la rama actual,
+y las **pestañas de repos** de la barra superior dejan de verse achatadas y pegadas.
 
 ### Añadido
 - **Historial con el grafo completo**: la vista por defecto recorre **todas las ramas (locales y remotas) y las etiquetas** en orden topológico (`git log --all --topo-order`), no solo la rama actual, para ver de un vistazo dónde se bifurca y dónde se fusiona cada cosa. Dos botones en la cabecera del historial —**Grafo completo** / **Rama actual**— acotan el recorrido: en repos enormes, «Rama actual» vuelve al coste de antes (y por cursor). La búsqueda sigue al ámbito elegido, y el carril del grafo admite ahora hasta 12 columnas antes de aplastar las extra.
