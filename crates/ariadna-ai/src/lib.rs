@@ -28,7 +28,7 @@ pub mod resolve;
 pub use models::{
     is_valid_model_name, suggested_models, AccountInfo, AccountState, AiContextPolicy, AiError,
     AiSettings, AiSuggestion, Availability, CommitLanguage, CommitOptions, CommitStyle,
-    ProviderChoice, ProviderId, SuggestionKind, SuggestionStatus, SummaryStyle,
+    ConflictOption, ProviderChoice, ProviderId, SuggestionKind, SuggestionStatus, SummaryStyle,
 };
 pub use orchestrator::{Limiter, Orchestrator, Profile, ProfileKind};
 pub use provider::{AiProvider, CallContext, CliProvider, CliProviderConfig};

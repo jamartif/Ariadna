@@ -5,6 +5,18 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+Lo que hay encima de `v0.1.0-alpha.7`.
+
+### Añadido
+- **Resolver los conflictos de una pull request con IA**: cuando la PR tiene conflictos, su detalle muestra **«Resolver conflictos con IA…»**. Ariadna baja las referencias, lee el merge que git calcularía (`git merge-tree`, sin tocar el árbol de trabajo) y enseña cada fichero en conflicto con sus tres versiones. Por fichero, la IA propone **hasta tres alternativas razonables** (con su motivo), se ven completas antes de elegir y nada se escribe hasta pulsar **«Aplicar y preparar merge»**, que pide confirmación nativa y deja el merge en local con los ficheros resueltos y preparados. El commit y el push los hace el usuario: la PR no se modifica sola. Errores claros para binarios y ficheros sensibles.
+
+### Corregido
+- **Ajustes › IA, fila Modelo**: el campo era inutilizable (heredaba el ancho de las casillas). Ahora la fila ocupa el ancho del panel, el desplegable abre bien y el campo de «Otro…» deja escribir, seleccionar y corregir, con foco visible y estado deshabilitado claro.
+- **Barra superior con muchos repos**: las pestañas se amontonaban y las de la derecha no se podían alcanzar. La tira tiene ahora scroll horizontal propio (rueda y rueda horizontal incluidos) con barra fina visible, sin tocar el resto de la barra.
+- **Scroll de Ajustes**: al abrir Ajustes se desplazaba la aplicación entera y el diálogo podía quedar a medias con media pantalla vacía. El scroll es solo del contenido de Ajustes (cabecera fija), con el fondo bloqueado y sin encadenar el desplazamiento.
+
 ## [0.1.0-alpha.7] - 2026-11-18
 
 Entra todo lo que llegó después de la alpha.6 (publicada el 2026-11-17 a las 22:19), más lo que

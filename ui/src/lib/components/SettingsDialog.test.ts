@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/svelte';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toasts } from '$lib/stores/toasts.svelte';
@@ -329,6 +329,16 @@ describe('Ajustes: IA con perfiles aislados, cuenta e inicio de sesión (alpha.2
     expect(within(codex).getByText('Cuenta no disponible')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: /Sesión propia para este perfil/ })).not.toBeChecked();
   });
+
+  it('mientras Ajustes está abierto la app de detrás no se puede desplazar', async () => {
+      document.body.style.overflow = '';
+      await setup();
+      expect(document.body.style.overflow).toBe('hidden');
+      expect(document.body.style.overscrollBehavior).toBe('none');
+      cleanup();
+      expect(document.body.style.overflow).toBe('');
+      expect(document.body.style.overscrollBehavior).toBe('');
+    });
 
   it('el modelo se elige de la lista del CLI o se escribe a mano, y se guarda', async () => {
     const { api } = await open();

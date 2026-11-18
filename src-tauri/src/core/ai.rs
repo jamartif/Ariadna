@@ -36,9 +36,9 @@ use serde::{Deserialize, Serialize};
 use super::api::{
     AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitReport, AiCommitSuggestion,
     AiConflictSuggestion, AiContextPreview, AiExcludeReason, AiExcludedFile, AiLoginInfo,
-    AiLoginRequest, AiPreviewFile, AiProfileInfo, AiProviderState, AiPullRequestOptions,
-    AiPullRequestSuggestion, AiSettingsPatch, AiState, ApiSessionEvent, ApiSessionEventKind,
-    AppEvent, SavedReport,
+    AiLoginRequest, AiPrConflictOptions, AiPreviewFile, AiProfileInfo, AiProviderState,
+    AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState, ApiSessionEvent,
+    ApiSessionEventKind, AppEvent, PrConflictOption, SavedReport,
 };
 use super::app::AppCore;
 use super::error::{ApiError, ApiResult};
@@ -722,7 +722,9 @@ enum PrRaw {
     },
 }
 
-/// Commits que se envían como máximo (los más recientes de la rama).
+/// Alternativas que se piden a la IA para cada conflicto de una pull request.
+const PR_CONFLICT_OPTIONS: usize = 3;
+/// Tope de commits que se envían para describir una PR.
 const PR_MAX_COMMITS: usize = 50;
 
 /// Nombre de rama o referencia aceptable como base. Lo que no pase no llega a git.
@@ -2016,6 +2018,143 @@ impl AppCore {
             command_summary: suggestion.command_summary.clone(),
             files_changed: raw.files_changed,
             truncated,
+            repo_revision: revision,
+        })
+    }
+
+    /// `ai_pr_conflict_options`: alternativas de resolución de un fichero en conflicto de una PR.
+    ///
+    /// Solo propone: no escribe nada. El merge lo prepara después `pr_apply_conflicts`, con su
+    /// propia confirmación nativa.
+    pub async fn ai_pr_conflict_options(
+        &self,
+        tab_id: &str,
+        id: u64,
+        path: String,
+    ) -> ApiResult<AiPrConflictOptions> {
+        let st = self.ai().snapshot();
+        if !st.settings.enabled {
+            return Err(ApiError::from(AiError::AiDisabled));
+        }
+        self.live(tab_id)?;
+        let run = self.ai().begin(tab_id);
+        let label = "IA: conflictos de la PR".to_owned();
+        self.ai_event(
+            tab_id,
+            ApiSessionEventKind::OperationStarted {
+                operation_id: run.op_id,
+                label: label.clone(),
+            },
+        );
+        let result = self
+            .ai_pr_conflict_options_inner(tab_id, id, &path, &run)
+            .await;
+        self.ai_event(
+            tab_id,
+            ApiSessionEventKind::OperationFinished {
+                operation_id: run.op_id,
+                label,
+                ok: result.is_ok(),
+                error: result.as_ref().err().cloned(),
+            },
+        );
+        result
+    }
+
+    async fn ai_pr_conflict_options_inner(
+        &self,
+        tab_id: &str,
+        id: u64,
+        path: &str,
+        run: &Run,
+    ) -> ApiResult<AiPrConflictOptions> {
+        let conflicts = self.pr_conflicts(tab_id, id).await?;
+        let file = conflicts
+            .files
+            .iter()
+            .find(|f| f.path == path)
+            .ok_or_else(|| {
+                ApiError::new(
+                    "CONFLICT_NOT_FOUND",
+                    "Ese fichero ya no está en conflicto en la pull request.",
+                    Some(path.to_owned()),
+                )
+            })?;
+        if file.binary {
+            return Err(ApiError::new(
+                "AI_CONFLICT_NOT_TEXT",
+                "Este conflicto es binario: la IA no puede resolverlo.",
+                Some(path.to_owned()),
+            ));
+        }
+        let input = ConflictInput {
+            path: path.to_owned(),
+            kind: "bothModified".into(),
+            ours: Some(file.ours.clone()),
+            base: Some(file.base.clone()),
+            theirs: Some(file.theirs.clone()),
+            working_tree: None,
+        };
+
+        let svc = self.ai();
+        let rule = self.rule_for_tab(tab_id);
+        let mut st = svc.snapshot_with(rule.as_ref());
+        let (session, _) = self.live(tab_id)?;
+        let revision = Self::fresh_snapshot(&session).await.revision;
+        let context_bytes = file.ours.len() + file.base.len() + file.theirs.len();
+
+        if let Plan::NeedConsent(provider) = svc.plan(&st)? {
+            self.ai_ask_consent(
+                provider,
+                st.active_profile,
+                Consent {
+                    files: &[],
+                    excluded: 0,
+                    context_bytes,
+                    purpose: Purpose::Conflict,
+                },
+                run,
+            )
+            .await?;
+            st = svc.snapshot_with(rule.as_ref());
+        }
+        if run.token.is_cancelled() {
+            return Err(AiError::Cancelled.into());
+        }
+
+        let providers: Vec<Arc<dyn AiProvider>> = ProviderId::AUTO_ORDER
+            .into_iter()
+            .map(|id| Arc::new(svc.provider(id, &st)) as Arc<dyn AiProvider>)
+            .collect();
+        let orchestrator = Orchestrator::new(providers, Arc::clone(&svc.shared.limiter));
+        let call = CallContext::new(revision.to_string()).with_cancel(run.token.clone());
+        let options = orchestrator
+            .propose_conflict_options(
+                &svc.call_profile(&st),
+                st.settings.provider,
+                &call,
+                &input,
+                PR_CONFLICT_OPTIONS,
+            )
+            .await
+            .map_err(ApiError::from)?;
+        Ok(AiPrConflictOptions {
+            path: path.to_owned(),
+            options: options
+                .into_iter()
+                .map(|o| PrConflictOption {
+                    title: o.title,
+                    content: o.content,
+                    rationale: o.rationale,
+                })
+                .collect(),
+            provider: st
+                .settings
+                .provider
+                .provider()
+                .map(|p| p.binary_name().to_owned())
+                .unwrap_or_else(|| "auto".to_owned()),
+            command_summary: format!("{path} · {PR_CONFLICT_OPTIONS} alternativa(s) pedidas"),
             repo_revision: revision,
         })
     }

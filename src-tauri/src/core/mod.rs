@@ -13,6 +13,7 @@ pub mod external;
 mod history_ops;
 pub mod menu;
 mod merge_ops;
+mod pr_conflicts;
 mod pr_ops;
 pub mod prompter;
 mod remote_ops;
@@ -28,11 +29,12 @@ pub use ai::{AiSettingsLoad, AiStore, StoredAi};
 pub use api::{
     AiAccounts, AiAccountsRequest, AiCommitOptions, AiCommitReport, AiCommitSuggestion,
     AiConflictSuggestion, AiContextPreview, AiExcludeReason, AiExcludedFile, AiLoginInfo,
-    AiLoginRequest, AiPreviewFile, AiProfileInfo, AiProviderState, AiPullRequestOptions,
-    AiPullRequestSuggestion, AiSettingsPatch, AiState, AmendDraft, ApiSessionEvent,
-    ApiSessionEventKind, ApiSnapshot, AppEvent, AppState, CloneProgressEvent, Closed, CommitResult,
-    CredentialTest, Done, EventSink, GitInfo, HunkArg, ModelPatch, NoticeEvent, OpenResult,
-    SavedReport, SnapshotEvent, TabInfo,
+    AiLoginRequest, AiPrConflictOptions, AiPreviewFile, AiProfileInfo, AiProviderState,
+    AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch, AiState, AmendDraft,
+    ApiSessionEvent, ApiSessionEventKind, ApiSnapshot, AppEvent, AppState, CloneProgressEvent,
+    Closed, CommitResult, CredentialTest, Done, EventSink, GitInfo, HunkArg, ModelPatch,
+    NoticeEvent, OpenResult, PrConflictApplied, PrConflictFile, PrConflictOption,
+    PrConflictResolution, PrConflicts, SavedReport, SnapshotEvent, TabInfo,
 };
 pub use app::{default_data_dir, locate_git, AppConfig, AppCore, CLOSE_GRACE, SOFT_TAB_LIMIT};
 pub use auth_ops::{

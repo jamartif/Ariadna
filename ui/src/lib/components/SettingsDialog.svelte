@@ -16,14 +16,29 @@
 
   let { api, tabId, onclose }: { api: Api; tabId?: string; onclose: () => void } = $props();
 
+  /** Estilos del `body` antes de abrir: se restauran al cerrar. */
+  let previousOverflow = '';
+  let previousOverscroll = '';
+
   // svelte-ignore state_referenced_locally
   const panel = new SettingsPanel(api, tabId);
   const ICONS: Record<SettingsSection, IconName> = { general: 'sliders', git: 'git-branch', ai: 'sparkles', accounts: 'key', about: 'info' };
 
   onMount(() => {
     void panel.load();
+    // El scroll es SOLO del panel de Ajustes: mientras está abierto, la app de detrás no se mueve.
+    const body = document.body;
+    previousOverflow = body.style.overflow;
+    previousOverscroll = body.style.overscrollBehavior;
+    body.style.overflow = 'hidden';
+    body.style.overscrollBehavior = 'none';
   });
-  onDestroy(() => panel.dispose());
+  onDestroy(() => {
+    panel.dispose();
+    const body = document.body;
+    body.style.overflow = previousOverflow;
+    body.style.overscrollBehavior = previousOverscroll;
+  });
 
   const section = $derived(settingsUi.section);
 
@@ -171,20 +186,23 @@
     inset: 0;
     z-index: 90;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
-    padding: 6vh var(--space-4) var(--space-4);
+    padding: var(--space-4);
     background: var(--bg-overlay);
     backdrop-filter: blur(3px);
     animation: fade-in var(--dur) var(--ease);
-    overflow: auto;
+    /* Nada de scroll fuera del diálogo: el panel de la sección es el único que se desplaza. */
+    overflow: hidden;
+    overscroll-behavior: none;
   }
   .dialog {
     display: flex;
     flex-direction: column;
     width: min(820px, 100%);
     /* Altura estable: el diálogo no «salta» al cambiar entre secciones de distinto largo. */
-    height: min(640px, 88vh);
+    height: min(640px, 92vh);
+    max-height: 92vh;
     border-radius: 16px;
     overflow: hidden;
   }

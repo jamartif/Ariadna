@@ -20,12 +20,13 @@ use crate::core::menu::{app_menu, effect_of, Effect, Entry, Role};
 use crate::core::{
     default_data_dir, locate_git, validate_external_url, AiAccounts, AiAccountsRequest,
     AiCommitOptions, AiCommitReport, AiCommitSuggestion, AiConflictSuggestion, AiContextPreview,
-    AiLoginInfo, AiLoginRequest, AiPullRequestOptions, AiPullRequestSuggestion, AiSettingsPatch,
-    AiState, AmendDraft, ApiError, ApiSnapshot, AppConfig, AppCore, AppEvent, AppState,
-    AuthOptions, CliStatus, CloneAuthArg, CloneMethod, Closed, CommitResult, ConflictResolution,
-    ContinueResult, CredentialTest, DeviceLoginPoll, DeviceLoginStart, Done, EventSink, GitDetect,
-    GitIdentity, HunkArg, MergeStartResult, MergeState, OpenResult, Prompter, PushBranchResult,
-    RebaseOutcome, RemoteView, SavedReport, Settings, SettingsView, WebTarget,
+    AiLoginInfo, AiLoginRequest, AiPrConflictOptions, AiPullRequestOptions,
+    AiPullRequestSuggestion, AiSettingsPatch, AiState, AmendDraft, ApiError, ApiSnapshot,
+    AppConfig, AppCore, AppEvent, AppState, AuthOptions, CliStatus, CloneAuthArg, CloneMethod,
+    Closed, CommitResult, ConflictResolution, ContinueResult, CredentialTest, DeviceLoginPoll,
+    DeviceLoginStart, Done, EventSink, GitDetect, GitIdentity, HunkArg, MergeStartResult,
+    MergeState, OpenResult, PrConflictApplied, PrConflictResolution, PrConflicts, Prompter,
+    PushBranchResult, RebaseOutcome, RemoteView, SavedReport, Settings, SettingsView, WebTarget,
 };
 
 use crate::core::{CommentInput, PrAction, PrCheckout, PrDiff, PrSupport};
@@ -646,6 +647,34 @@ fn save_commit_report(
     core.save_commit_report(&tab_id, file_name, markdown)
 }
 
+/// Conflictos de una PR, con sus tres versiones (solo lectura).
+#[tauri::command]
+async fn pr_conflicts(core: State<'_, AppCore>, tab_id: String, id: u64) -> Cmd<PrConflicts> {
+    core.pr_conflicts(&tab_id, id).await
+}
+
+/// Alternativas de resolución de un fichero en conflicto (solo propone).
+#[tauri::command]
+async fn ai_pr_conflict_options(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    id: u64,
+    path: String,
+) -> Cmd<AiPrConflictOptions> {
+    core.ai_pr_conflict_options(&tab_id, id, path).await
+}
+
+/// Deja la PR preparada en local con las resoluciones elegidas (confirmación nativa).
+#[tauri::command]
+async fn pr_apply_conflicts(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    id: u64,
+    resolutions: Vec<PrConflictResolution>,
+) -> Cmd<PrConflictApplied> {
+    core.pr_apply_conflicts(&tab_id, id, resolutions).await
+}
+
 // --- comandos de pestaña ------------------------------------------------------------------
 
 #[tauri::command]
@@ -1181,6 +1210,9 @@ pub fn run() {
             ai_generate_pull_request,
             ai_commit_report,
             save_commit_report,
+            pr_conflicts,
+            ai_pr_conflict_options,
+            pr_apply_conflicts,
             ai_resolve_conflict,
             get_snapshot,
             refresh,

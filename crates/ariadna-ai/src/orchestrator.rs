@@ -19,7 +19,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::env::shares_login_between_profiles;
 use crate::models::{
-    AiError, AiSuggestion, Availability, CommitOptions, ProviderChoice, ProviderId,
+    AiError, AiSuggestion, Availability, CommitOptions, ConflictOption, ProviderChoice, ProviderId,
     SuggestionStatus, SummaryStyle, DEFAULT_MAX_CONTEXT_BYTES,
 };
 use crate::prompt::{ConflictInput, PullRequestInput};
@@ -402,6 +402,56 @@ impl Orchestrator {
     ) -> Result<AiSuggestion, AiError> {
         self.perform(profile, choice, ctx, &Action::Conflict(conflict))
             .await
+    }
+
+    /// Alternativas de resolución de un conflicto (1..=`max`), con el mismo reparto de
+    /// proveedor y la misma cola que el resto de llamadas. Solo propone: no escribe nada.
+    pub async fn propose_conflict_options(
+        &self,
+        profile: &Profile,
+        choice: ProviderChoice,
+        ctx: &CallContext,
+        conflict: &ConflictInput,
+        max: usize,
+    ) -> Result<Vec<ConflictOption>, AiError> {
+        if !self.enabled.load(Ordering::Relaxed) {
+            return Err(AiError::AiDisabled);
+        }
+        let candidates = self.candidates(profile, choice)?;
+        let auto = choice == ProviderChoice::Auto;
+        let mut hints: Vec<String> = Vec::new();
+        for id in candidates {
+            let Some(provider) = self.providers.get(&id) else {
+                let e = AiError::NotInstalled {
+                    provider: id,
+                    hint: "Proveedor no registrado.".into(),
+                };
+                if auto {
+                    hints.push(e.to_string());
+                    continue;
+                }
+                return Err(e);
+            };
+            let mut call_ctx = ctx.clone();
+            call_ctx.config_dir = profile.config_dirs.get(&id).cloned();
+            call_ctx.max_context_bytes = Some(profile.max_context_bytes);
+            let permit = self.limiter.acquire(&ctx.cancel).await?;
+            let result = provider
+                .propose_conflict_options(&call_ctx, conflict, max)
+                .await;
+            drop(permit);
+            match result {
+                Ok(o) => return Ok(o),
+                Err(AiError::NotInstalled { provider, hint }) if auto => {
+                    hints.push(format!("{}: {hint}", provider.display_name()));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(AiError::NotInstalled {
+            provider: ProviderId::Claude,
+            hint: format!("Ningún proveedor disponible. {}", hints.join(" ")),
+        })
     }
 
     /// El usuario aceptó. Solo cambia el estado en memoria; no llama a git.

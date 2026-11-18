@@ -178,8 +178,32 @@ describe('TabStrip', () => {
   });
 
   it('el clic con botón central cierra', async () => {
-    const p = setup([repo('a'), repo('b')], 'a');
-    await fireEvent(screen.getAllByRole('tab')[1] as HTMLElement, new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true }));
-    expect(p.onclose).toHaveBeenCalledWith('b');
+      const p = setup([repo('a'), repo('b')], 'a');
+      await fireEvent(screen.getAllByRole('tab')[1] as HTMLElement, new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true }));
+      expect(p.onclose).toHaveBeenCalledWith('b');
+    });
+
+    it('con muchas pestañas la rueda desplaza la tira para llegar a las de la derecha', async () => {
+      const many = Array.from({ length: 30 }, (_, i) => repo(`t${i}`));
+      setup(many, 't0');
+      const scroller = screen.getByTestId('tabs-scroller');
+      // jsdom no mide: se simula que la tira desborda y que el desplazamiento es escribible.
+      let left = 0;
+      Object.defineProperty(scroller, 'scrollWidth', { configurable: true, value: 3000 });
+      Object.defineProperty(scroller, 'clientWidth', { configurable: true, value: 800 });
+      Object.defineProperty(scroller, 'scrollLeft', {
+        configurable: true,
+        get: () => left,
+        set: (v: number) => {
+          left = v;
+        }
+      });
+
+      await fireEvent(scroller, new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }));
+      expect(left).toBe(120);
+
+      // La rueda horizontal también sirve, y sumar no se queda a cero.
+      await fireEvent(scroller, new WheelEvent('wheel', { deltaX: 60, bubbles: true, cancelable: true }));
+      expect(left).toBe(180);
+    });
   });
-});

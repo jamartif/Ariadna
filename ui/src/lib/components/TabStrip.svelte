@@ -260,10 +260,31 @@
       onclose(id);
     }
   }
+
+  /**
+   * Con muchos repos abiertos las pestañas no caben: la rueda (y el desplazamiento horizontal)
+   * mueve la tira, para que las de la derecha sean alcanzables sin scroll del sistema.
+   */
+  function onWheel(e: WheelEvent) {
+    const el = scroller;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+    if (delta === 0) return;
+    e.preventDefault();
+    el.scrollLeft += delta;
+  }
 </script>
 
 <div class="strip" data-tauri-drag-region>
-  <div class="scroller" role="tablist" aria-label={t('tabs.list')} aria-orientation="horizontal" bind:this={scroller}>
+  <div
+    class="scroller"
+    role="tablist"
+    aria-label={t('tabs.list')}
+    aria-orientation="horizontal"
+    data-testid="tabs-scroller"
+    bind:this={scroller}
+    onwheel={onWheel}
+  >
     {#each entries as entry (entry.id)}
       {@const isActive = entry.id === activeId}
       <div
@@ -388,10 +409,20 @@
     height: 100%;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-width: none;
+    /* Barra fina y visible: es la pista de que hay más pestañas a la derecha. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-field) transparent;
+    overscroll-behavior-x: contain;
   }
   .scroller::-webkit-scrollbar {
-    display: none;
+    height: 4px;
+  }
+  .scroller::-webkit-scrollbar-thumb {
+    background: var(--border-field);
+    border-radius: 2px;
+  }
+  .scroller::-webkit-scrollbar-track {
+    background: transparent;
   }
   /* Con ancho fijado a mano, la pestaña deja de encogerse sola. */
   .tab.fixed {

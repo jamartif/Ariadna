@@ -413,6 +413,76 @@ pub struct SavedReport {
     pub bytes: usize,
 }
 
+/// Un fichero en conflicto en una pull request, con sus tres versiones.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrConflictFile {
+    pub path: String,
+    /// Versión del lado destino (la base de la PR).
+    pub ours: String,
+    /// Versión del lado de la PR.
+    pub theirs: String,
+    /// Ancestro común (`merge-base`).
+    pub base: String,
+    /// `true` si alguna de las dos versiones es binaria: la IA no lo intenta.
+    pub binary: bool,
+}
+
+/// Ficheros en conflicto de una PR (solo lectura).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrConflicts {
+    pub number: u64,
+    pub base: String,
+    pub head: String,
+    pub base_sha: String,
+    pub head_sha: String,
+    pub files: Vec<PrConflictFile>,
+    /// Había más ficheros en conflicto de los que se devuelven.
+    pub truncated: bool,
+    /// «repo (rama x)», para los textos.
+    pub tab: String,
+}
+
+/// Una alternativa de resolución propuesta por la IA.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrConflictOption {
+    pub title: String,
+    pub content: String,
+    pub rationale: Option<String>,
+}
+
+/// Alternativas de resolución de un fichero en conflicto (solo propuesta).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiPrConflictOptions {
+    pub path: String,
+    pub options: Vec<PrConflictOption>,
+    pub provider: String,
+    pub command_summary: String,
+    pub repo_revision: u64,
+}
+
+/// Resolución elegida por el usuario para un fichero.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrConflictResolution {
+    pub path: String,
+    pub content: String,
+}
+
+/// Resultado de dejar la PR preparada en local.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrConflictApplied {
+    pub done: bool,
+    pub branch: String,
+    pub files: Vec<String>,
+    /// `true` = el merge está en curso con los ficheros resueltos y preparados.
+    pub merge_ready: bool,
+}
+
 /// Opciones de `ai_generate_commit_message`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]

@@ -330,18 +330,18 @@ fn find_template(root: &Path, provider: Provider) -> Option<String> {
 }
 
 /// Lo necesario para una operación de PR de una pestaña.
-struct PrCtx {
-    provider: Arc<dyn PullRequestProvider>,
-    info: RemoteInfo,
+pub(crate) struct PrCtx {
+    pub(crate) provider: Arc<dyn PullRequestProvider>,
+    pub(crate) info: RemoteInfo,
     /// Nombre del remoto del que se bajan las referencias de la PR (`origin` casi siempre).
-    remote_name: String,
+    pub(crate) remote_name: String,
     /// «repo (rama x)» de la pestaña, para los diálogos.
-    tab_label: String,
-    repo_path: String,
+    pub(crate) tab_label: String,
+    pub(crate) repo_path: String,
 }
 
 impl PrCtx {
-    fn where_(&self) -> String {
+    pub(crate) fn where_(&self) -> String {
         format!(
             "{} — {} ({})",
             self.tab_label,
@@ -373,7 +373,7 @@ impl AppCore {
         ))
     }
 
-    async fn pr_ctx(&self, tab_id: &str) -> ApiResult<PrCtx> {
+    pub(crate) async fn pr_ctx(&self, tab_id: &str) -> ApiResult<PrCtx> {
         let (remote, tab_label, repo_path) = self.pr_remote(tab_id).await?;
         let Some(remote) = remote else {
             return Err(ApiError::new(

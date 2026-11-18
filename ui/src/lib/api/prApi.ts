@@ -1,9 +1,13 @@
 import type {
+  AiPrConflictOptions,
   NewPullRequest,
   PrAction,
   PrCheckout,
   PrCommentInput,
   PrCompleteOptions,
+  PrConflictApplied,
+  PrConflictResolution,
+  PrConflicts,
   PrDiff,
   PrFilter,
   PrReviewThread,
@@ -47,5 +51,21 @@ export interface PullRequestApi {
   completePullRequest(tabId: string, id: number, options: PrCompleteOptions): Promise<PrAction>;
   /** PR-08. Abandona (Azure DevOps) o cierra (GitHub), con confirmación nativa. */
   abandonPullRequest(tabId: string, id: number): Promise<PrAction>;
-  reopenPullRequest(tabId: string, id: number): Promise<PrAction>;
-}
+    reopenPullRequest(tabId: string, id: number): Promise<PrAction>;
+    /**
+     * Ficheros en conflicto de la PR con sus tres versiones. Solo lectura: `git fetch` + `git
+     * merge-tree`, sin tocar el árbol de trabajo.
+     */
+    prConflicts(tabId: string, id: number): Promise<PrConflicts>;
+    /** Alternativas de resolución de un fichero en conflicto (la IA solo propone). */
+    aiPrConflictOptions(tabId: string, id: number, path: string): Promise<AiPrConflictOptions>;
+    /**
+     * Deja la PR preparada en local (checkout de la rama, merge de la base y ficheros resueltos
+     * escritos y preparados) tras la confirmación nativa. No hace commit ni push.
+     */
+    prApplyConflicts(
+      tabId: string,
+      id: number,
+      resolutions: PrConflictResolution[]
+    ): Promise<PrConflictApplied>;
+  }

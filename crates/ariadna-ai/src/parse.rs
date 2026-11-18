@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 use regex::Regex;
 use serde_json::Value;
 
-use crate::models::{AccountInfo, AccountState, AiError, ProviderId};
+use crate::models::{AccountInfo, AccountState, AiError, ConflictOption, ProviderId};
 
 /// Mensaje fijo de [`AiError::BadOutput`] cuando el formato no es el esperado.
 pub const UNRECOGNIZED: &str = "formato no reconocido";
@@ -551,6 +551,52 @@ pub fn parse_conflict_proposal(raw: &str) -> (String, Option<String>) {
     }
 }
 
+/// Alternativas de resolución de un conflicto.
+///
+/// Acepta el formato con `---OPTION---` (título + `---FILE---` + `---RATIONALE---` repetido) y,
+/// si el modelo responde con el formato de una sola propuesta (`---FILE---` sin `---OPTION---`),
+/// lo devuelve como una única opción. Nunca devuelve más de `max`; descarta las vacías.
+pub fn parse_conflict_options(raw: &str, max: usize) -> Vec<ConflictOption> {
+    let text = strip_fences(raw);
+    let mut out = Vec::new();
+    let chunks: Vec<&str> = if text.contains("---OPTION---") {
+        text.split("---OPTION---").skip(1).collect()
+    } else {
+        vec![text.as_str()]
+    };
+    for chunk in chunks {
+        let (content, rationale) = parse_conflict_proposal(chunk);
+        let content = content.trim_start_matches(['\r', '\n']).to_string();
+        if content.trim().is_empty() {
+            continue;
+        }
+        let first = chunk
+            .lines()
+            .map(str::trim)
+            .find(|l| !l.is_empty())
+            .unwrap_or("");
+        let title = if first.is_empty() || first.starts_with("---") {
+            format!("Opción {}", out.len() + 1)
+        } else {
+            first
+                .trim_start_matches([':', '-'])
+                .trim()
+                .chars()
+                .take(80)
+                .collect()
+        };
+        out.push(ConflictOption {
+            title,
+            content,
+            rationale,
+        });
+        if out.len() >= max.max(1) {
+            break;
+        }
+    }
+    out
+}
+
 /// Campo de texto del estado de cuenta: sin caracteres de control y acotado.
 fn account_field(v: &Value, key: &str) -> Option<String> {
     let s: String = v
@@ -596,6 +642,28 @@ pub fn parse_claude_auth_status(stdout: &str) -> AccountInfo {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parsea_alternativas_de_conflicto() {
+        let raw = "---OPTION---\nQuedarse con las dos\n---FILE---\nhola\nhello\n---RATIONALE---\nCaben juntas\n---OPTION---\nQuedarse con la PR\n---FILE---\nhello\n---RATIONALE---\nEs más nueva\n";
+        let opts = parse_conflict_options(raw, 3);
+        assert_eq!(opts.len(), 2);
+        assert_eq!(opts[0].title, "Quedarse con las dos");
+        assert_eq!(opts[0].content, "hola\nhello\n");
+        assert_eq!(opts[0].rationale.as_deref(), Some("Caben juntas"));
+        assert_eq!(opts[1].title, "Quedarse con la PR");
+        assert_eq!(opts[1].content, "hello\n");
+
+        // Sin `---OPTION---` se acepta el formato de una sola propuesta.
+        let single = parse_conflict_options("---FILE---\nuno\n---RATIONALE---\nporque sí\n", 3);
+        assert_eq!(single.len(), 1);
+        assert_eq!(single[0].content, "uno\n");
+        assert!(single[0].title.starts_with("Opción"));
+
+        // `max` recorta y las vacías se descartan.
+        assert_eq!(parse_conflict_options(raw, 1).len(), 1);
+        assert!(parse_conflict_options("---OPTION---\nvacía\n---FILE---\n\n", 3).is_empty());
+    }
 
     const CLAUDE_OK: &str = include_str!("../tests/fixtures/claude_ok.json");
     const CLAUDE_LOGIN: &str = include_str!("../tests/fixtures/claude_login_error.json");

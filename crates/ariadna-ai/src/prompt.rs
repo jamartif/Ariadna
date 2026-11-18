@@ -412,6 +412,48 @@ AI, and output only the Markdown report.";
         assemble(task, d)
     }
 
+    /// Resolución de un conflicto con **alternativas**: hasta `max` opciones razonables, cada
+    /// una con título, archivo completo y motivo. Falla si el fichero es sensible (no se envía).
+    pub fn resolve_conflict_options(
+        c: &ConflictInput,
+        max: usize,
+    ) -> Result<PromptPreview, AiError> {
+        if is_sensitive_path(&c.path) {
+            return Err(AiError::SensitiveFile(c.path.clone()));
+        }
+        let max = max.clamp(1, 3);
+        let task = format!(
+            "Resolve the Git merge conflict described in the untrusted data below, in Spanish. \
+If there are several reasonable resolutions (for example: keep both sides, keep ours, keep \
+theirs, or merge them by hand), offer up to {max} of them, best first. \
+Output only this shape, repeated once per option and nothing else:\n\
+---OPTION---\n<title: short, in Spanish>\n---FILE---\n<full resolved file contents>\n\
+---RATIONALE---\n<why this option, one short paragraph, in Spanish>\n\
+\nRules:\n- Each file contents must be the complete file, without conflict markers.\n\
+- Change only the conflicting regions; keep every other line as in the side you keep.\n\
+- At least one option is mandatory.\n- A human will review the result before anything is written."
+        );
+        let mut d = Data::default();
+        d.section("PATH", &c.path, false);
+        d.section("KIND", &c.kind, false);
+        d.section(
+            "OURS",
+            c.ours.as_deref().unwrap_or("(our side is missing)"),
+            false,
+        );
+        d.section(
+            "BASE",
+            c.base.as_deref().unwrap_or("(no common ancestor)"),
+            false,
+        );
+        d.section(
+            "THEIRS",
+            c.theirs.as_deref().unwrap_or("(incoming side is missing)"),
+            false,
+        );
+        Ok(assemble(&task, d))
+    }
+
     /// Resolución de un conflicto. Falla si el fichero es sensible (no se envía).
     pub fn resolve_conflict(c: &ConflictInput) -> Result<PromptPreview, AiError> {
         if is_sensitive_path(&c.path) {
@@ -457,7 +499,9 @@ fn normalize_eol(s: &str) -> String {
     s.replace("\r\n", "\n")
 }
 
-fn has_conflict_markers(text: &str) -> bool {
+/// `true` si el texto conserva marcadores de conflicto (lo usa el proveedor para rechazar una
+/// propuesta que no vale).
+pub fn has_conflict_markers(text: &str) -> bool {
     text.lines().any(|l| {
         l.starts_with("<<<<<<< ")
             || l == "<<<<<<<"
