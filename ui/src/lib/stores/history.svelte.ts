@@ -1,4 +1,4 @@
-import { toApiError, type ApiError, type Commit, type FileDiff } from '$lib/api/types';
+import { toApiError, type ApiError, type Commit, type FileDiff, type LogScope } from '$lib/api/types';
 import { emptyGraphState, layoutGraph, maxWidth, type GraphRow, type GraphState } from '$lib/util/graph';
 import { Frontier } from '$lib/util/cursor';
 import type { TabState } from './tab.svelte';
@@ -16,6 +16,8 @@ export class HistoryController {
   rows = $state.raw<GraphRow[]>([]);
   graphWidth = $state(1);
   query = $state('');
+  /** Ámbito del historial: `all` (grafo completo, por defecto) o `current` (solo HEAD). */
+  scope = $state<LogScope>('all');
   loading = $state(false);
   loadingMore = $state(false);
   hasMore = $state(true);
@@ -55,7 +57,7 @@ export class HistoryController {
     this.error = null;
     this.graph = emptyGraphState();
     try {
-      const page = await this.tab.api.logPage(this.tab.id, 0, this.pageSize, this.searching ? this.query.trim() : null);
+      const page = await this.tab.api.logPage(this.tab.id, 0, this.pageSize, this.searching ? this.query.trim() : null, null, this.scope);
       if (mine !== this.gen) return;
       this.commits = page;
       this.frontier.reset();
@@ -84,14 +86,15 @@ export class HistoryController {
       const searching = this.searching;
       const query = searching ? this.query.trim() : null;
       // Sin búsqueda se continúa desde la frontera del historial cargado (sin `--skip`: el coste
-      // no crece con la profundidad). Con búsqueda, o sin frontera utilizable, se pagina por `skip`.
-      const useCursor = !searching && this.frontier.usable;
-      let page = await this.tab.api.logPage(this.tab.id, this.commits.length, this.pageSize, query, useCursor ? this.frontier.list() : null);
+      // no crece con la profundidad). Con búsqueda, con el grafo completo (varias puntas) o sin
+      // frontera utilizable, se pagina por `skip`.
+      const useCursor = !searching && this.scope === 'current' && this.frontier.usable;
+      let page = await this.tab.api.logPage(this.tab.id, this.commits.length, this.pageSize, query, useCursor ? this.frontier.list() : null, this.scope);
       if (mine !== this.gen) return;
       let fresh = page.filter((c) => !this.frontier.has(c.sha));
       if (useCursor && fresh.length === 0 && page.length > 0) {
         // Una página de puros repetidos (fechas iguales): el cursor no avanzaría; por `skip` sí.
-        page = await this.tab.api.logPage(this.tab.id, this.commits.length, this.pageSize, query, null);
+        page = await this.tab.api.logPage(this.tab.id, this.commits.length, this.pageSize, query, null, this.scope);
         if (mine !== this.gen) return;
         fresh = page.filter((c) => !this.frontier.has(c.sha));
       }
@@ -129,6 +132,13 @@ export class HistoryController {
     this.query = q;
     if (this.searchTimer) clearTimeout(this.searchTimer);
     this.searchTimer = setTimeout(() => void this.reload(), 150);
+  }
+
+  /** Cambia el ámbito del historial (`all` = grafo completo) y recarga desde cero. */
+  setScope(scope: LogScope): void {
+    if (this.scope === scope) return;
+    this.scope = scope;
+    void this.reload();
   }
 
   /** Recarga si el repo cambió desde la última carga (nuevo commit, checkout, merge…). */

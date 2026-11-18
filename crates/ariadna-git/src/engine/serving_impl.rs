@@ -162,6 +162,24 @@ impl GitServing for GitCliEngine {
     ) -> GitResult<Vec<Commit>> {
         self.search_log(repo, query, limit).await
     }
+
+    async fn log_all_page(
+        &self,
+        repo: &Repository,
+        skip: usize,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        self.log_page_all(repo, skip, limit).await
+    }
+
+    async fn search_all_log(
+        &self,
+        repo: &Repository,
+        query: &str,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        self.search_log_all(repo, query, limit).await
+    }
     async fn diff(
         &self,
         repo: &Repository,

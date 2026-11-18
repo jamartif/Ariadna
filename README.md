@@ -45,8 +45,11 @@ the real service, it says "not verified" here:
   appear on both sides and deleted/added blocks are aligned. The choice is remembered.
 - **Stash**: save (with or without untracked files), list, view the diff, apply, pop and drop
   with confirmation; conflicts on apply land in the Conflicts panel.
-- **History** paginated **by cursor** (constant cost even on 100,000-commit repos), with a
-  graph, local filter, global search (message, author, hash) and per-commit diff. Right-click a
+- **History**: by default the **full graph** — every local and remote branch plus tags, in
+  topological order, so you can see where things fork and merge at a glance — with two buttons
+  (**Full graph** / **Current branch**) to narrow it down on huge repos. Paginated **by cursor**
+  in *Current branch* (constant cost even on 100,000-commit repos), with local filter, global
+  search (message, author, hash) and per-commit diff. Right-click a
   commit (or `Shift+F10`) for **Create tag…**, copy SHA/subject and **Generate change report
   (.md)**: the AI drafts a Markdown report for that commit — what changes functionally, risks and
   sensitive areas, possible bugs, and what to test — shown in a viewer and saved to

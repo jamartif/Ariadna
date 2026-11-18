@@ -133,6 +133,27 @@ pub trait GitServing: Send + Sync {
         query: &str,
         limit: usize,
     ) -> GitResult<Vec<Commit>>;
+
+    /// Página del historial de **todo** el repositorio: todas las ramas (locales y remotas) y las
+    /// etiquetas. Por defecto delega en `log_page` para no obligar a los dobles de prueba a
+    /// implementarlo; el motor real añade `--all --topo-order`.
+    async fn log_all_page(
+        &self,
+        repo: &Repository,
+        skip: usize,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        self.log_page(repo, skip, limit).await
+    }
+    /// Búsqueda en todo el repositorio (no solo en HEAD). Por defecto, la de `search_log`.
+    async fn search_all_log(
+        &self,
+        repo: &Repository,
+        query: &str,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        self.search_log(repo, query, limit).await
+    }
     async fn diff(
         &self,
         repo: &Repository,

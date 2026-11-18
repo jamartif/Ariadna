@@ -837,12 +837,16 @@ async fn log_page(
     limit: usize,
     query: Option<String>,
     cursor: Option<Vec<String>>,
+    scope: Option<String>,
 ) -> Cmd<Vec<Commit>> {
     // Con cursor (y sin búsqueda) se recorre desde la frontera: sin `--skip`, coste constante.
+    // El grafo completo (`all`) no usa cursor: pagina por `skip`, que es lo que git permite con
+    // `--all` sin recalcular fronteras de varias puntas.
     let searching = query.as_deref().is_some_and(|q| !q.trim().is_empty());
+    let all = scope.as_deref().map(str::trim).is_some_and(|s| s == "all");
     match cursor {
-        Some(cursor) if !searching => core.log_after(&tab_id, cursor, limit).await,
-        _ => core.log_page(&tab_id, skip, limit, query).await,
+        Some(cursor) if !searching && !all => core.log_after(&tab_id, cursor, limit).await,
+        _ => core.log_page(&tab_id, skip, limit, query, scope).await,
     }
 }
 

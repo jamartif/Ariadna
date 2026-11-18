@@ -31,6 +31,7 @@ import type {
   DeviceLoginStart,
   DiffHunk,
   DiffScope,
+  LogScope,
   DoneResult,
   FileDiff,
   StashApplyResult,
@@ -135,7 +136,14 @@ export interface Api extends PullRequestApi, TagApi {
    * desde ahí sin `--skip`: mismo orden, coste constante en repos grandes. El cursor se ignora con
    * `query`. Una página puede traer commits ya cargados (fechas iguales); el cliente los descarta.
    */
-  logPage(tabId: string, skip: number, limit: number, query: string | null, cursor?: string[] | null): Promise<Commit[]>;
+  logPage(
+    tabId: string,
+    skip: number,
+    limit: number,
+    query: string | null,
+    cursor?: string[] | null,
+    scope?: LogScope
+  ): Promise<Commit[]>;
   createBranch(tabId: string, name: string, startPoint: string | null): Promise<void>;
   renameBranch(tabId: string, oldName: string, newName: string): Promise<void>;
   checkout(tabId: string, reference: string): Promise<DoneResult>;

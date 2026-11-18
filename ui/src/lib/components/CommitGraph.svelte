@@ -5,13 +5,15 @@
   let { row, columns, height, merge = false }: { row: GraphRow; columns: number; height: number; merge?: boolean } = $props();
 
   const LANE_W = 14;
+  /** Carriles que se dibujan antes de aplastar los extra en la última columna. */
+  const MAX_LANES = 12;
   const PALETTE = ['--accent', '--success', '--warning', '--info', '--danger', '--tok-keyword'];
   const x = (lane: number) => 9 + lane * LANE_W;
   const color = (lane: number) => `var(${PALETTE[lane % PALETTE.length]})`;
-  const width = $derived(Math.min(columns, 8) * LANE_W + 6);
+  const width = $derived(Math.min(columns, MAX_LANES) * LANE_W + 6);
   const mid = $derived(height / 2);
-  // Con más de 8 carriles las columnas extra se aplastan en la última.
-  const cl = (lane: number) => Math.min(lane, 7);
+  // Con más de MAX_LANES carriles las columnas extra se aplastan en la última.
+  const cl = (lane: number) => Math.min(lane, MAX_LANES - 1);
 </script>
 
 <svg class="graph" {width} {height} viewBox="0 0 {width} {height}" aria-hidden="true" focusable="false">

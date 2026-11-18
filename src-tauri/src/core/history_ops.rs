@@ -11,22 +11,41 @@ pub const MAX_PAGE: usize = 500;
 
 impl AppCore {
     /// Una página del historial: `limit` commits tras saltar `skip`. Con `query` busca en todo el
-    /// historial de HEAD (mensaje, autor o hash) y pagina el resultado.
+    /// historial (mensaje, autor o hash) y pagina el resultado. `scope` decide el recorrido:
+    /// `current` (historial de HEAD, por defecto si falta) o `all` (todas las ramas, remotas y
+    /// etiquetas, en orden topológico: el grafo completo).
     pub async fn log_page(
         &self,
         tab_id: &str,
         skip: usize,
         limit: usize,
         query: Option<String>,
+        scope: Option<String>,
     ) -> ApiResult<Vec<Commit>> {
         let limit = limit.clamp(1, MAX_PAGE);
+        let all = match scope.as_deref().map(str::trim) {
+            Some("all") => true,
+            Some("") | None | Some("current") => false,
+            Some(other) => {
+                return Err(ApiError::new(
+                    "INVALID_REFERENCE",
+                    "Ámbito del historial desconocido: usa «current» o «all».",
+                    Some(other.to_owned()),
+                ))
+            }
+        };
         self.read_op(tab_id, "historial", move |e, r| {
             Box::pin(async move {
                 match query.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
                     Some(q) => {
-                        let all = e.search_log(&r, q, skip.saturating_add(limit)).await?;
-                        Ok(all.into_iter().skip(skip).collect())
+                        let all_commits = if all {
+                            e.search_all_log(&r, q, skip.saturating_add(limit)).await?
+                        } else {
+                            e.search_log(&r, q, skip.saturating_add(limit)).await?
+                        };
+                        Ok(all_commits.into_iter().skip(skip).collect())
                     }
+                    None if all => e.log_all_page(&r, skip, limit).await,
                     None => e.log_page(&r, skip, limit).await,
                 }
             })

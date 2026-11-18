@@ -82,6 +82,29 @@
     {#if h.loading}<span class="spin" title={t('history.loading')}><Icon name="loader" size={14} spin /></span>{/if}
   </div>
 
+  <div class="scope" role="group" aria-label={t('history.scope')}>
+    <button
+      type="button"
+      class="btn btn-sm"
+      aria-pressed={h.scope === 'all'}
+      data-testid="history-scope-all"
+      onclick={() => h.setScope('all')}
+      title={t('history.scopeAllHint')}
+    >
+      <Icon name="git-branch" size={13} />{t('history.scopeAll')}
+    </button>
+    <button
+      type="button"
+      class="btn btn-sm"
+      aria-pressed={h.scope === 'current'}
+      data-testid="history-scope-current"
+      onclick={() => h.setScope('current')}
+      title={t('history.scopeCurrentHint')}
+    >
+      <Icon name="history" size={13} />{t('history.scopeCurrent')}
+    </button>
+  </div>
+
   {#if h.error}
     <div class="pad">
       <Banner kind="error" title={t('history.errorTitle')} message={h.error.message} detail={h.error.detail}>
@@ -212,6 +235,19 @@
   .search .field {
     flex: 1;
     min-width: 0;
+  }
+  /* Ámbito del historial: grafo completo (por defecto) o solo la rama actual. */
+  .scope {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3) var(--space-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .scope .btn[aria-pressed='true'] {
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    color: var(--accent);
   }
   .spin {
     display: inline-flex;
