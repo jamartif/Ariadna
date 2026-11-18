@@ -591,13 +591,37 @@ impl GitCliEngine {
         skip: usize,
         limit: usize,
     ) -> GitResult<Vec<Commit>> {
-        if !self.has_head(repo).await? {
+        self.log_page_scoped(repo, skip, limit, false).await
+    }
+
+    /// Página del historial de **todo** el repositorio: todas las ramas (locales y remotas) y
+    /// las etiquetas, en orden topológico para que el grafo se lea de un vistazo.
+    pub async fn log_page_all(
+        &self,
+        repo: &Repository,
+        skip: usize,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        self.log_page_scoped(repo, skip, limit, true).await
+    }
+
+    async fn log_page_scoped(
+        &self,
+        repo: &Repository,
+        skip: usize,
+        limit: usize,
+        all: bool,
+    ) -> GitResult<Vec<Commit>> {
+        if !self.has_head(repo).await? && !all {
             return Ok(Vec::new());
         }
         let capped = limit.clamp(1, MAX_LOG);
         let mut args = os(&["log", "-n"]);
         args.push(OsString::from(capped.to_string()));
         args.push(OsString::from(format!("--skip={}", skip.min(10_000_000))));
+        if all {
+            args.extend(os(&["--all", "--topo-order"]));
+        }
         args.extend(os(&["--no-color", "--no-show-signature", LOG_FORMAT]));
         let out = self.read(repo, &args).await?;
         Ok(parse_commit_log(&out.stdout))
@@ -612,20 +636,48 @@ impl GitCliEngine {
         query: &str,
         limit: usize,
     ) -> GitResult<Vec<Commit>> {
+        self.search_log_scoped(repo, query, limit, false).await
+    }
+
+    /// Igual que [`Self::search_log`] pero en **todo** el repositorio (`--all`): busca también en
+    /// commits de otras ramas y etiquetas, que es lo que se ve en el grafo completo.
+    pub async fn search_log_all(
+        &self,
+        repo: &Repository,
+        query: &str,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        self.search_log_scoped(repo, query, limit, true).await
+    }
+
+    async fn search_log_scoped(
+        &self,
+        repo: &Repository,
+        query: &str,
+        limit: usize,
+        all: bool,
+    ) -> GitResult<Vec<Commit>> {
         let needle = query.trim();
         if needle.is_empty() {
-            return self.log(repo, limit).await;
+            return if all {
+                self.log_page_all(repo, 0, limit).await
+            } else {
+                self.log(repo, limit).await
+            };
         }
         if needle.contains('\0') || needle.contains('\n') {
             return Err(GitError::InvalidReference(needle.to_owned()));
         }
-        if !self.has_head(repo).await? {
+        if !self.has_head(repo).await? && !all {
             return Ok(Vec::new());
         }
         let capped = limit.clamp(1, MAX_LOG);
         let stamp_args = |filter: String| {
             let mut a = os(&["log", "-n"]);
             a.push(OsString::from(capped.to_string()));
+            if all {
+                a.extend(os(&["--all", "--topo-order"]));
+            }
             a.extend(os(&[
                 "--no-color",
                 "--no-show-signature",
@@ -651,7 +703,12 @@ impl GitCliEngine {
             let out = self.read_raw(repo, &a).await?;
             if out.success() {
                 for (sha, time) in parse_stamps(&out.stdout) {
-                    // Solo cuenta si está en el historial de HEAD (incluido HEAD).
+                    // Con el grafo completo vale cualquier commit; en la rama actual, solo los
+                    // que están en el historial de HEAD.
+                    if all {
+                        candidates.push((sha, time));
+                        continue;
+                    }
                     let anc = os(&["merge-base", "--is-ancestor", &sha, "HEAD"]);
                     if self.read_raw(repo, &anc).await?.success() {
                         candidates.push((sha, time));

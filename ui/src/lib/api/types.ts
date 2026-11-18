@@ -106,6 +106,12 @@ export type MergeResult =
 
 export type IntegrationState = 'none' | 'merging' | 'rebasing' | 'cherryPicking';
 
+/**
+ * Ámbito del historial: `current` recorre solo el historial de HEAD; `all` recorre todo el
+ * repositorio (ramas locales y remotas y etiquetas) en orden topológico: el grafo completo.
+ */
+export type LogScope = 'current' | 'all';
+
 export type DiffScope =
   | 'unstaged'
   | 'staged'

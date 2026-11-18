@@ -48,7 +48,7 @@ async fn crear_y_listar_etiquetas_ligeras_y_anotadas() {
     assert_eq!(list.len(), 2);
     assert!(list.iter().any(|t| t.name == "v1" && !t.annotated));
     // El commit del historial lleva la etiqueta en sus refs.
-    let page = env.core.log_page(&id, 0, 10, None).await.unwrap();
+    let page = env.core.log_page(&id, 0, 10, None, None).await.unwrap();
     assert!(
         page[0].refs.iter().any(|r| r == "tag: v1"),
         "{:?}",
@@ -197,10 +197,10 @@ async fn log_after_por_el_nucleo_continua_donde_acabo_la_pagina() {
         env.git(&repo, &["commit", "-q", "-m", &format!("c{i}")]);
     }
     let id = env.open(&repo).await;
-    let p1 = env.core.log_page(&id, 0, 5, None).await.unwrap();
+    let p1 = env.core.log_page(&id, 0, 5, None, None).await.unwrap();
     let cursor = ariadna_git::history_cursor(&p1);
     let p2 = env.core.log_after(&id, cursor, 5).await.unwrap();
-    assert_eq!(p2, env.core.log_page(&id, 5, 5, None).await.unwrap());
+    assert_eq!(p2, env.core.log_page(&id, 5, 5, None, None).await.unwrap());
     // Entradas no válidas no llegan a git.
     let e = env
         .core

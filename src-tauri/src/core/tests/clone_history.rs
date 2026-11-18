@@ -244,11 +244,11 @@ async fn log_page_pagina_sin_solapes_y_filtra_por_texto() {
         env.git(&repo, &["commit", "-q", "-m", &format!("paso {i}")]);
     }
     let id = env.open(&repo).await;
-    let all = env.core.log_page(&id, 0, 100, None).await.unwrap();
+    let all = env.core.log_page(&id, 0, 100, None, None).await.unwrap();
     assert_eq!(all.len(), 10);
-    let p1 = env.core.log_page(&id, 0, 4, None).await.unwrap();
-    let p2 = env.core.log_page(&id, 4, 4, None).await.unwrap();
-    let p3 = env.core.log_page(&id, 8, 4, None).await.unwrap();
+    let p1 = env.core.log_page(&id, 0, 4, None, None).await.unwrap();
+    let p2 = env.core.log_page(&id, 4, 4, None, None).await.unwrap();
+    let p3 = env.core.log_page(&id, 8, 4, None, None).await.unwrap();
     assert_eq!((p1.len(), p2.len(), p3.len()), (4, 4, 2));
     let joined: Vec<_> = p1
         .iter()
@@ -262,20 +262,20 @@ async fn log_page_pagina_sin_solapes_y_filtra_por_texto() {
     );
     assert!(env
         .core
-        .log_page(&id, 10, 4, None)
+        .log_page(&id, 10, 4, None, None)
         .await
         .unwrap()
         .is_empty());
     // Búsqueda paginada.
     let hit = env
         .core
-        .log_page(&id, 0, 3, Some("paso".into()))
+        .log_page(&id, 0, 3, Some("paso".into()), None)
         .await
         .unwrap();
     assert_eq!(hit.len(), 3);
     let rest = env
         .core
-        .log_page(&id, 3, 20, Some("paso".into()))
+        .log_page(&id, 3, 20, Some("paso".into()), None)
         .await
         .unwrap();
     assert_eq!(rest.len(), 6);
@@ -292,7 +292,7 @@ async fn log_page_pagina_sin_solapes_y_filtra_por_texto() {
     let vid = env.open(&vacio).await;
     assert!(env
         .core
-        .log_page(&vid, 0, 10, None)
+        .log_page(&vid, 0, 10, None, None)
         .await
         .unwrap()
         .is_empty());
@@ -308,7 +308,12 @@ async fn el_diff_de_un_commit_da_sus_archivos() {
     env.git(&repo, &["add", "-A"]);
     env.git(&repo, &["commit", "-q", "-m", "dos archivos"]);
     let id = env.open(&repo).await;
-    let head = env.core.log_page(&id, 0, 1, None).await.unwrap().remove(0);
+    let head = env
+        .core
+        .log_page(&id, 0, 1, None, None)
+        .await
+        .unwrap()
+        .remove(0);
     let files = env
         .core
         .diff(&id, DiffScope::Commit(head.sha.clone()), vec![])
@@ -316,7 +321,12 @@ async fn el_diff_de_un_commit_da_sus_archivos() {
         .unwrap();
     assert_eq!(files.len(), 2);
     // Un commit raíz también funciona.
-    let root = env.core.log_page(&id, 1, 1, None).await.unwrap().remove(0);
+    let root = env
+        .core
+        .log_page(&id, 1, 1, None, None)
+        .await
+        .unwrap()
+        .remove(0);
     let files = env
         .core
         .diff(&id, DiffScope::Commit(root.sha), vec![])

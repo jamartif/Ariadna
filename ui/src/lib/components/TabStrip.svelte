@@ -396,7 +396,7 @@
   .strip {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 8px;
     min-width: 0;
     flex: 0 1 auto;
     align-self: stretch;
@@ -404,9 +404,12 @@
   .scroller {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 6px;
     min-width: 0;
     height: 100%;
+    /* Aire arriba y abajo (la etiqueta no toca el borde) y a los lados (no se recortan las
+       esquinas redondeadas ni el anillo de foco al desplazar la tira). */
+    padding: 5px 3px;
     overflow-x: auto;
     overflow-y: hidden;
     /* Barra fina y visible: es la pista de que hay más pestañas a la derecha. */
@@ -471,9 +474,10 @@
     flex: 0 1 auto;
     min-width: 112px;
     max-width: 264px;
-    height: 30px;
+    /* 28 + el aire del carril (5+5) deja la pestaña centrada sin tocar los bordes. */
+    height: 28px;
     border: 1px solid transparent;
-    border-radius: var(--radius-md);
+    border-radius: 9px;
     color: var(--text-muted);
     transition:
       background-color var(--dur-fast) var(--ease),

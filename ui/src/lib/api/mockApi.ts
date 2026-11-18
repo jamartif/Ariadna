@@ -468,6 +468,8 @@ export type MockApi = Api & {
   __aiLogins: () => AiLoginInfo[];
   /** Solo pruebas: informes de cambios guardados, en orden. */
   __reports: () => { path: string; markdown: string }[];
+  /** Solo pruebas: ámbito pedido en cada `logPage`, en orden. */
+  __logScopes: () => string[];
   /** Solo pruebas: etiquetas publicadas en remotos (`remoto/nombre`), ordenadas. */
   __publishedTags: (tabId: string) => string[];
   /** Simula un elemento del menú nativo (`menu-action`). */
@@ -511,6 +513,8 @@ export function createMockApi(options: MockOptions = {}): MockApi {
   const aiLogins: AiLoginInfo[] = [];
   /** Informes de cambios guardados (solo pruebas). */
   const mockReports: { path: string; markdown: string }[] = [];
+  /** Ámbito pedido en cada `logPage` (solo pruebas). */
+  const logScopes: string[] = [];
   const withIsolation = (st: AiState): AiState => {
     const on = isolationPref[st.profile.kind];
     return { ...st, profile: { ...st.profile, isolated: on }, providers: st.providers.map((p) => ({ ...p, isolated: on && !p.sharesLogin })) };
@@ -1471,9 +1475,10 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       const q = query?.toLowerCase();
       return clone(r.commits.filter((c) => !q || c.subject.toLowerCase().includes(q)).slice(0, limit));
     },
-    async logPage(tabId, skip, limit, query) {
+    async logPage(tabId, skip, limit, query, cursor, scope) {
       await delay();
       const r = repoOf(tabId);
+      logScopes.push(scope ?? 'current');
       const q = query?.trim().toLowerCase();
       const list = r.commits.filter(
         (c) => !q || c.subject.toLowerCase().includes(q) || c.authorName.toLowerCase().includes(q) || c.sha.startsWith(q)
@@ -2268,6 +2273,8 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     },
     /** Solo pruebas: informes guardados, en orden. */
     __reports: () => [...mockReports],
+    /** Solo pruebas: ámbito pedido en cada `logPage`, en orden. */
+    __logScopes: () => [...logScopes],
     /** Solo pruebas: inicios de sesión pedidos, en orden. */
     __aiLogins: () => [...aiLogins],
     // Etiquetas: viven en los `refs` de los commits simulados (se ven también en el historial).

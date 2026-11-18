@@ -98,6 +98,26 @@ describe('Historial', () => {
     expect(screen.getByText(/100\+? commits cargados/)).toBeInTheDocument();
   });
 
+  it('por defecto pide el grafo completo y se puede acotar a la rama actual', async () => {
+    const { tab, api } = await setup();
+    const list = await screen.findByRole('listbox', { name: 'Lista de commits' });
+    await waitFor(() => expect(within(list).getAllByRole('option').length).toBeGreaterThan(2));
+
+    const scopes = (api as unknown as { __logScopes: () => string[] }).__logScopes();
+    expect(scopes.length).toBeGreaterThan(0);
+    expect(new Set(scopes)).toEqual(new Set(['all']));
+    expect(screen.getByTestId('history-scope-all')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('history-scope-current')).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(screen.getByTestId('history-scope-current'));
+    await waitFor(() => {
+      const after = (api as unknown as { __logScopes: () => string[] }).__logScopes();
+      expect(after.at(-1)).toBe('current');
+    });
+    expect(screen.getByTestId('history-scope-current')).toHaveAttribute('aria-pressed', 'true');
+    expect(historyOf(tab).scope).toBe('current');
+  });
+
   it('un repo sin commits muestra el estado vacío', async () => {
     const { tab, api } = await loadedTab('tab-ariadna');
     api.logPage = async () => [];

@@ -29,7 +29,10 @@ async function controllerWith(history: Commit[], page: number, serve?: (skip: nu
     return history.slice(skip, skip + limit);
   });
   vi.spyOn(tab.api, 'diff').mockResolvedValue([]);
-  return { tab, calls, h: new HistoryController(tab, page) };
+  // El cursor solo se usa en el ámbito «rama actual»; el grafo completo pagina por `skip`.
+  const h = new HistoryController(tab, page);
+  h.scope = 'current';
+  return { tab, calls, h };
 }
 
 describe('HistoryController: paginación por cursor', () => {
