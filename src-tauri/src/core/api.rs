@@ -426,6 +426,9 @@ pub struct PrConflictFile {
     pub base: String,
     /// `true` si alguna de las dos versiones es binaria: la IA no lo intenta.
     pub binary: bool,
+    /// `true` si alguna versión se ha recortado para mandarla a la IA. Un fichero recortado **no
+    /// se puede resolver con IA**: se aplicaría un texto incompleto encima del fichero real.
+    pub truncated: bool,
 }
 
 /// Ficheros en conflicto de una PR (solo lectura).

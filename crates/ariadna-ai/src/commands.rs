@@ -255,6 +255,7 @@ pub fn command_summary(provider: ProviderId, prompt_bytes: usize) -> String {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::models::is_valid_model_name;
 
     fn strs(p: ProviderId) -> Vec<String> {
         build_args(p)
@@ -304,11 +305,25 @@ mod tests {
 
     #[test]
     fn sin_modelo_configurado_no_se_añade_nada() {
-        // El modelo es opcional: sin él, los argumentos son exactamente los verificados.
-        assert_eq!(
-            build_args(ProviderId::Claude),
-            build_args(ProviderId::Claude)
-        );
+        // El modelo es opcional: `model_args` se llama solo si hay modelo, y sin él los
+        // argumentos son exactamente los verificados (ninguno de los tres CLIs lleva modelo).
+        for p in ProviderId::AUTO_ORDER {
+            let base = strs(p);
+            assert!(!base.iter().any(|a| a == "--model" || a == "-m"), "{p:?}");
+            // Y con modelo, el valor va en su propio argumento, nunca pegado a un guion.
+            let with = model_args(p, "sonnet");
+            assert_eq!(with.len(), 2, "{p:?}");
+            assert_eq!(with[1].to_string_lossy(), "sonnet");
+        }
+    }
+
+    #[test]
+    fn un_nombre_que_empieza_por_guion_no_es_un_modelo() {
+        // Inyección de flags: si colara, el CLI lo leería como una opción suya.
+        assert!(!is_valid_model_name("--dangerously-skip-permissions"));
+        assert!(!is_valid_model_name("-p"));
+        assert!(is_valid_model_name("gpt-5-codex"));
+        assert!(is_valid_model_name("us.anthropic.claude-sonnet-4:1"));
     }
 
     #[test]

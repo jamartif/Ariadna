@@ -10,7 +10,8 @@ use super::GitCliEngine;
 use crate::error::GitResult;
 use crate::models::{
     Branch, Commit, ConflictFile, DiffHunk, DiffScope, FileDiff, GitPath, GitStatus,
-    IntegrationState, MergeFastForward, MergeResult, Remote, RemoteCheckout, Repository,
+    IntegrationState, MergeFastForward, MergeResult, MergeTreeScan, Remote, RemoteCheckout,
+    Repository,
 };
 use crate::serving::{Confirmation, GitServing};
 use crate::stash::{StashApplyResult, StashEntry, StashPushOptions};
@@ -317,6 +318,37 @@ impl GitServing for GitCliEngine {
     }
     async fn fetch(&self, repo: &Repository, remote: &str) -> GitResult<()> {
         self.fetch(repo, remote).await
+    }
+
+    async fn fetch_to_ref(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        source: &str,
+        target: &str,
+    ) -> GitResult<String> {
+        self.fetch_to_ref(repo, remote, source, target).await
+    }
+
+    async fn merge_tree(
+        &self,
+        repo: &Repository,
+        base: &str,
+        head: &str,
+    ) -> GitResult<MergeTreeScan> {
+        self.merge_tree(repo, base, head).await
+    }
+
+    async fn unmerged_paths(&self, repo: &Repository) -> GitResult<Vec<String>> {
+        self.unmerged_paths(repo).await
+    }
+
+    async fn file_at(&self, repo: &Repository, rev: &str, path: &str) -> GitResult<String> {
+        self.file_at(repo, rev, path).await
+    }
+
+    async fn merge_base(&self, repo: &Repository, a: &str, b: &str) -> GitResult<Option<String>> {
+        self.merge_base(repo, a, b).await
     }
     async fn fetch_into_branch(
         &self,

@@ -692,6 +692,45 @@ fn clamp_patch(patch: &str, max_bytes: usize) -> (String, bool) {
     )
 }
 
+/// Quita del diff los ficheros sensibles (mismos criterios que `classify`) y dice cuántos eran.
+///
+/// El informe de cambios mandaba el diff entero, así que un `.env` o una clave acababan en el
+/// CLI de la IA.
+fn drop_sensitive_chunks(patch: &str) -> (String, usize) {
+    let mut out = String::new();
+    let mut excluded = 0;
+    for (i, chunk) in patch.split("diff --git ").enumerate() {
+        if i == 0 {
+            // Cabecera previa al primer fichero (o el texto del mensaje, si lo hay).
+            out.push_str(chunk);
+            continue;
+        }
+        let head = chunk.lines().next().unwrap_or("");
+        let path = head.split(" b/").nth(1).unwrap_or(head).trim().to_owned();
+        if is_sensitive_path(&path) {
+            excluded += 1;
+            continue;
+        }
+        out.push_str("diff --git ");
+        out.push_str(chunk);
+    }
+    (out, excluded)
+}
+
+/// Nombres de dispositivo de Windows: `CON.md` no se puede crear en Windows.
+fn is_reserved_windows_name(name: &str) -> bool {
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or(name)
+        .trim()
+        .to_ascii_uppercase();
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.as_bytes()[3].is_ascii_digit())
+}
+
 /// Archivos que verá el diálogo de consentimiento: uno por bloque del diff recortado.
 fn report_files(clamped: &str) -> Vec<AiPreviewFile> {
     clamped
@@ -1948,7 +1987,9 @@ impl AppCore {
             return Err(AiError::Cancelled.into());
         }
 
-        let (patch, truncated) = clamp_patch(&raw.patch, max_bytes);
+        // Mismos criterios de exclusión que el resto de la IA: un `.env` no se manda nunca.
+        let (raw_patch, excluded_count) = drop_sensitive_chunks(&raw.patch);
+        let (patch, truncated) = clamp_patch(&raw_patch, max_bytes);
         let files = report_files(&patch);
         let details = format!(
             "{}\nAutor: {}\nFecha: {}\nCambios: {}",
@@ -1979,7 +2020,7 @@ impl AppCore {
                 st.active_profile,
                 Consent {
                     files: &gathered.files,
-                    excluded: 0,
+                    excluded: excluded_count,
                     context_bytes: gathered.prompt.context_bytes,
                     purpose: Purpose::ChangeReport,
                 },
@@ -2087,6 +2128,18 @@ impl AppCore {
                 Some(path.to_owned()),
             ));
         }
+        // Recortado = incompleto: la IA devolvería una versión corta y se escribiría encima del
+        // fichero real. Mismos filtros que el resto de la IA, y aquí también el de sensibles.
+        if file.truncated {
+            return Err(ApiError::new(
+                "AI_CONFLICT_TOO_BIG",
+                "Este fichero es demasiado grande para resolverlo con IA sin recortarlo: elige una versión entera o resuélvelo a mano.",
+                Some(path.to_owned()),
+            ));
+        }
+        if is_sensitive_path(path) {
+            return Err(ApiError::from(AiError::SensitiveFile(path.to_owned())));
+        }
         let input = ConflictInput {
             path: path.to_owned(),
             kind: "bothModified".into(),
@@ -2104,11 +2157,17 @@ impl AppCore {
         let context_bytes = file.ours.len() + file.base.len() + file.theirs.len();
 
         if let Plan::NeedConsent(provider) = svc.plan(&st)? {
+            // Consentimiento con el fichero real: antes iba vacío y no había forma de saber qué
+            // se enviaba.
+            let files = [AiPreviewFile {
+                path: ariadna_git::GitPath::new(path.as_bytes().to_vec()),
+                bytes: context_bytes,
+            }];
             self.ai_ask_consent(
                 provider,
                 st.active_profile,
                 Consent {
-                    files: &[],
+                    files: &files,
                     excluded: 0,
                     context_bytes,
                     purpose: Purpose::Conflict,
@@ -2228,6 +2287,12 @@ impl AppCore {
                         "--no-color",
                         "--no-show-signature",
                         "--no-ext-diff",
+                        // Sin filtros `textconv` del repo: pueden ejecutar comandos externos.
+                        "--no-textconv",
+                        // Un merge no muestra diff por defecto; con `-m --first-parent` se ve el
+                        // cambio real respecto a la primera rama, que es lo que interesa.
+                        "-m",
+                        "--first-parent",
                         "--unified=3",
                         &sha,
                     ],
@@ -2269,13 +2334,14 @@ impl AppCore {
             && !name.contains('/')
             && !name.contains('\\')
             && !name.contains("..")
+            && !is_reserved_windows_name(&name)
             && name
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ' '));
         if !valid {
             return Err(ApiError::new(
                 "INVALID_REFERENCE",
-                "El nombre del informe solo admite letras, números, guion, guion bajo, punto y espacios, y tiene que acabar en .md",
+                "El nombre del informe solo admite letras, números, guion, guion bajo, punto y espacios, tiene que acabar en .md y no puede ser un nombre reservado de Windows (CON, PRN, AUX, NUL, COM1…)",
                 Some(file_name),
             ));
         }
@@ -2287,18 +2353,42 @@ impl AppCore {
             ));
         }
         let (_, meta) = self.live(tab_id)?;
-        let dir = PathBuf::from(&meta.path).join(REPORT_DIR);
-        let path = dir.join(&name);
-        if path.exists() {
-            return Err(ApiError::new(
-                "CONFLICT",
-                "Ya existe un informe con ese nombre. Cambia el nombre para no sobrescribirlo.",
-                Some(path.to_string_lossy().into_owned()),
-            ));
+        let root = PathBuf::from(&meta.path);
+        let dir = root.join(REPORT_DIR);
+        // `informes-cambios` no puede ser un enlace que saque la escritura fuera del repositorio.
+        if let Ok(md) = std::fs::symlink_metadata(&dir) {
+            if md.file_type().is_symlink() {
+                return Err(ApiError::new(
+                    "INVALID_REFERENCE",
+                    format!(
+                        "{REPORT_DIR} es un enlace simbólico: no se escribe fuera del repositorio."
+                    ),
+                    Some(dir.to_string_lossy().into_owned()),
+                ));
+            }
         }
+        let path = dir.join(&name);
         std::fs::create_dir_all(&dir)
             .map_err(|e| ApiError::io(format!("no se pudo crear {REPORT_DIR}: {e}")))?;
-        std::fs::write(&path, markdown.as_bytes())
+        // `create_new` en una sola operación: comprobar y escribir en dos pasos deja una carrera
+        // en la que otro proceso podría crear el fichero entre medias.
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    ApiError::new(
+                        "CONFLICT",
+                        "Ya existe un informe con ese nombre. Cambia el nombre para no sobrescribirlo.",
+                        Some(path.to_string_lossy().into_owned()),
+                    )
+                } else {
+                    ApiError::io(format!("no se pudo escribir el informe: {e}"))
+                }
+            })?;
+        use std::io::Write;
+        file.write_all(markdown.as_bytes())
             .map_err(|e| ApiError::io(format!("no se pudo escribir el informe: {e}")))?;
         Ok(SavedReport {
             path: path.to_string_lossy().into_owned(),

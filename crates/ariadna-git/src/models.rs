@@ -410,6 +410,16 @@ pub enum MergeResult {
     Conflicts { paths: Vec<GitPath> },
 }
 
+/// Resultado de `git merge-tree --write-tree`: qué árbol saldría y qué rutas chocan.
+///
+/// `tree` es el árbol fusionado (lo escribe `merge-tree` sin tocar índice ni árbol de trabajo) y
+/// `conflicts` las rutas en conflicto, vacío si el merge sería limpio.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MergeTreeScan {
+    pub tree: Option<String>,
+    pub conflicts: Vec<String>,
+}
+
 /// Operación de integración en curso.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

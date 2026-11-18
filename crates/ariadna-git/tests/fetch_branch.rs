@@ -82,6 +82,17 @@ async fn no_fuerza_si_la_rama_divergio() {
 }
 
 #[tokio::test]
+async fn estar_al_dia_no_es_un_error() {
+    // El remoto no tiene nada nuevo: antes se devolvía `BranchNotFastForward` (falso).
+    let (_origen, otro) = remoto_y_clon();
+    let repo = otro.engine.open_repository(otro.path()).await.unwrap();
+    otro.engine
+        .fetch_into_branch(&repo, "origin", "main")
+        .await
+        .expect("una rama al día no es un rechazo");
+}
+
+#[tokio::test]
 async fn avisa_si_la_rama_es_la_activa() {
     let (_origen, otro) = remoto_y_clon();
     let repo = otro.engine.open_repository(otro.path()).await.unwrap();

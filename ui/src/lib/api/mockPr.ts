@@ -483,7 +483,8 @@ export function createMockPullRequests(deps: MockPrDeps): PullRequestApi {
                 ours: MSG_OURS,
                 theirs: MSG_THEIRS,
                 base: MSG_BASE,
-                binary: false
+                binary: false,
+                truncated: false,
               }
             ]
           };
