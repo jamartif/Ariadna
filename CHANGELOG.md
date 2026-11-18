@@ -5,9 +5,18 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [0.1.0-alpha.7] - 2026-11-18
 
-Lo que hay encima de `v0.1.0-alpha.3`.
+Entra todo lo que llegó después de la alpha.6 (publicada el 2026-11-17 a las 22:19), más lo que
+ya venía en la alpha.4, la alpha.5 y la alpha.6 y no estaba en la alpha.3.
+
+**Respecto a `v0.1.0-alpha.6`:**
+- Se retira el experimento de SDD: fuera la carpeta `specs/` y todo lo que solo existía por él;
+  la documentación viva que había dentro pasa a `docs/`.
+- README reescrito en inglés y sin ninguna referencia a Swift, con el estado real verificado y la
+  tabla de documentos de `docs/`; la descripción del repositorio en GitHub también se actualizó.
+- Modelo de IA por proveedor en Ajustes › IA.
+- Informe de cambios `.md` desde el menú contextual de un commit del historial.
 
 ### Añadido
 - **Modelo de IA por proveedor**: Ajustes › IA permite elegir el **modelo**, no solo el proveedor. Ninguno de los tres CLI publica una lista de modelos (su `--help` solo documenta `--model`/`-m`), así que el desplegable trae los alias que cada CLI documenta (`sonnet`, `opus`, `haiku`, `fable` en Claude; `auto` en Copilot; ninguno en Codex) más **«Otro…»**, que abre un campo de texto con validación básica (letras, números y `- _ . : /`, máximo 64; si no, `INVALID_MODEL`). Se guarda en los ajustes y se aplica a todas las llamadas: `--model` en Claude y Copilot, `-m` en Codex. Vacío = el modelo por defecto del CLI.
@@ -144,6 +153,6 @@ Primera versión alfa de la reescritura en Rust + Tauri 2 + Svelte (multiplatafo
   de texto.
 - La barra lateral abre el panel de Ramas y la IA devuelve siempre una descripción.
 
-[Sin publicar]: https://github.com/jamartif/Ariadna/compare/v0.1.0-alpha.3...HEAD
+[0.1.0-alpha.7]: https://github.com/jamartif/Ariadna/compare/v0.1.0-alpha.6...v0.1.0-alpha.7
 [0.1.0-alpha.2]: https://github.com/jamartif/Ariadna/compare/v0.1.0-alpha.1...408b0fb
 [0.1.0-alpha.1]: https://github.com/jamartif/Ariadna/commit/1ecdd35
