@@ -74,9 +74,7 @@ impl AppCore {
         let Some(head) = rev_parse(&runner, &cwd, &head_sha).await else {
             return Err(ApiError::new(
                 "NOT_FOUND",
-                format!(
-                    "No encuentro la rama de la pull request en local. Baja la PR («Bajar la PR») y vuelve a intentarlo."
-                ),
+                "No encuentro la rama de la pull request en local. Baja la PR («Bajar la PR») y vuelve a intentarlo.",
                 Some(summary.source_branch.clone()),
             ));
         };
