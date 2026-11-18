@@ -410,35 +410,51 @@
     color: var(--text-muted);
     cursor: pointer;
   }
-  .mini input {
+  .mini input[type='checkbox'] {
     accent-color: var(--accent);
     width: 15px;
     height: 15px;
   }
-  .mini input:focus-visible {
+  .mini input[type='checkbox']:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
   .modelrow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
+    display: grid;
     gap: var(--space-2);
-    padding: 0 var(--space-1) var(--space-1);
+    padding: 0 var(--space-1) var(--space-2);
+    grid-template-columns: minmax(0, 1fr);
   }
   .modelrow .mini {
-    gap: var(--space-2);
+    display: grid;
+    gap: var(--space-1);
+    cursor: default;
+    width: 100%;
+  }
+  .modelrow .mini > span {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+  }
+  /* Los campos de esta fila son los de siempre: ancho completo y alto de control. */
+  .modelrow .field,
+  .modelrow .modelsel {
+    width: 100%;
+    min-width: 0;
+    height: var(--control-h);
+    min-height: var(--control-h);
+    padding: 0 var(--space-3);
+    font-size: var(--text-sm);
+    cursor: text;
   }
   .modelrow .modelsel {
-    min-width: 12rem;
+    cursor: pointer;
   }
-  .modelrow .field {
-    font-size: var(--text-xs);
-    padding: 2px var(--space-2);
-    min-height: 28px;
+  .modelrow .field:disabled,
+  .modelrow .modelsel:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
   .modelrow .hint {
-    flex-basis: 100%;
     margin: 0;
   }
   .login {

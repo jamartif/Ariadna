@@ -392,6 +392,18 @@ impl AiContextPolicy {
     }
 }
 
+/// Una alternativa de resolución de un conflicto (puede haber varias razonables).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConflictOption {
+    /// Título corto para elegir en la interfaz.
+    pub title: String,
+    /// Contenido completo del archivo resuelto (sin marcadores).
+    pub content: String,
+    /// Por qué esta opción; puede faltar.
+    pub rationale: Option<String>,
+}
+
 /// Ajustes globales de IA (persistidos como JSON).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]

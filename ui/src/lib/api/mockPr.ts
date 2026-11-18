@@ -7,6 +7,9 @@
 import { makeHunk } from './mockData';
 import type { PullRequestApi } from './prApi';
 import type {
+  AiPrConflictOptions,
+  PrConflictApplied,
+  PrConflicts,
   NewPullRequest,
   PrAction,
   PrCapabilities,
@@ -24,6 +27,14 @@ import type {
   PullRequestSummary
 } from './prTypes';
 import { ApiError, type ApiErrorCode, type FileDiff, type RemoteProviderId } from './types';
+
+/** Resoluciones aplicadas en el mock (`[]` al empezar): lo usa el test del diálogo. */
+export const mockAppliedConflicts: { id: number; files: string[] }[] = [];
+
+/** Contenidos de las tres versiones del conflicto simulado. */
+const MSG_OURS = "export const GREETING = 'hola';\n";
+const MSG_THEIRS = "export const GREETING = 'hello';\nexport const LOCALE = 'en';\n";
+const MSG_BASE = "export const GREETING = 'hola';\n";
 
 export interface MockPrDeps {
   scenario?: string;
@@ -444,11 +455,66 @@ export function createMockPullRequests(deps: MockPrDeps): PullRequestApi {
     },
 
     async reopenPullRequest(tabId, id): Promise<PrAction> {
-      const s = await store(tabId);
-      const d = find(s, id).detail;
-      if (d.state === 'completed') throw err('POLICY', 'Una pull request completada no se puede reabrir.');
-      d.state = 'active';
-      return { done: true, detail: clone(d) };
-    }
+          const s = await store(tabId);
+          const d = find(s, id).detail;
+          if (d.state === 'completed') throw err('POLICY', 'Una pull request completada no se puede reabrir.');
+          d.state = 'active';
+          return { done: true, detail: clone(d) };
+        },
+
+        async prConflicts(tabId, id): Promise<PrConflicts> {
+          const s = await store(tabId);
+          const d = find(s, id).detail;
+          await deps.delay();
+          if (d.mergeStatus !== 'conflicts') {
+            return { number: d.id, base: d.targetBranch, head: d.sourceBranch, baseSha: 'base000', headSha: 'head000', files: [], truncated: false, tab: d.targetBranch };
+          }
+          return {
+            number: d.id,
+            base: d.targetBranch,
+            head: d.sourceBranch,
+            baseSha: 'base000',
+            headSha: 'head000',
+            truncated: false,
+            tab: d.targetBranch,
+            files: [
+              {
+                path: 'ui/src/lib/api/types.ts',
+                ours: MSG_OURS,
+                theirs: MSG_THEIRS,
+                base: MSG_BASE,
+                binary: false
+              }
+            ]
+          };
+        },
+
+        async aiPrConflictOptions(tabId, id, path): Promise<AiPrConflictOptions> {
+          await store(tabId);
+          await deps.delay();
+          if (deps.scenario === 'ai-quota') throw err('AI_QUOTA', 'El proveedor ha alcanzado su límite de uso.');
+          if (deps.scenario === 'ai-disabled') throw err('AI_DISABLED', 'La IA está desactivada en los ajustes de Ariadna.');
+          return {
+            path,
+            options: [
+              { title: 'Quedarse con las dos versiones', content: `${MSG_OURS}${MSG_THEIRS}`, rationale: 'Los dos cambios caben juntos: uno añade el tipo y el otro el campo.' },
+              { title: 'Quedarse con la versión de la PR', content: MSG_THEIRS, rationale: 'La PR es más reciente y ya incluye lo de la base.' }
+            ],
+            provider: 'claude',
+            commandSummary: 'claude --model sonnet (stdin)',
+            repoRevision: 1
+          };
+        },
+
+        async prApplyConflicts(tabId, id, resolutions): Promise<PrConflictApplied> {
+          const s = await store(tabId);
+          const d = find(s, id).detail;
+          await deps.delay();
+          if (resolutions.length === 0) throw err('INVALID_REFERENCE', 'No hay ninguna resolución que aplicar.');
+          const ok = deps.confirm(`Se bajará la rama «${d.sourceBranch}», se fusionará la base y se escribirán ${resolutions.length} fichero(s) resueltos. No se hace commit ni se sube nada.`);
+          if (!ok) return { done: false, branch: d.sourceBranch, files: [], mergeReady: false };
+          mockAppliedConflicts.push({ id, files: resolutions.map((r) => r.path) });
+          return { done: true, branch: d.sourceBranch, files: resolutions.map((r) => r.path), mergeReady: true };
+        }
   };
 }

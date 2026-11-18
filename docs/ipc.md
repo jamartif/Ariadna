@@ -289,6 +289,9 @@ La IA **solo propone**: nunca hace commit ni toca el repo. La UI **nunca** lee e
 | `ai_resolve_conflict` | `tabId, path: GitPath` | `AiConflictSuggestion { path: GitPath, content: string, rationale: string \| null, provider: string, commandSummary: string, repoRevision: number }`: el archivo **completo** resuelto, sin escribir nada |
 | `ai_commit_report` | `tabId, sha: string` | `AiCommitReport { markdown, sha, subject, provider, commandSummary, filesChanged, truncated, repoRevision }`: informe de cambios de ese commit (solo propuesta; no escribe nada) |
 | `save_commit_report` | `tabId, fileName: string, markdown: string` | `SavedReport { path, bytes }`: escribe `<repo>/informes-cambios/<fileName>` (nombre validado, nunca sobrescribe → `CONFLICT`) |
+| `pr_conflicts` | `tabId, id: number` | `PrConflicts { number, base, head, baseSha, headSha, files: PrConflictFile[], truncated, tab }` con `PrConflictFile { path, ours, theirs, base, binary }`: `git fetch` + `git merge-tree`, sin tocar el árbol de trabajo |
+| `ai_pr_conflict_options` | `tabId, id: number, path: string` | `AiPrConflictOptions { path, options: PrConflictOption[], provider, commandSummary, repoRevision }` con `PrConflictOption { title, content, rationale }`: hasta 3 alternativas, solo propuesta |
+| `pr_apply_conflicts` | `tabId, id: number, resolutions: [{ path, content }]` | `PrConflictApplied { done, branch, files, mergeReady }`: **confirmación nativa**; checkout de la rama de la PR, merge de la base, ficheros escritos y preparados. No hace commit ni push |
 
 Reglas:
 - Genera el mensaje a partir del **diff preparado (staged)**. Sin nada preparado: `AI_NO_STAGED_CHANGES`.

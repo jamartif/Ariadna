@@ -30,6 +30,57 @@ export interface PrReviewer {
 }
 
 export type PrMergeStatus = 'clean' | 'conflicts' | 'unknown';
+
+/** Un fichero en conflicto en una PR, con sus tres versiones. */
+export interface PrConflictFile {
+  path: string;
+  ours: string;
+  theirs: string;
+  base: string;
+  binary: boolean;
+}
+
+/** Ficheros en conflicto de una PR (solo lectura). */
+export interface PrConflicts {
+  number: number;
+  base: string;
+  head: string;
+  baseSha: string;
+  headSha: string;
+  files: PrConflictFile[];
+  truncated: boolean;
+  tab: string;
+}
+
+/** Una alternativa de resolución propuesta por la IA. */
+export interface PrConflictOption {
+  title: string;
+  content: string;
+  rationale: string | null;
+}
+
+/** Alternativas de resolución de un fichero en conflicto. */
+export interface AiPrConflictOptions {
+  path: string;
+  options: PrConflictOption[];
+  provider: string;
+  commandSummary: string;
+  repoRevision: number;
+}
+
+/** Resolución elegida para un fichero. */
+export interface PrConflictResolution {
+  path: string;
+  content: string;
+}
+
+/** Resultado de preparar el merge de la PR en local. */
+export interface PrConflictApplied {
+  done: boolean;
+  branch: string;
+  files: string[];
+  mergeReady: boolean;
+}
 export type PrCheckStatus = 'passing' | 'failing' | 'pending' | 'notApplicable' | 'broken';
 
 export interface PrPolicyCheck {

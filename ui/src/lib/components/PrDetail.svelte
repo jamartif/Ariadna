@@ -12,6 +12,7 @@
   import PrBadge from './PrBadge.svelte';
   import PrComposer from './PrComposer.svelte';
   import PrCompleteForm from './PrCompleteForm.svelte';
+  import PrConflictDialog from './PrConflictDialog.svelte';
   import PrCreateForm from './PrCreateForm.svelte';
   import PrError from './PrError.svelte';
   import PrFiles from './PrFiles.svelte';
@@ -30,6 +31,8 @@
   let writing = $state(false);
   let formHost = $state<HTMLElement | null>(null);
   let prevPanel: 'review' | 'complete' | null = null;
+  /** Ventana de resolución de conflictos de la PR con IA. */
+  let conflictDialog = $state(false);
 
   // Teclado y lectores: al abrir un formulario el foco entra en él y, al cerrarlo, vuelve al botón que lo abrió.
   $effect(() => {
@@ -214,6 +217,17 @@
                 <Icon name={d.mergeStatus === 'conflicts' ? 'triangle-alert' : d.mergeStatus === 'clean' ? 'circle-check' : 'info'} size={14} />
                 {t(MERGE_LABEL[d.mergeStatus])}{#if d.mergeDetail && d.mergeStatus !== 'clean'}<span class="muted mono">{' · '}{d.mergeDetail}</span>{/if}
               </p>
+              {#if d.mergeStatus === 'conflicts'}
+                <p class="muted">{t('pr.conflicts.hint')}</p>
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  data-testid="pr-conflicts-open"
+                  onclick={() => (conflictDialog = true)}
+                >
+                  <Icon name="sparkles" size={14} />{t('pr.conflicts.resolveWithAi')}
+                </button>
+              {/if}
             </section>
           {/if}
 
@@ -301,10 +315,18 @@
             <p class="muted">{t('pr.threads.none')}</p>
           {/if}
         </div>
-      {/if}
-    </div>
-  {/if}
-</section>
+              {/if}
+            </div>
+          {/if}
+
+          {#if conflictDialog && d}
+            <PrConflictDialog
+              {tab}
+              prNumber={d.id}
+              onclose={() => (conflictDialog = false)}
+            />
+          {/if}
+        </section>
 
 <style>
   .detail {

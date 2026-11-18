@@ -27,6 +27,9 @@ export function createTauriPullRequests(): PullRequestApi {
     votePullRequest: (tabId, id, vote, comment) => call('vote_pull_request', { tabId, id, vote, comment: comment ?? null }),
     completePullRequest: (tabId, id, options) => call('complete_pull_request', { tabId, id, options }),
     abandonPullRequest: (tabId, id) => call('abandon_pull_request', { tabId, id }),
-    reopenPullRequest: (tabId, id) => call('reopen_pull_request', { tabId, id })
-  };
-}
+        reopenPullRequest: (tabId, id) => call('reopen_pull_request', { tabId, id }),
+        prConflicts: (tabId, id) => call('pr_conflicts', { tabId, id }),
+        aiPrConflictOptions: (tabId, id, path) => call('ai_pr_conflict_options', { tabId, id, path }),
+        prApplyConflicts: (tabId, id, resolutions) => call('pr_apply_conflicts', { tabId, id, resolutions })
+      };
+    }

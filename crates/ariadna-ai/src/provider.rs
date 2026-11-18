@@ -20,11 +20,12 @@ use crate::commands::{
 use crate::env::{provider_env, EnvOptions};
 use crate::models::{
     new_suggestion_id, now_millis, AccountInfo, AiContextPolicy, AiError, AiSuggestion,
-    Availability, CommitOptions, ProviderId, SuggestionKind, SuggestionStatus, SummaryStyle,
+    Availability, CommitOptions, ConflictOption, ProviderId, SuggestionKind, SuggestionStatus,
+    SummaryStyle,
 };
 use crate::parse::{
-    error_from_failed_run, parse_claude_auth_status, parse_conflict_proposal, parse_output,
-    split_commit_message, strip_fences, ParsedReply,
+    error_from_failed_run, parse_claude_auth_status, parse_conflict_options,
+    parse_conflict_proposal, parse_output, split_commit_message, strip_fences, ParsedReply,
 };
 use crate::prompt::{
     validate_conflict_proposal, ConflictInput, PromptBuilder, PromptPreview, PullRequestInput,
@@ -123,6 +124,19 @@ pub trait AiProvider: Send + Sync {
         ctx: &CallContext,
         conflict: &ConflictInput,
     ) -> Result<AiSuggestion, AiError>;
+    /// Alternativas de resolución de un conflicto (1..=`max`), para revisarlas antes de escribir
+    /// nada. La implementación por defecto no está soportada; la del CLI pide a la IA hasta
+    /// `max` opciones y valida que ninguna lleve marcadores de conflicto.
+    async fn propose_conflict_options(
+        &self,
+        _ctx: &CallContext,
+        _conflict: &ConflictInput,
+        _max: usize,
+    ) -> Result<Vec<ConflictOption>, AiError> {
+        Err(AiError::BadOutput(
+            "este proveedor no propone alternativas de resolución".into(),
+        ))
+    }
 }
 
 /// Configuración de un [`CliProvider`].
@@ -585,5 +599,31 @@ impl AiProvider for CliProvider {
             Some(content),
             reply.note,
         ))
+    }
+
+    async fn propose_conflict_options(
+        &self,
+        ctx: &CallContext,
+        conflict: &ConflictInput,
+        max: usize,
+    ) -> Result<Vec<ConflictOption>, AiError> {
+        let preview = PromptBuilder::resolve_conflict_options(conflict, max)?;
+        let reply = self.complete(ctx, &preview).await?;
+        let options = parse_conflict_options(&reply.text, max);
+        if options.is_empty() {
+            return Err(AiError::BadOutput("respuesta vacía".into()));
+        }
+        for o in &options {
+            if o.content.trim().is_empty() {
+                return Err(AiError::BadOutput("una opción venía vacía".into()));
+            }
+            if crate::prompt::has_conflict_markers(&o.content) {
+                return Err(AiError::ConflictProposalRejected(format!(
+                    "la opción «{}» deja marcadores de conflicto",
+                    o.title
+                )));
+            }
+        }
+        Ok(options)
     }
 }
