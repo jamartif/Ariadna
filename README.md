@@ -11,9 +11,9 @@ the official AI CLIs you already pay for.
 Hard rule: **nothing that rewrites your repository happens without your confirmation**, and
 the AI **only proposes**.
 
-> **Version 0.1.0-alpha.7** — the current build. Installers are on the
-> [releases page](https://github.com/jamartif/Ariadna/releases): `Ariadna_0.1.0-alpha.7_x64-setup.exe`
-> (Windows), `Ariadna_0.1.0-alpha.7_universal.dmg` (macOS), a portable ZIP and `SHA256SUMS.txt`.
+> **Version 0.1.0-alpha.8** — the current build. Installers are on the
+> [releases page](https://github.com/jamartif/Ariadna/releases): `Ariadna_0.1.0-alpha.8_x64-setup.exe`
+> (Windows), `Ariadna_0.1.0-alpha.8_universal.dmg` (macOS), a portable ZIP and `SHA256SUMS.txt`.
 > They are **unsigned** alphas: read [Installation](#installation) first.
 
 ## Verification status
@@ -75,7 +75,10 @@ the real service, it says "not verified" here:
   once and forgotten, never stored (see *Security*).
 - **Pull requests** for GitHub and Azure DevOps: list, detail with safe Markdown, create (with
   the title and description **drafted by the AI** if you want), check out the branch, review
-  with inline comments, vote and complete/abandon.
+  with inline comments, vote and complete/abandon. When a PR has **conflicts**, "Resolve
+  conflicts with AI…" reads them with `git merge-tree`, offers up to three resolutions per file
+  (all reviewed before choosing) and, with a native confirmation, leaves the merge prepared
+  locally with the resolved files staged — the commit and the push stay yours.
 - **Settings** (General, Git, AI, Accounts), light/dark theme with a two-state toggle in the
   title bar (`system` lives in Settings and in the palette), command palette, native menu and
   shortcuts. Interface available in **Spanish and English**.
