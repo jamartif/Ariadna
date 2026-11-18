@@ -57,13 +57,15 @@
 
   async function proposeAll(): Promise<void> {
     for (const f of conflicts?.files ?? []) {
-      if (f.binary) continue;
+      if (f.binary || f.truncated) continue;
       await propose(f.path);
     }
   }
 
   const pendingCount = $derived(
-    (conflicts?.files ?? []).filter((f) => !f.binary && chosen[f.path] === undefined).length
+    (conflicts?.files ?? []).filter(
+      (f) => !f.binary && !f.truncated && chosen[f.path] === undefined
+    ).length
   );
 
   async function apply(): Promise<void> {
@@ -151,13 +153,15 @@
                 <span class="path mono">{f.path}</span>
                 {#if f.binary}
                   <span class="chip">{t('pr.conflicts.binary')}</span>
+                {:else if f.truncated}
+                  <span class="chip warn">{t('pr.conflicts.tooBig')}</span>
                 {:else if chosen[f.path] !== undefined}
                   <span class="chip ok">{t('pr.conflicts.chosen')}</span>
                 {/if}
                 <button
                   type="button"
                   class="btn btn-sm"
-                  disabled={f.binary || proposing !== null || applying}
+                  disabled={f.binary || f.truncated || proposing !== null || applying}
                   onclick={() => void propose(f.path)}
                   data-testid="pr-conflicts-propose"
                 >

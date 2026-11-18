@@ -38,6 +38,8 @@ export interface PrConflictFile {
   theirs: string;
   base: string;
   binary: boolean;
+  /** `true` si alguna versión se recortó: no se puede resolver con IA (se escribiría a medias). */
+  truncated: boolean;
 }
 
 /** Ficheros en conflicto de una PR (solo lectura). */

@@ -94,6 +94,7 @@ export const esPr = {
   'pr.conflicts.intro': 'De {head} a {base}. La IA solo propone: se leen las tres versiones, eliges una resolución por fichero y nada se escribe hasta «Aplicar».',
   'pr.conflicts.none': 'Esta pull request ya no tiene ficheros en conflicto.',
   'pr.conflicts.binary': 'binario',
+  'pr.conflicts.tooBig': 'demasiado grande para la IA',
   'pr.conflicts.chosen': 'resuelto',
   'pr.conflicts.propose': 'Proponer con IA',
   'pr.conflicts.proposing': 'Proponiendo…',

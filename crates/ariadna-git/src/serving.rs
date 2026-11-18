@@ -8,7 +8,8 @@ use async_trait::async_trait;
 use crate::error::{GitError, GitResult};
 use crate::models::{
     Branch, Commit, ConflictFile, DiffHunk, DiffScope, FileDiff, GitPath, GitStatus,
-    IntegrationState, MergeFastForward, MergeResult, Remote, RemoteCheckout, Repository,
+    IntegrationState, MergeFastForward, MergeResult, MergeTreeScan, Remote, RemoteCheckout,
+    Repository,
 };
 use crate::stash::{StashApplyResult, StashEntry, StashPushOptions};
 use crate::tag::Tag;
@@ -133,27 +134,22 @@ pub trait GitServing: Send + Sync {
         query: &str,
         limit: usize,
     ) -> GitResult<Vec<Commit>>;
-
-    /// Página del historial de **todo** el repositorio: todas las ramas (locales y remotas) y las
-    /// etiquetas. Por defecto delega en `log_page` para no obligar a los dobles de prueba a
-    /// implementarlo; el motor real añade `--all --topo-order`.
+    /// Página del historial de **todo** el repositorio: ramas (locales y remotas) y etiquetas.
+    /// Obligatorio: un motor que no lo implemente no puede fingir que lo hace devolviendo el
+    /// historial de HEAD.
     async fn log_all_page(
         &self,
         repo: &Repository,
         skip: usize,
         limit: usize,
-    ) -> GitResult<Vec<Commit>> {
-        self.log_page(repo, skip, limit).await
-    }
-    /// Búsqueda en todo el repositorio (no solo en HEAD). Por defecto, la de `search_log`.
+    ) -> GitResult<Vec<Commit>>;
+    /// Búsqueda en todo el repositorio (no solo en HEAD).
     async fn search_all_log(
         &self,
         repo: &Repository,
         query: &str,
         limit: usize,
-    ) -> GitResult<Vec<Commit>> {
-        self.search_log(repo, query, limit).await
-    }
+    ) -> GitResult<Vec<Commit>>;
     async fn diff(
         &self,
         repo: &Repository,
@@ -361,6 +357,31 @@ pub trait GitServing: Send + Sync {
         )))
     }
     async fn fetch(&self, repo: &Repository, remote: &str) -> GitResult<()>;
+    /// Baja una referencia concreta del remoto (`+origen:destino`, con `destino` en
+    /// `refs/ariadna/…`) y devuelve el SHA resultante. Necesario para `refs/pull/N/head`, que el
+    /// refspec por defecto no trae.
+    async fn fetch_to_ref(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        source: &str,
+        target: &str,
+    ) -> GitResult<String>;
+    /// `git merge-tree --write-tree`: árbol fusionado y rutas en conflicto entre `base` y `head`,
+    /// sin tocar índice ni árbol de trabajo. Sale con 1 cuando hay conflictos, y eso **no** es un
+    /// error.
+    async fn merge_tree(
+        &self,
+        repo: &Repository,
+        base: &str,
+        head: &str,
+    ) -> GitResult<MergeTreeScan>;
+    /// Rutas sin resolver del índice (`--diff-filter=U`).
+    async fn unmerged_paths(&self, repo: &Repository) -> GitResult<Vec<String>>;
+    /// Contenido de `rev:path` (texto sin recortar; los binarios conservan sus bytes nulos).
+    async fn file_at(&self, repo: &Repository, rev: &str, path: &str) -> GitResult<String>;
+    /// Ancestro común de dos revisiones; `None` si no comparten historia.
+    async fn merge_base(&self, repo: &Repository, a: &str, b: &str) -> GitResult<Option<String>>;
     /// Actualiza una rama local que no está activa desde su remoto (solo avance rápido).
     async fn fetch_into_branch(
         &self,

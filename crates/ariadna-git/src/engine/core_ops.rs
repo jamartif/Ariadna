@@ -605,6 +605,50 @@ impl GitCliEngine {
         self.log_page_scoped(repo, skip, limit, true).await
     }
 
+    /// Contenido de `rev:path` como texto (sin recortar: el fichero manda). Un contenido binario
+    /// conserva sus bytes nulos, así que quien lo use puede detectarlo.
+    pub async fn file_at(&self, repo: &Repository, rev: &str, path: &str) -> GitResult<String> {
+        validate_revision_arg(rev).map_err(|_| GitError::InvalidReference(rev.to_owned()))?;
+        if path.is_empty() || path.contains('\u{0}') {
+            return Err(GitError::InvalidReference(path.to_owned()));
+        }
+        let mut args = os(&["show", "--end-of-options"]);
+        args.push(OsString::from(format!("{rev}:{path}")));
+        let out = self.read(repo, &args).await?;
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+
+    /// Ancestro común de dos revisiones (`git merge-base`). `None` si no comparten historia.
+    pub async fn merge_base(
+        &self,
+        repo: &Repository,
+        a: &str,
+        b: &str,
+    ) -> GitResult<Option<String>> {
+        validate_revision_arg(a).map_err(|_| GitError::InvalidReference(a.to_owned()))?;
+        validate_revision_arg(b).map_err(|_| GitError::InvalidReference(b.to_owned()))?;
+        let mut args = os(&["merge-base", "--end-of-options"]);
+        args.push(OsString::from(a));
+        args.push(OsString::from(b));
+        let out = self
+            .runner
+            .run(&repo.path, CommandKind::Read, &args, None)
+            .await?;
+        match out.code {
+            Some(0) => {
+                let sha = out.stdout_lossy().trim().to_owned();
+                Ok((!sha.is_empty()).then_some(sha))
+            }
+            // Código 1: no hay ancestro común. Es un resultado, no un fallo.
+            Some(1) => Ok(None),
+            _ => Err(GitError::CommandFailed {
+                command: "git merge-base".into(),
+                exit_code: out.code.unwrap_or(-1),
+                stderr: out.stderr_lossy().trim().chars().take(600).collect(),
+            }),
+        }
+    }
+
     async fn log_page_scoped(
         &self,
         repo: &Repository,
@@ -620,7 +664,16 @@ impl GitCliEngine {
         args.push(OsString::from(capped.to_string()));
         args.push(OsString::from(format!("--skip={}", skip.min(10_000_000))));
         if all {
-            args.extend(os(&["--all", "--topo-order"]));
+            // Ramas locales, de seguimiento, etiquetas y HEAD. Se evita `--all` a propósito: mete
+            // además el stash, las notas y `refs/pull/*`, que no son historia del proyecto y
+            // ensucian el grafo (y lo hacen más caro de recorrer).
+            args.extend(os(&[
+                "--branches",
+                "--remotes",
+                "--tags",
+                "HEAD",
+                "--topo-order",
+            ]));
         }
         args.extend(os(&["--no-color", "--no-show-signature", LOG_FORMAT]));
         let out = self.read(repo, &args).await?;
@@ -676,7 +729,13 @@ impl GitCliEngine {
             let mut a = os(&["log", "-n"]);
             a.push(OsString::from(capped.to_string()));
             if all {
-                a.extend(os(&["--all", "--topo-order"]));
+                a.extend(os(&[
+                    "--branches",
+                    "--remotes",
+                    "--tags",
+                    "HEAD",
+                    "--topo-order",
+                ]));
             }
             a.extend(os(&[
                 "--no-color",

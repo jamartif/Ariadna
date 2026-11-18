@@ -458,11 +458,14 @@ pub fn suggested_models(provider: ProviderId) -> &'static [&'static str] {
     }
 }
 
-/// Validación básica del nombre de un modelo: 1–64 caracteres, sin espacios ni controles.
+/// Validación básica del nombre de un modelo: 1–64 caracteres, sin espacios ni controles y **sin
+/// empezar por `-`**. Un nombre como `--dangerously-skip-permissions` se colaría como opción del
+/// CLI (inyección de flags), así que se rechaza.
 pub fn is_valid_model_name(name: &str) -> bool {
     let n = name.trim();
     !n.is_empty()
         && n.len() <= 64
+        && !n.starts_with('-')
         && n.chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':' | '/'))
 }
@@ -493,13 +496,37 @@ impl AiSettings {
             ProviderId::Codex => &mut self.codex_model,
             ProviderId::Copilot => &mut self.copilot_model,
         };
-        *slot = model.filter(|m| !m.trim().is_empty());
+        // Se guarda recortado: `" sonnet"` no es el alias que espera el CLI.
+        *slot = model.map(|m| m.trim().to_owned()).filter(|m| !m.is_empty());
+    }
+
+    /// Descarta los modelos que no pasan la validación (fichero editado a mano, valor antiguo):
+    /// un nombre inválido no debe llegar nunca a la línea de argumentos del CLI.
+    pub fn sanitize(&mut self) {
+        for slot in [
+            &mut self.claude_model,
+            &mut self.codex_model,
+            &mut self.copilot_model,
+        ] {
+            let keep = slot
+                .as_deref()
+                .map(str::trim)
+                .filter(|m| is_valid_model_name(m))
+                .map(str::to_owned);
+            *slot = keep;
+        }
     }
 
     /// Carga los ajustes; si el fichero no existe devuelve los valores por defecto.
     pub fn load(path: &Path) -> Result<Self, AiError> {
         match std::fs::read_to_string(path) {
-            Ok(text) => serde_json::from_str(&text).map_err(|e| AiError::Io(e.to_string())),
+            // Un fichero editado a mano no puede meter opciones en la línea de argumentos.
+            Ok(text) => {
+                let mut s: Self =
+                    serde_json::from_str(&text).map_err(|e| AiError::Io(e.to_string()))?;
+                s.sanitize();
+                Ok(s)
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(AiError::Io(e.to_string())),
         }
@@ -533,7 +560,11 @@ mod tests {
         let mut s = AiSettings::default();
         assert!(s.model_for(ProviderId::Claude).is_none());
         s.set_model(ProviderId::Claude, Some(" sonnet ".into()));
-        assert_eq!(s.model_for(ProviderId::Claude), Some(" sonnet "));
+        assert_eq!(
+            s.model_for(ProviderId::Claude),
+            Some("sonnet"),
+            "se guarda recortado"
+        );
         s.set_model(ProviderId::Claude, Some("   ".into()));
         assert!(
             s.model_for(ProviderId::Claude).is_none(),

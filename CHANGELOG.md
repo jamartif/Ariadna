@@ -5,6 +5,43 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+Lo que hay encima de `v0.1.0-alpha.9`.
+
+### Corregido
+- **Conflictos de PR con IA**: `git merge-tree` sale con 1 cuando hay conflictos y se tomaba por
+  «sin conflictos», así que la lista de ficheros salía **siempre vacía** y los mensajes de git se
+  colaban como rutas. Ahora se interpreta el código de salida (0 limpio, 1 conflictos, otro error)
+  y la salida se lee con `-z --no-messages` (hace falta git 2.38 o posterior: se avisa si es más
+  antiguo). Con prueba de integración en un repo temporal con un conflicto real.
+- **Conflictos de PR**: un fichero cuya versión se recortaba a 60 KB se podía «resolver» con IA y
+  se escribía el texto corto encima del real. Ahora se marca `truncated`, no se ofrece la IA y
+  `pr_apply_conflicts` lo rechaza; además solo acepta rutas que estén **de verdad** en conflicto y
+  calcula `merge_ready` mirando las rutas sin resolver del índice.
+- **Conflictos de PR**: el `fetch` no bajaba la PR (ignoraba `refs/pull/N/head`, así que una PR de
+  un fork daba «no encuentro la rama»). Ahora se bajan explícitamente la cabeza y la base a
+  `refs/ariadna/pr/N/…`, se cachea el resultado por PR y SHA (antes cada fichero repetía fetch,
+  merge-tree y tres `git show`), el consentimiento enseña el fichero que se manda y se aplican las
+  reglas de exclusión (también `.env` y rutas sensibles).
+- **Preparar el merge de una PR**: `checkout_remote_ref(…, true)` **rebasaba la rama local** a la
+  cabeza de la PR y podía pisar commits locales. Ahora no se fuerza: si diverge, se para y se avisa.
+- **Actualizar una rama no activa**: si ya estaba al día devolvía «no es avance rápido» (un error
+  falso). Además el refspec usaba el nombre local en vez del **upstream real**
+  (`branch.<nombre>.merge`), y una rama activa en otro worktree ahora se explica como tal.
+- **Modelo de IA**: un nombre que empezara por `-` se aceptaba, así que
+  `--dangerously-skip-permissions` pasaba como modelo y el CLI lo leía como una opción. Se rechaza,
+  se valida también al cargar los ajustes y se guarda recortado.
+- **Informe de cambios**: el diff se mandaba sin las exclusiones de la IA (un `.env` iba al CLI),
+  de un merge solía salir vacío y se dejaba ejecutar `textconv` del repo. Ahora filtra lo sensible,
+  usa `-m --first-parent --no-textconv` y el consentimiento dice cuántos ficheros se excluyen.
+- **Guardar el informe**: `create_new` en una sola operación (antes se comprobaba y escribía en dos
+  pasos), se rechaza `informes-cambios` como enlace simbólico y los nombres reservados de Windows
+  (`CON.md`, `NUL.md`…).
+- **Historial**: el grafo completo usa `--branches --remotes --tags HEAD` en vez de `--all`, así no
+  mete el stash, las notas ni `refs/pull/*`; los métodos del trait para el historial completo ya no
+  tienen implementación por defecto (un motor no puede fingir que los soporta).
+
 ## [0.1.0-alpha.9] - 2026-11-18
 
 Entra lo que llegó después de la alpha.8.

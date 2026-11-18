@@ -27,8 +27,8 @@ use ariadna_git::session::{
 };
 use ariadna_git::{
     Branch, Commit, Confirmation, ConflictFile, DiffHunk, DiffScope, FileDiff, GitError, GitPath,
-    GitRunner, GitServing, GitStatus, IntegrationState, MergeFastForward, MergeResult, Remote,
-    Repository,
+    GitRunner, GitServing, GitStatus, IntegrationState, MergeFastForward, MergeResult,
+    MergeTreeScan, Remote, Repository,
 };
 use async_trait::async_trait;
 use tokio::sync::{broadcast, Semaphore};
@@ -266,6 +266,24 @@ impl GitServing for FakeEngine {
         self.simple_read("search_log").await;
         Ok(Vec::new())
     }
+    async fn log_all_page(
+        &self,
+        _repo: &Repository,
+        _skip: usize,
+        _limit: usize,
+    ) -> Result<Vec<Commit>, GitError> {
+        self.simple_read("log_all_page").await;
+        Ok(Vec::new())
+    }
+    async fn search_all_log(
+        &self,
+        _repo: &Repository,
+        _query: &str,
+        _limit: usize,
+    ) -> Result<Vec<Commit>, GitError> {
+        self.simple_read("search_all_log").await;
+        Ok(Vec::new())
+    }
     async fn diff(
         &self,
         _repo: &Repository,
@@ -349,6 +367,42 @@ impl GitServing for FakeEngine {
         unimpl()
     }
     async fn fetch(&self, _repo: &Repository, _remote: &str) -> Result<(), GitError> {
+        unimpl()
+    }
+    async fn fetch_to_ref(
+        &self,
+        _repo: &Repository,
+        _remote: &str,
+        _source: &str,
+        _target: &str,
+    ) -> Result<String, GitError> {
+        unimpl()
+    }
+    async fn merge_tree(
+        &self,
+        _repo: &Repository,
+        _base: &str,
+        _head: &str,
+    ) -> Result<MergeTreeScan, GitError> {
+        unimpl()
+    }
+    async fn unmerged_paths(&self, _repo: &Repository) -> Result<Vec<String>, GitError> {
+        unimpl()
+    }
+    async fn file_at(
+        &self,
+        _repo: &Repository,
+        _rev: &str,
+        _path: &str,
+    ) -> Result<String, GitError> {
+        unimpl()
+    }
+    async fn merge_base(
+        &self,
+        _repo: &Repository,
+        _a: &str,
+        _b: &str,
+    ) -> Result<Option<String>, GitError> {
         unimpl()
     }
     async fn fetch_into_branch(

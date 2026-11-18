@@ -145,6 +145,22 @@ número de entradas de `status` coincide con los registros generados (y truncar 
 inventa entradas); resolver todos los conflictos deja el archivo sin marcadores y con el
 contenido esperado (LF/CRLF, con y sin base). **Pánicos encontrados: ninguno.**
 
+## Historial con el grafo completo
+
+La vista por defecto recorre **todas las ramas y etiquetas** (`git log --branches --remotes
+--tags HEAD --topo-order`). Con `--skip=N` git recorre el grafo desde el principio en cada
+página, así que en repos muy grandes conviene:
+
+- **`git commit-graph write --reachable`** (o dejar que `git maintenance` lo haga): el
+  recorrido topológico pasa a usar el fichero de commit-graph y baja de golpe el coste de
+  cada página.
+- O pulsar **«Rama actual»** en la cabecera del historial: ahí se pagina por **cursor**
+  (coste constante, sin `--skip`).
+
+Al paginar con el grafo completo, si un `fetch` mete commits nuevos entre dos páginas el
+`--skip` puede saltarse alguno; la pantalla no repite ninguno (se filtran por SHA contra la
+frontera cargada) y basta recargar el historial para verlo entero.
+
 ## NF sin medir
 
 | NF | Motivo |

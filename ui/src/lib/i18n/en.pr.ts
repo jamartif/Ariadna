@@ -96,6 +96,7 @@ export const enPr: Record<keyof typeof esPr, string> = {
   'pr.conflicts.intro': 'From {head} into {base}. The AI only proposes: the three sides are read, you pick one resolution per file, and nothing is written until you press Apply.',
   'pr.conflicts.none': 'This pull request no longer has conflicting files.',
   'pr.conflicts.binary': 'binary',
+  'pr.conflicts.tooBig': 'too big for AI',
   'pr.conflicts.chosen': 'resolved',
   'pr.conflicts.propose': 'Propose with AI',
   'pr.conflicts.proposing': 'Proposing…',

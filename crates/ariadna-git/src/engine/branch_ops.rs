@@ -17,7 +17,8 @@ use crate::error::{truncate, GitError, GitResult};
 use crate::listings::{parse_branches, parse_remotes};
 use crate::models::{
     Branch, ConflictFile, ConflictKind, ConflictSide, DiffScope, FileDiff, GitPath,
-    IntegrationState, MergeFastForward, MergeResult, Remote, RemoteCheckout, Repository,
+    IntegrationState, MergeFastForward, MergeResult, MergeTreeScan, Remote, RemoteCheckout,
+    Repository,
 };
 use crate::path_safety::{
     git_pathspec_args, validate_ref, validate_repo_path_components, validate_revision_arg,
@@ -830,9 +831,16 @@ impl GitCliEngine {
         Ok(())
     }
 
-    /// Actualiza una rama **local que no está activa** desde su remoto, sin cambiar de rama:
-    /// `git fetch <remoto> <rama>:<rama>`. Solo avanza (fast-forward); si la rama hubiera
-    /// divergido, git lo rechaza y se devuelve el error en vez de forzar nada.
+    /// Actualiza una rama **local que no está activa** desde su remoto, sin cambiar de rama.
+    /// Se dice «sin cambiar de rama» porque así lo usa la
+    /// interfaz, con la rama destino siempre inactiva: si estuviera activa (aquí o en otro
+    /// worktree) git lo rechaza y eso se traduce a [`GitError::BranchIsCurrent`].
+    ///
+    /// El origen se toma del **upstream real** de la rama (`branch.<nombre>.merge`), no del nombre
+    /// local: `refs/heads/<upstream>:refs/heads/<rama>`. Así no se confunde con una etiqueta del
+    /// mismo nombre, y el refspec no puede empezar por `+` (que forzaría la actualización).
+    ///
+    /// Si la rama ya estaba al día no es un error: no hay nada que traer.
     pub async fn fetch_into_branch(
         &self,
         repo: &Repository,
@@ -855,7 +863,8 @@ impl GitCliEngine {
                 branch: branch.to_owned(),
             });
         }
-        let refspec = format!("{branch}:{branch}");
+        let upstream = self.bo_upstream(repo, branch).await?;
+        let refspec = format!("refs/heads/{upstream}:refs/heads/{branch}");
         let antes = self.bo_rev(repo, &format!("refs/heads/{branch}")).await?;
         let out = self
             .bo_raw(
@@ -865,6 +874,12 @@ impl GitCliEngine {
             )
             .await?;
         let texto = format!("{}{}", out.stdout_lossy(), out.stderr_lossy());
+        // Otra rama activa en **otro worktree**: git también lo rechaza.
+        if texto.contains("refusing to fetch into branch") {
+            return Err(GitError::BranchIsCurrent {
+                branch: branch.to_owned(),
+            });
+        }
         // Un rechazo por no ser avance rápido no es un fallo de red: se explica como tal.
         if texto.contains("non-fast-forward") || texto.contains("rejected") {
             return Err(GitError::BranchNotFastForward {
@@ -878,16 +893,143 @@ impl GitCliEngine {
                 stderr: truncate(out.stderr_lossy().trim(), 600),
             });
         }
-        // `git fetch` sale con 0 aunque **rechace** esta referencia (sigue con las demás) y con
-        // `--quiet` ni lo cuenta, así que se comprueba el resultado: si la rama no se movió, no
-        // era un avance rápido y no se ha forzado nada.
         let despues = self.bo_rev(repo, &format!("refs/heads/{branch}")).await?;
-        if antes == despues {
-            return Err(GitError::BranchNotFastForward {
-                branch: branch.to_owned(),
-            });
-        }
+        // `git fetch` sale con 0 aunque no haya nada nuevo; eso **no** es un rechazo. Los rechazos
+        // de verdad ya se han visto arriba en el texto de git.
+        let _ = (antes, despues);
         Ok(())
+    }
+
+    /// Baja una referencia **concreta** del remoto a una referencia local propia y devuelve el SHA
+    /// resultante. Hace falta porque el refspec por defecto no trae `refs/pull/N/head` (las PRs de
+    /// GitHub no tienen por qué venir de una rama del repositorio) ni la base de un fork.
+    ///
+    /// El destino es una referencia del espacio `refs/ariadna/…` que gestiona la app, así que
+    /// forzarla (`+`) no toca nada del usuario.
+    pub async fn fetch_to_ref(
+        &self,
+        repo: &Repository,
+        remote: &str,
+        source: &str,
+        target: &str,
+    ) -> GitResult<String> {
+        check_ref(remote)?;
+        if !source.starts_with("refs/") || check_ref(source).is_err() {
+            return Err(GitError::InvalidReference(source.to_owned()));
+        }
+        if !target.starts_with("refs/ariadna/") || check_ref(target).is_err() {
+            return Err(GitError::InvalidReference(target.to_owned()));
+        }
+        let refspec = format!("+{source}:{target}");
+        let args = ["fetch", "--no-tags", "--", remote, refspec.as_str()];
+        let out = self.bo_raw(repo, CommandKind::Network, &args).await?;
+        if !out.success() {
+            let os_args: Vec<OsString> = args.iter().map(OsString::from).collect();
+            if let Some(e) = self.runner.auth_error(&repo.path, &os_args, &out).await {
+                return Err(e);
+            }
+            if self.bo_remote_ref_missing(repo, remote, source).await? {
+                return Err(GitError::MissingRemoteRef {
+                    remote: remote.to_owned(),
+                    reference: source.to_owned(),
+                });
+            }
+            return Err(command_error(repo, "fetch", &out));
+        }
+        self.bo_rev(repo, &format!("{target}^{{commit}}"))
+            .await?
+            .ok_or_else(|| GitError::Parse(format!("{target} no resuelve tras bajarlo del remoto")))
+    }
+
+    /// Rama del remoto que sigue `branch` según `branch.<nombre>.merge` (`refs/heads/x` → `x`).
+    /// Sin upstream configurado se supone el mismo nombre, que es lo que hace git por defecto.
+    async fn bo_upstream(&self, repo: &Repository, branch: &str) -> GitResult<String> {
+        let out = self
+            .bo_raw(
+                repo,
+                CommandKind::Read,
+                &["config", "--get", &format!("branch.{branch}.merge")],
+            )
+            .await?;
+        let value = out.stdout_lossy().trim().to_owned();
+        if !out.success() || value.is_empty() {
+            return Ok(branch.to_owned());
+        }
+        let name = value
+            .strip_prefix("refs/heads/")
+            .map(str::to_owned)
+            .unwrap_or(value);
+        // El refspec se construye con lo que devuelve la configuración: se valida antes de usarlo.
+        if check_ref(&name).is_err() {
+            return Ok(branch.to_owned());
+        }
+        Ok(name)
+    }
+
+    /// `git merge-tree --write-tree` en **modo lectura**: no toca el índice ni el árbol de trabajo
+    /// y sirve para saber qué ficheros chocarían al fusionar `base` con `head`.
+    ///
+    /// `merge-tree` sale con **1 cuando hay conflictos**, así que el código de salida se interpreta
+    /// explícitamente (0 limpio, 1 conflictos, otro error). La salida se lee con `-z`: primero el
+    /// OID del árbol y después las rutas en conflicto separadas por NUL, sin mensajes humanos.
+    /// Requiere git 2.38 o posterior; si el git del sistema es más antiguo, `--write-tree` no
+    /// existe y el error lo dice con claridad.
+    pub async fn merge_tree(
+        &self,
+        repo: &Repository,
+        base: &str,
+        head: &str,
+    ) -> GitResult<MergeTreeScan> {
+        check_rev(base)?;
+        check_rev(head)?;
+        let out = self
+            .bo_raw(
+                repo,
+                CommandKind::Read,
+                &[
+                    "merge-tree",
+                    "--write-tree",
+                    "--name-only",
+                    "-z",
+                    "--no-messages",
+                    "--end-of-options",
+                    base,
+                    head,
+                ],
+            )
+            .await?;
+        match out.code {
+            Some(0) | Some(1) => {}
+            Some(129) => {
+                return Err(GitError::InvalidReference(format!(
+                "este git no admite `merge-tree --write-tree` (hace falta git 2.38 o posterior); \
+                     no se puede calcular el merge de la pull request con {base} y {head}"
+            )))
+            }
+            _ => return Err(command_error(repo, "merge-tree", &out)),
+        }
+        let mut fields = nul_fields(&out.stdout).into_iter();
+        let tree = fields
+            .next()
+            .map(|f| String::from_utf8_lossy(&f).trim().to_owned())
+            .filter(|s| !s.is_empty());
+        let mut conflicts: Vec<String> = fields
+            .map(|f| String::from_utf8_lossy(&f).trim().to_owned())
+            .filter(|s| !s.is_empty())
+            .collect();
+        conflicts.sort();
+        conflicts.dedup();
+        Ok(MergeTreeScan { tree, conflicts })
+    }
+
+    /// Rutas **sin resolver** del índice (`git diff --diff-filter=U`): la única fuente fiable de
+    /// «esto sigue en conflicto», sin adivinar por el nombre.
+    pub async fn unmerged_paths(&self, repo: &Repository) -> GitResult<Vec<String>> {
+        let paths = self.bo_unmerged(repo).await?;
+        Ok(paths
+            .into_iter()
+            .map(|p| String::from_utf8_lossy(p.as_bytes()).into_owned())
+            .collect())
     }
 
     /// Borra una rama en el **remoto** (`git push <remote> --delete <rama>`). No toca la copia

@@ -18,7 +18,7 @@ pub struct ApiError {
 pub type ApiResult<T> = Result<T, ApiError>;
 
 /// Todos los códigos del contrato (para tests y documentación).
-pub const ALL_CODES: [&str; 53] = [
+pub const ALL_CODES: [&str; 54] = [
     "MERGE_CONFLICTS",
     "CONFLICTS_PENDING",
     "CONFLICT_MARKERS_REMAIN",
@@ -66,6 +66,7 @@ pub const ALL_CODES: [&str; 53] = [
     "AI_SENSITIVE_FILE",
     "AI_CONFLICT_NOT_TEXT",
     "AI_CONFLICT_INVALID_PROPOSAL",
+    "AI_CONFLICT_TOO_BIG",
     "POLICY",
     "RATE_LIMITED",
     "NOT_FOUND",
@@ -75,7 +76,7 @@ pub const ALL_CODES: [&str; 53] = [
 ];
 
 /// Códigos `AI_*` del contrato (los produce [`From<AiError>`] y el servicio de IA).
-pub const AI_CODES: [&str; 12] = [
+pub const AI_CODES: [&str; 13] = [
     "AI_DISABLED",
     "AI_NOT_INSTALLED",
     "AI_NOT_LOGGED_IN",
@@ -88,6 +89,7 @@ pub const AI_CODES: [&str; 12] = [
     "AI_SENSITIVE_FILE",
     "AI_CONFLICT_NOT_TEXT",
     "AI_CONFLICT_INVALID_PROPOSAL",
+    "AI_CONFLICT_TOO_BIG",
 ];
 
 impl ApiError {
