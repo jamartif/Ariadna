@@ -5,9 +5,18 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [0.1.0-alpha.8] - 2026-11-18
 
-Lo que hay encima de `v0.1.0-alpha.7`.
+Entra lo que llegó después de la alpha.7.
+
+**Respecto a `v0.1.0-alpha.7`:**
+- Resolución de conflictos de una pull request **con IA** (leer los ficheros en conflicto, hasta tres
+  alternativas y aplicar con confirmación, sin commit ni push).
+- Fila **Modelo** de Ajustes › IA usable: ancho completo, desplegable correcto y campo «Otro…» editable.
+- La tira de repos de la barra superior tiene **scroll horizontal propio** (rueda incluida) con barra
+  visible: las pestañas de la derecha dejan de ser inalcanzables.
+- El **scroll queda atrapado** dentro de Ajustes: se bloquea el `body` y solo se desplaza el panel de
+  la sección, con la cabecera fija.
 
 ### Añadido
 - **Resolver los conflictos de una pull request con IA**: cuando la PR tiene conflictos, su detalle muestra **«Resolver conflictos con IA…»**. Ariadna baja las referencias, lee el merge que git calcularía (`git merge-tree`, sin tocar el árbol de trabajo) y enseña cada fichero en conflicto con sus tres versiones. Por fichero, la IA propone **hasta tres alternativas razonables** (con su motivo), se ven completas antes de elegir y nada se escribe hasta pulsar **«Aplicar y preparar merge»**, que pide confirmación nativa y deja el merge en local con los ficheros resueltos y preparados. El commit y el push los hace el usuario: la PR no se modifica sola. Errores claros para binarios y ficheros sensibles.
@@ -165,6 +174,7 @@ Primera versión alfa de la reescritura en Rust + Tauri 2 + Svelte (multiplatafo
   de texto.
 - La barra lateral abre el panel de Ramas y la IA devuelve siempre una descripción.
 
+[0.1.0-alpha.8]: https://github.com/jamartif/Ariadna/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/jamartif/Ariadna/compare/v0.1.0-alpha.6...v0.1.0-alpha.7
 [0.1.0-alpha.2]: https://github.com/jamartif/Ariadna/compare/v0.1.0-alpha.1...408b0fb
 [0.1.0-alpha.1]: https://github.com/jamartif/Ariadna/commit/1ecdd35
