@@ -41,7 +41,8 @@
     const bytes = Math.trunc(Number(input.value));
     if (!Number.isFinite(bytes) || bytes < MIN_CONTEXT_BYTES || bytes > MAX_CONTEXT_BYTES) {
       toasts.error(
-        t('settings.ai.maxContextRange', { min: MIN_CONTEXT_BYTES, max: MAX_CONTEXT_BYTES })
+        t('settings.ai.maxContextRange', { min: MIN_CONTEXT_BYTES, max: MAX_CONTEXT_BYTES }),
+        null
       );
       input.value = String(ai?.maxContextBytes ?? MIN_CONTEXT_BYTES);
       return;

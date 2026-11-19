@@ -168,7 +168,15 @@ async fn sin_nada_preparado_falla_y_no_llama_al_cli() {
 async fn el_tope_de_contexto_se_guarda_y_se_valida() {
     let ai = Ai::new(ok_script).await;
     // Por defecto el informe usa 100 000 bytes; el ajuste lo puede subir y el estado lo refleja.
-    assert_eq!(ai.env.core.ai_state("tab-1").await.unwrap().max_context_bytes, 100_000);
+    assert_eq!(
+        ai.env
+            .core
+            .ai_state("tab-1")
+            .await
+            .unwrap()
+            .max_context_bytes,
+        100_000
+    );
 
     let estado = patch(
         &ai,
@@ -180,7 +188,12 @@ async fn el_tope_de_contexto_se_guarda_y_se_valida() {
     .await;
     assert_eq!(estado.max_context_bytes, 250_000, "el ajuste se guarda");
     assert_eq!(
-        ai.env.core.ai_state("tab-1").await.unwrap().max_context_bytes,
+        ai.env
+            .core
+            .ai_state("tab-1")
+            .await
+            .unwrap()
+            .max_context_bytes,
         250_000,
         "y sobrevive a la siguiente lectura"
     );
@@ -204,7 +217,12 @@ async fn el_tope_de_contexto_se_guarda_y_se_valida() {
         );
     }
     assert_eq!(
-        ai.env.core.ai_state("tab-1").await.unwrap().max_context_bytes,
+        ai.env
+            .core
+            .ai_state("tab-1")
+            .await
+            .unwrap()
+            .max_context_bytes,
         250_000,
         "un valor inválido no toca el ajuste vigente"
     );

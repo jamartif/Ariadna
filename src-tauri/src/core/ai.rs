@@ -24,9 +24,8 @@ use ariadna_ai::provider::DEFAULT_TIMEOUT;
 use ariadna_ai::resolve::{resolve_binary, SearchEnv};
 use ariadna_ai::{
     is_valid_model_name, suggested_models, AiContextPolicy, AiError, AiProvider, AiSettings,
-    DEFAULT_MAX_CONTEXT_BYTES,
     Availability, CallContext, CliProvider, CliProviderConfig, CommitLanguage, CommitOptions,
-    ProviderChoice, ProviderId,
+    ProviderChoice, ProviderId, DEFAULT_MAX_CONTEXT_BYTES,
 };
 use ariadna_git::{
     CommandKind, ConflictFile, ConflictKind, ConflictSide, DiffScope, FileDiff, GitPath,

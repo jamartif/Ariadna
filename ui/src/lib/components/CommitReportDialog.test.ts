@@ -23,7 +23,7 @@ describe('CommitReportDialog · contexto demasiado grande', () => {
     const onclose = vi.fn();
     // El commit tiene que existir en el repo del mock: se toma el primero del historial.
     const page = await ctx.api.logPage('tab-ariadna', 0, 1, null, null, 'all');
-    const real = page[0];
+    const real = page[0]!;
     render(CommitReportDialog, { props: { tab: ctx.tab, commit: real, onclose } });
     render(Toasts);
     await new Promise((r) => setTimeout(r, 80));
@@ -54,7 +54,7 @@ describe('CommitReportDialog · contexto demasiado grande', () => {
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
     await new Promise((r) => setTimeout(r, 30));
     // 100 000 → 200 000: se dobla el tope actual, que es el mínimo útil.
-    expect(patch.mock.calls[0][0]).toMatchObject({ maxContextBytes: 200_000 });
+    expect(patch.mock.calls[0]![0]).toMatchObject({ maxContextBytes: 200_000 });
     // Y se vuelve a pedir el informe sin cerrar el diálogo.
     // El espía se instala después del montaje: 1 llamada = ya se volvió a pedir el informe.
     await waitFor(() => expect(report.mock.calls.length).toBeGreaterThanOrEqual(1), { timeout: 5000 });
