@@ -130,10 +130,21 @@ async fn el_grafo_completo_ve_ramas_solo_remotas_y_pagina_sin_perder_nada() {
         .is_empty());
 
     // Nombre con varias barras, también solo en el remoto.
-    t.git(&["checkout", "-q", "-b", "claude/ariadna-amend-epoch-fix-bgz9lc", &base]);
+    t.git(&[
+        "checkout",
+        "-q",
+        "-b",
+        "claude/ariadna-amend-epoch-fix-bgz9lc",
+        &base,
+    ]);
     t.write("barras.txt", b"barras\n");
     let varias_barras = t.commit_all("trabajo con nombre de varias barras");
-    t.git(&["push", "-q", "origin", "claude/ariadna-amend-epoch-fix-bgz9lc"]);
+    t.git(&[
+        "push",
+        "-q",
+        "origin",
+        "claude/ariadna-amend-epoch-fix-bgz9lc",
+    ]);
     t.git(&["checkout", "-q", "main"]);
     t.git(&["branch", "-D", "claude/ariadna-amend-epoch-fix-bgz9lc"]);
     t.git(&["fetch", "-q", "origin"]);
@@ -145,7 +156,12 @@ async fn el_grafo_completo_ve_ramas_solo_remotas_y_pagina_sin_perder_nada() {
     let locales = engine.branches(&repo).await.unwrap();
     let remotas = engine.remote_tracking_branches(&repo).await.unwrap();
     let esperadas: Vec<String> = t
-        .git(&["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads", "refs/remotes"])
+        .git(&[
+            "for-each-ref",
+            "--format=%(refname:lstrip=2)",
+            "refs/heads",
+            "refs/remotes",
+        ])
         .lines()
         .map(|l| l.trim().to_owned())
         .filter(|l| !l.is_empty() && !l.ends_with("/HEAD"))
@@ -158,15 +174,26 @@ async fn el_grafo_completo_ve_ramas_solo_remotas_y_pagina_sin_perder_nada() {
     vistas.sort();
     let mut esperadas_ordenadas = esperadas.clone();
     esperadas_ordenadas.sort();
-    assert_eq!(vistas, esperadas_ordenadas, "el panel lista las mismas refs que git");
+    assert_eq!(
+        vistas, esperadas_ordenadas,
+        "el panel lista las mismas refs que git"
+    );
 
     // 2. Sus commits salen en el grafo completo y no en el de HEAD.
     let head = engine.log_page(&repo, 0, 50).await.unwrap();
-    assert!(!head.iter().any(|c| c.sha == solo_remota || c.sha == varias_barras));
+    assert!(!head
+        .iter()
+        .any(|c| c.sha == solo_remota || c.sha == varias_barras));
     let todo = engine.log_page_all(&repo, 0, 50).await.unwrap();
     let shas: Vec<&str> = todo.iter().map(|c| c.sha.as_str()).collect();
-    assert!(shas.contains(&solo_remota.as_str()), "rama solo remota: {shas:?}");
-    assert!(shas.contains(&varias_barras.as_str()), "nombre con varias barras: {shas:?}");
+    assert!(
+        shas.contains(&solo_remota.as_str()),
+        "rama solo remota: {shas:?}"
+    );
+    assert!(
+        shas.contains(&varias_barras.as_str()),
+        "nombre con varias barras: {shas:?}"
+    );
 
     // 3. Paginando de uno en uno no se pierde ni se repite ningún commit.
     let total = engine.log_page_all(&repo, 0, 500).await.unwrap();
@@ -177,5 +204,8 @@ async fn el_grafo_completo_ve_ramas_solo_remotas_y_pagina_sin_perder_nada() {
         paginado.push(pagina[0].sha.clone());
     }
     let esperado: Vec<String> = total.iter().map(|c| c.sha.clone()).collect();
-    assert_eq!(paginado, esperado, "las páginas coinciden con la lista completa");
+    assert_eq!(
+        paginado, esperado,
+        "las páginas coinciden con la lista completa"
+    );
 }
