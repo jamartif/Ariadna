@@ -437,10 +437,33 @@ export const diffScope: V = either(
   tagged({ commit: str, between: obj({ base: str, head: str }) })
 );
 
+/**
+ * Motivo tipado por el que no se puede corregir el último commit (`AmendRefusal` de Rust).
+ * El valor de cable es `snake_case`; `value` (el remoto) solo existe en `already_published`.
+ */
+export const amendRefusal: V = (v, p, e) => {
+  if (!isObj(v)) return void e.push(`${p}: se esperaba objeto`);
+  const kind = v.kind;
+  const kinds = ['no_commits', 'detached_head', 'integration_in_progress', 'already_published'];
+  if (typeof kind !== 'string' || !kinds.includes(kind))
+    return void e.push(`${p}.kind: valor ${JSON.stringify(kind)} fuera de ${JSON.stringify(kinds)}`);
+  const permitidas = kind === 'already_published' ? ['kind', 'value'] : ['kind'];
+  for (const k of Object.keys(v))
+    if (!permitidas.includes(k)) e.push(`${p}.${k}: clave desconocida en el motivo ${kind}`);
+  if (kind === 'already_published') str(v.value, `${p}.value`, e);
+};
+
 export const apiError = obj(
   { code: oneOf(...API_ERROR_CODES), message: str },
-  { detail: nullable(str) }
+  { detail: nullable(str), reason: nullable(amendRefusal) }
 );
+
+export const amendDraft = obj({
+  message: str,
+  canAmend: bool,
+  reason: nullable(amendRefusal),
+  warning: nullable(str)
+});
 
 const lifecycle = oneOf('opening', 'active', 'closing', 'closed');
 const sessionKind: V = (v, p, e) => {

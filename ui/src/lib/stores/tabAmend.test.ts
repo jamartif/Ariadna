@@ -11,7 +11,8 @@ afterEach(() => {
 const ultimoCommit: AmendDraft = {
   message: 'Anterior asunto\n\nAnterior cuerpo',
   canAmend: true,
-  reason: null
+  reason: null,
+  warning: null
 };
 
 /**
@@ -70,11 +71,11 @@ describe('amend sin carreras', () => {
     const segunda = tab.setAmend(true);
 
     // La primera lectura llega tarde: no debe pisar la segunda activación.
-    pendientes[0]({ message: 'vieja', canAmend: true, reason: null });
+    pendientes[0]!({ message: 'vieja', canAmend: true, reason: null, warning: null });
     await primera;
     expect(tab.message).toBe('');
 
-    pendientes[1](ultimoCommit);
+    pendientes[1]!(ultimoCommit);
     await segunda;
     expect(tab.amend).toBe(true);
     expect(tab.message).toBe(ultimoCommit.message);

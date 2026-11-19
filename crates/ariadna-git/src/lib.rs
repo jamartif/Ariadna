@@ -58,7 +58,7 @@ pub use credentials::{CredentialStore, FilledCredential, Secret};
 pub use cursor::history_cursor;
 pub use diff::{parse_diff, rebuild_diff, unquote_c_style, DiffError};
 pub use engine::GitCliEngine;
-pub use error::{GitError, GitResult};
+pub use error::{AmendRefusal, GitError, GitResult};
 pub use git_locator::{
     find_git, parse_git_version, GitInstall, GitLocateError, GitVersion, LocatorOptions, TargetOs,
     MIN_GIT_VERSION,

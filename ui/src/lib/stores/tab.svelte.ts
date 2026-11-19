@@ -10,6 +10,7 @@ import {
   type TabInfo
 } from '$lib/api/types';
 import { t } from '$lib/i18n';
+import { amendRefusalText } from '$lib/util/amendReason';
 import { groupEntries, SECTION_ORDER, type SectionId } from '$lib/util/changes';
 import { pathKey, pathText } from '$lib/util/gitpath';
 import { AiController } from './ai.svelte';
@@ -498,7 +499,7 @@ export class TabState {
       if (epoch !== this.amendEpoch) return;
       if (!draft.canAmend) {
         this.amend = false;
-        toasts.warning(t('commit.cannotAmend'), draft.reason ?? undefined);
+        toasts.warning(t('commit.cannotAmend'), amendRefusalText(draft.reason) ?? undefined);
         return;
       }
       this.amend = true;
@@ -506,7 +507,9 @@ export class TabState {
     } catch (e) {
       if (epoch !== this.amendEpoch) return;
       this.amend = false;
-      toasts.error(t('commit.cannotAmend'), e);
+      // El motivo viaja tipado: se traduce aquí en vez de pintar el texto del motor.
+      const typed = e instanceof ApiError ? amendRefusalText(e.reason) : null;
+      toasts.error(t('commit.cannotAmend'), typed ?? e);
     }
   }
 

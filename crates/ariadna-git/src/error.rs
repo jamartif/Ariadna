@@ -1,6 +1,8 @@
 //! Errores del motor git. El texto es para la UI (español); el `stderr` original de
 //! `git` se conserva tal cual en `CommandFailed`.
 
+use serde::{Deserialize, Serialize};
+
 /// Fallo de una operación git. `Clone + PartialEq` para poder enviarlo por IPC y compararlo en tests.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum GitError {
@@ -23,8 +25,8 @@ pub enum GitError {
         "HEAD no está en una rama. El commit quedaría suelto. Confírmalo o crea una rama antes."
     )]
     DetachedHeadCommit,
-    #[error("No corrijo el último commit. {reason}")]
-    CannotAmend { reason: String },
+    #[error("No corrijo el último commit. {}", .reason.explanation())]
+    CannotAmend { reason: AmendRefusal },
     #[error("Hay cambios locales que impedirían el cambio de rama. Haz commit, descártalos o guárdalos antes.{}", detail_suffix(.detail))]
     LocalChangesBlockCheckout { detail: String },
     #[error("La rama local «{local}» no coincide con {remote}. No cambio de rama hasta que lo confirmes.")]
@@ -126,3 +128,91 @@ impl From<std::io::Error> for GitError {
 
 /// Resultado estándar del motor.
 pub type GitResult<T> = Result<T, GitError>;
+
+/// Por qué no se puede corregir el último commit.
+///
+/// Es un **valor** y no un texto: la UI traduce la variante (`amendReason.<kind>`) y los tests
+/// comparan motivos en lugar de redacciones. El valor de cable es `snake_case` y estable
+/// (`{"kind":"no_commits"}`, `{"kind":"already_published","value":"origin/main"}`): reescribir el
+/// texto de [`AmendRefusal::explanation`] no cambia el contrato con la interfaz.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
+pub enum AmendRefusal {
+    /// El repositorio todavía no tiene commits.
+    NoCommits,
+    /// HEAD no está en una rama.
+    DetachedHead,
+    /// Hay un merge, rebase, cherry-pick o revert a medias.
+    IntegrationInProgress,
+    /// El commit ya está en una rama remota (nombre sin `refs/remotes/`).
+    AlreadyPublished(String),
+}
+
+impl AmendRefusal {
+    /// Texto en español para logs y para los sitios que todavía no lo traducen.
+    pub fn explanation(&self) -> String {
+        match self {
+            AmendRefusal::NoCommits => "Todavía no hay ningún commit que corregir.".to_owned(),
+            AmendRefusal::DetachedHead => {
+                "HEAD no está en una rama. Crea una rama antes de corregir el commit.".to_owned()
+            }
+            AmendRefusal::IntegrationInProgress => {
+                "Hay un merge, rebase o cherry-pick en curso. Termínalo o abórtalo antes."
+                    .to_owned()
+            }
+            AmendRefusal::AlreadyPublished(remote_ref) => format!(
+                "El último commit ya está en {remote_ref}. Corregirlo obligaría a un push forzado."
+            ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    /// El valor de cable es el contrato con la UI: snake_case, estable y sin el texto en español.
+    #[test]
+    fn cada_motivo_del_amend_tiene_su_valor_de_cable() {
+        let casos = [
+            (AmendRefusal::NoCommits, r#"{"kind":"no_commits"}"#),
+            (AmendRefusal::DetachedHead, r#"{"kind":"detached_head"}"#),
+            (
+                AmendRefusal::IntegrationInProgress,
+                r#"{"kind":"integration_in_progress"}"#,
+            ),
+            (
+                AmendRefusal::AlreadyPublished("origin/main".into()),
+                r#"{"kind":"already_published","value":"origin/main"}"#,
+            ),
+        ];
+        for (motivo, esperado) in casos {
+            let json = serde_json::to_string(&motivo).unwrap();
+            assert_eq!(json, esperado);
+            let vuelta: AmendRefusal = serde_json::from_str(&json).unwrap();
+            assert_eq!(vuelta, motivo);
+        }
+    }
+
+    #[test]
+    fn el_texto_del_error_sale_del_motivo_y_no_se_duplica() {
+        let e = GitError::CannotAmend {
+            reason: AmendRefusal::AlreadyPublished("origin/main".into()),
+        };
+        let texto = e.to_string();
+        assert!(
+            texto.starts_with("No corrijo el último commit. "),
+            "{texto}"
+        );
+        assert!(texto.contains("origin/main"), "{texto}");
+        assert_eq!(
+            texto,
+            format!(
+                "No corrijo el último commit. {}",
+                AmendRefusal::AlreadyPublished("origin/main".into()).explanation()
+            )
+        );
+    }
+}

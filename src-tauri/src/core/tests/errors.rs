@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use ariadna_git::GitError;
+use ariadna_git::{AmendRefusal, GitError};
 
 use crate::core::error::{ApiError, AI_CODES, ALL_CODES};
 
@@ -27,7 +27,7 @@ pub fn every_git_error() -> Vec<(GitError, &'static str)> {
         (GitError::DetachedHeadCommit, "DETACHED_HEAD_COMMIT"),
         (
             GitError::CannotAmend {
-                reason: "ya publicado".into(),
+                reason: AmendRefusal::AlreadyPublished("origin/main".into()),
             },
             "CANNOT_AMEND",
         ),
@@ -245,6 +245,35 @@ fn la_forma_json_es_code_message_detail() {
     assert!(v.get("detail").is_none());
     let back: ApiError = serde_json::from_value(v).unwrap();
     assert_eq!(back.code, "CANCELLED");
+}
+
+/// El motivo del amend viaja tipado y en `snake_case`: la UI traduce el `kind` y nunca pinta
+/// redacciones. Los demás errores no llevan la clave.
+#[test]
+fn el_motivo_del_amend_viaja_tipado() {
+    let v = serde_json::to_value(ApiError::from(GitError::CannotAmend {
+        reason: AmendRefusal::NoCommits,
+    }))
+    .unwrap();
+    assert_eq!(v["code"], "CANNOT_AMEND");
+    assert_eq!(v["reason"]["kind"], "no_commits");
+    assert!(v["reason"].get("value").is_none(), "{v}");
+
+    let v = serde_json::to_value(ApiError::from(GitError::CannotAmend {
+        reason: AmendRefusal::AlreadyPublished("origin/main".into()),
+    }))
+    .unwrap();
+    assert_eq!(v["reason"]["kind"], "already_published");
+    assert_eq!(v["reason"]["value"], "origin/main");
+    let back: ApiError = serde_json::from_value(v).unwrap();
+    assert_eq!(
+        back.reason,
+        Some(AmendRefusal::AlreadyPublished("origin/main".into()))
+    );
+
+    // El resto de errores no gastan la clave (`skip_serializing_if`).
+    let v = serde_json::to_value(ApiError::from(GitError::Cancelled)).unwrap();
+    assert!(v.get("reason").is_none(), "{v}");
 }
 
 #[test]

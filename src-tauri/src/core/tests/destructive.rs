@@ -380,7 +380,7 @@ async fn amend_draft_explica_por_que_no_se_puede() {
     let id2 = env.open(&repo2).await;
     let d = env.core.amend_draft(&id2).await.unwrap();
     assert!(!d.can_amend);
-    assert!(d.reason.unwrap().contains("rama"));
+    assert_eq!(d.reason, Some(ariadna_git::AmendRefusal::DetachedHead));
 }
 
 #[tokio::test]

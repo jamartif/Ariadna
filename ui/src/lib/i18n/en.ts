@@ -267,6 +267,12 @@ export const en: Record<MessageKey, string> = {
   'commit.reasonNothing': 'Stage at least one file to be able to commit.',
   'commit.amend': 'Correct the last commit (amend)',
   'commit.cannotAmend': 'The last commit cannot be corrected',
+  'amendReason.noCommits': 'There is no commit to correct yet.',
+  'amendReason.detachedHead': 'HEAD is not on a branch. Create a branch before correcting the commit.',
+  'amendReason.integrationInProgress':
+    'A merge, rebase or cherry-pick is in progress. Finish or abort it first.',
+  'amendReason.alreadyPublished':
+    'The last commit is already in {ref}. Correcting it would need a force push.',
   'commit.staged.one': '1 file staged',
   'commit.staged.other': '{n} files staged',
   'commit.submit': 'Create commit',

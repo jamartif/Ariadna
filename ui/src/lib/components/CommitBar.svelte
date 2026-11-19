@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { t, tn } from '$lib/i18n';
+  import { amendRefusalText } from '$lib/util/amendReason';
   import { formatCombo, isMac, registerHandlers, SHORTCUTS } from '$lib/shortcuts/registry';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { profileLabel } from '$lib/stores/ai.svelte';
@@ -55,7 +56,7 @@
       .then((d) => {
         if (!alive) return;
         canAmend = d.canAmend;
-        amendReason = d.reason;
+        amendReason = amendRefusalText(d.reason);
       })
       .catch(() => {
         if (alive) canAmend = false;

@@ -266,6 +266,12 @@ export const es = {
   'commit.reasonNothing': 'Prepara al menos un archivo para poder confirmar.',
   'commit.amend': 'Corregir el último commit (amend)',
   'commit.cannotAmend': 'No se puede corregir el último commit',
+  'amendReason.noCommits': 'Todavía no hay ningún commit que corregir.',
+  'amendReason.detachedHead': 'HEAD no está en una rama. Crea una rama antes de corregir el commit.',
+  'amendReason.integrationInProgress':
+    'Hay un merge, rebase o cherry-pick en curso. Termínalo o abórtalo antes.',
+  'amendReason.alreadyPublished':
+    'El último commit ya está en {ref}. Corregirlo obligaría a un push forzado.',
   'commit.staged.one': '1 archivo preparado',
   'commit.staged.other': '{n} archivos preparados',
   'commit.submit': 'Crear commit',
