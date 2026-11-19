@@ -9,6 +9,20 @@ use std::path::{Path, PathBuf};
 
 use ariadna_hosting::{CliSession, CliTool, SystemCli};
 use std::sync::Arc;
+use tokio::sync::{Mutex, MutexGuard};
+
+/// Cerrojo de las pruebas de este fichero.
+///
+/// `GH_TOKEN` es una variable **del proceso**: la prueba que la fija (para comprobar que no se
+/// hereda) no puede correr a la vez que las demás, porque los `gh` falsos de las otras leen el
+/// entorno y devolverían ese token → la aserción del token fallaba de forma intermitente, sobre
+/// todo en CI. Todas las pruebas del fichero toman este cerrojo (asíncrono: se mantiene durante
+/// los `await` del test, que es donde ocurre la carrera).
+static ENV_LOCK: Mutex<()> = Mutex::const_new(());
+
+async fn lock_env() -> MutexGuard<'static, ()> {
+    ENV_LOCK.lock().await
+}
 
 /// Escribe un `gh`/`glab` falso que ejecuta `body` con `/bin/sh`.
 fn fake_cli(dir: &Path, name: &str, body: &str) -> PathBuf {
@@ -27,6 +41,7 @@ fn session(path: &Path, tool: CliTool) -> CliSession {
 
 #[tokio::test]
 async fn sesion_valida_devuelve_el_token_sin_espacios_alrededor() {
+    let _g = lock_env().await;
     let dir = tempfile::tempdir().unwrap();
     // El token llega con espacios y saltos de línea alrededor (como un `printf` descuidado).
     fake_cli(
@@ -44,6 +59,7 @@ async fn sesion_valida_devuelve_el_token_sin_espacios_alrededor() {
 
 #[tokio::test]
 async fn sin_sesion_el_error_dice_que_comando_ejecutar_y_no_filtra_nada() {
+    let _g = lock_env().await;
     let dir = tempfile::tempdir().unwrap();
     fake_cli(
         dir.path(),
@@ -70,6 +86,7 @@ async fn sin_sesion_el_error_dice_que_comando_ejecutar_y_no_filtra_nada() {
 
 #[tokio::test]
 async fn cli_ausente_se_detecta_sin_pedir_el_token() {
+    let _g = lock_env().await;
     let dir = tempfile::tempdir().unwrap();
     let s = session(dir.path(), CliTool::Gh);
     let st = s.status().await;
@@ -86,6 +103,7 @@ async fn cli_ausente_se_detecta_sin_pedir_el_token() {
 
 #[tokio::test]
 async fn un_cli_que_no_responde_no_cuelga_el_dialogo() {
+    let _g = lock_env().await;
     let dir = tempfile::tempdir().unwrap();
     // `sleep` en ruta absoluta: el `PATH` del hijo es solo la carpeta del doble.
     fake_cli(dir.path(), "gh", "/bin/sleep 5");
@@ -113,6 +131,7 @@ async fn un_cli_que_no_responde_no_cuelga_el_dialogo() {
 
 #[tokio::test]
 async fn un_token_con_espacios_dentro_se_rechaza_sin_repetirlo() {
+    let _g = lock_env().await;
     let dir = tempfile::tempdir().unwrap();
     fake_cli(
         dir.path(),
@@ -129,6 +148,7 @@ async fn un_token_con_espacios_dentro_se_rechaza_sin_repetirlo() {
 
 #[tokio::test]
 async fn glab_lee_el_token_de_auth_status_show_token() {
+    let _g = lock_env().await;
     let dir = tempfile::tempdir().unwrap();
     fake_cli(
         dir.path(),
@@ -143,6 +163,7 @@ async fn glab_lee_el_token_de_auth_status_show_token() {
 
 #[tokio::test]
 async fn la_variable_gh_token_del_entorno_no_se_hereda() {
+    let _g = lock_env().await;
     // Aunque el proceso tenga GH_TOKEN, la fuente es la sesión del CLI (aquí, sin sesión).
     let dir = tempfile::tempdir().unwrap();
     fake_cli(
