@@ -1,0 +1,72 @@
+name: Runner retry
+
+# Cuando GitHub no consigue runner para un job, el job queda **`cancelled`** (no `failure`) y la
+# anotación del check-run dice «The job was not acquired by Runner of type hosted…». El gate
+# `rust-ok` lo distingue con `scripts/ci/rust-gate.sh` y sale en rojo a propósito para que este
+# workflow relance los jobs que no llegaron a ejecutarse (hasta 3 intentos).
+#
+# No se puede relanzar desde dentro del propio run (GitHub responde «This workflow is already
+# running»): por eso el reintento vive aquí, disparado al **terminar** el run.
+# Un `failure` de verdad no se relanza nunca.
+
+on:
+  workflow_run:
+    workflows: ["Rust"]
+    types: [completed]
+
+permissions:
+  # `gh run rerun` necesita escribir sobre las ejecuciones.
+  actions: write
+  contents: read
+
+concurrency:
+  group: runner-retry-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    name: relanzar si solo faltó runner
+    # Mismo tope que el gate (`--max 3`): el intento 3 ya no se relanza.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.run_attempt < 3
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci
+
+      - name: Relanzar los jobs que no llegaron a ejecutarse
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          set -uo pipefail
+          api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          auth=(-H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json")
+          work="${RUNNER_TEMP:-/tmp}/retry"
+          mkdir -p "$work"
+
+          curl -sfS "${auth[@]}" "$api/actions/runs/${RUN_ID}/jobs?per_page=100" -o "$work/jobs.json"
+
+          : > "$work/no-runner.txt"
+          for id in $(jq -r '.jobs[] | select(.conclusion == "cancelled" or .conclusion == "skipped") | .id' "$work/jobs.json"); do
+            if curl -sfS "${auth[@]}" "$api/check-runs/$id/annotations" | grep -qi "not acquired by Runner"; then
+              echo "$id" >> "$work/no-runner.txt"
+            fi
+          done
+
+          rc=0
+          bash scripts/ci/rust-gate.sh --jobs "$work/jobs.json" --no-runner "$work/no-runner.txt" \
+            --attempt "$ATTEMPT" --max 3 || rc=$?
+
+          case "$rc" in
+            3) echo "Solo falta runner: se relanza." ;;
+            0) echo "Nada que relanzar."; exit 0 ;;
+            *) echo "Hay un fallo real: no se relanza nada."; exit 0 ;;
+          esac
+
+          # Margen para que GitHub cierre del todo el run antes de pedir el reintento.
+          sleep 60
+          gh run rerun "$RUN_ID" --failed --repo "$GITHUB_REPOSITORY"
