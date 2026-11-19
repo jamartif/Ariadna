@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { t, tn } from '$lib/i18n';
   import type { Branch } from '$lib/api/types';
+  import type { ExtraRefs } from '$lib/api/tagApi';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { branchesOf } from '$lib/stores/branches.svelte';
   import { remotesOf } from '$lib/stores/remotes.svelte';
@@ -195,6 +196,24 @@
     void tab.revision;
     if (!tab.hibernated) void tagCtl.load();
   });
+
+  /*
+   * Refs de pull request y worktrees: lectura **explícita** (no van en el snapshot diario, que se
+   * refresca a menudo). Así el riel las enseña sin añadir lecturas al refresco de la sesión.
+   */
+  let extra = $state.raw<ExtraRefs>({ pullRefs: [], worktrees: [] });
+  $effect(() => {
+    void tab.revision;
+    if (tab.hibernated) return;
+    void tab.api
+      .extraRefs(tab.id)
+      .then((r) => (extra = r))
+      .catch(() => (extra = { pullRefs: [], worktrees: [] }));
+  });
+  const pullRefs = $derived(extra.pullRefs.filter((x) => match(x)));
+  const otherWorktrees = $derived(extra.worktrees.filter((w) => !w.isMain && (q === '' || (w.branch ?? w.head).toLowerCase().includes(q))));
+  let pullOpen = $state(true);
+  let worktreesOpen = $state(true);
 
   onMount(() =>
     registerHandlers({
@@ -712,6 +731,45 @@
                 </button>
               {/each}
               {#if tags.length === 0}<p class="none sm">{t('branches.noMatches', { query: filter.trim() })}</p>{/if}
+            {/if}
+          </div>
+        {/if}
+
+        {#if extra.pullRefs.length > 0}
+          <div class="section" data-testid="rail-pull">
+            <button type="button" class="grouphead" aria-expanded={pullOpen} onclick={() => (pullOpen = !pullOpen)}>
+              <Icon name={pullOpen ? 'chevron-down' : 'chevron-right'} size={11} />
+              <span>{t('branches.pull')}</span>
+              <span class="chip num">{pullRefs.length}</span>
+            </button>
+            {#if pullOpen}
+              {#each pullRefs as ref (ref.name)}
+                <div class="row tag-row" title={`refs/pull/${ref.name}`} data-testid="rail-pull-ref">
+                  <Icon name="git-pull-request" size={12} />
+                  <span class="name">{ref.name}</span>
+                  <span class="kind mono">{ref.oid.slice(0, 7)}</span>
+                </div>
+              {/each}
+              {#if pullRefs.length === 0}<p class="none sm">{t('branches.noMatches', { query: filter.trim() })}</p>{/if}
+            {/if}
+          </div>
+        {/if}
+
+        {#if otherWorktrees.length > 0}
+          <div class="section" data-testid="rail-worktrees">
+            <button type="button" class="grouphead" aria-expanded={worktreesOpen} onclick={() => (worktreesOpen = !worktreesOpen)}>
+              <Icon name={worktreesOpen ? 'chevron-down' : 'chevron-right'} size={11} />
+              <span>{t('branches.worktrees')}</span>
+              <span class="chip num">{otherWorktrees.length}</span>
+            </button>
+            {#if worktreesOpen}
+              {#each otherWorktrees as wt (wt.path)}
+                <div class="row tag-row" title={wt.path} data-testid="rail-worktree">
+                  <Icon name="folder" size={12} />
+                  <span class="name">{wt.branch ?? wt.head.slice(0, 7)}</span>
+                  {#if wt.detached}<span class="kind">{t('branches.detached')}</span>{/if}
+                </div>
+              {/each}
             {/if}
           </div>
         {/if}

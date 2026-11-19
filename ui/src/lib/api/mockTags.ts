@@ -88,6 +88,15 @@ export function createMockTags(deps: MockTagDeps): TagApi & { __publishedTags(ta
   }
 
   return {
+    async extraRefs(tabId) {
+      await deps.delay();
+      const r = deps.repoOf(tabId) as { pullRefs?: unknown[]; worktrees?: unknown[] };
+      return {
+        pullRefs: [...((r.pullRefs ?? []) as never[])],
+        worktrees: [...((r.worktrees ?? []) as never[])]
+      };
+    },
+
     async listTags(tabId) {
       await deps.delay();
       deps.repoOf(tabId);

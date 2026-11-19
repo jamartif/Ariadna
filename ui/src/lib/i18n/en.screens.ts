@@ -163,6 +163,11 @@ export const enScreens: Record<keyof typeof esScreens, string> = {
   'branches.toggleFolder': 'Open or close the {folder} folder',
   'branches.local': 'Local',
   'branches.remote': 'Remote',
+  /** PR refs fetched into the repo (`refs/pull/*`): branches not merged yet. */
+  'branches.pull': 'Pull requests',
+  /** Other repo worktrees; a detached one may hold commits of its own. */
+  'branches.worktrees': 'Other worktrees',
+  'branches.detached': 'no branch',
   /** Tags: repo references (`refs/tags`) that the rail lists next to branches. */
   'branches.tags': 'Tags',
   'branches.current': 'current',

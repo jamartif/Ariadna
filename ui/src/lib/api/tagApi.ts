@@ -1,4 +1,20 @@
-import type { DoneResult } from './types';
+import type { Branch, DoneResult } from './types';
+
+/** Un worktree del repositorio (`git worktree list`). Su `HEAD` puede no estar en ninguna rama. */
+export interface Worktree {
+  path: string;
+  head: string;
+  branch: string | null;
+  detached: boolean;
+  /** El worktree principal (el del propio repositorio). */
+  isMain: boolean;
+}
+
+/** Lo que el riel necesita para sus grupos «Pull requests» y «Otros worktrees». */
+export interface ExtraRefs {
+  pullRefs: Branch[];
+  worktrees: Worktree[];
+}
 
 /**
  * Una etiqueta del repositorio (`list_tags`, `create_tag`). Forma de `ariadna_git::Tag`.
@@ -25,6 +41,11 @@ export interface Tag {
  * Borrar (local o en el remoto) abre una confirmación nativa en Rust: `{ done: false }` si se cancela.
  */
 export interface TagApi {
+  /**
+   * Referencias que el riel pinta aparte del snapshot diario: refs de pull request
+   * (`refs/pull/*`, `refs/merge-requests/*`) y worktrees del repo.
+   */
+  extraRefs(tabId: string): Promise<ExtraRefs>;
   /** De la más reciente a la más antigua. */
   listTags(tabId: string): Promise<Tag[]>;
   /** En `target` (SHA; `null` = HEAD). Con `message` no vacío es anotada. */

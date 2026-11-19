@@ -164,6 +164,11 @@ export const esScreens = {
   'branches.toggleFolder': 'Abrir o cerrar la carpeta {folder}',
   'branches.local': 'Locales',
   'branches.remote': 'Remotas',
+  /** Referencias de PR descargadas (`refs/pull/*`): ramas que aún no están fusionadas. */
+  'branches.pull': 'Refs de PR',
+  /** Otros worktrees del repo; uno en «detached HEAD» puede tener commits propios. */
+  'branches.worktrees': 'Otros worktrees',
+  'branches.detached': 'sin rama',
   /** Etiquetas: referencias del repo (`refs/tags`) que el riel lista junto a las ramas. */
   'branches.tags': 'Etiquetas',
   'branches.current': 'actual',

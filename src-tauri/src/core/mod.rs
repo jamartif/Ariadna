@@ -16,6 +16,7 @@ mod merge_ops;
 mod pr_conflicts;
 mod pr_ops;
 pub mod prompter;
+pub mod refs_ops;
 mod remote_ops;
 pub mod session_file;
 pub mod settings;
@@ -52,6 +53,7 @@ pub use pr_ops::{
     CommentInput, PrAction, PrCheckout, PrDiff, PrOmitted, PrProviderFactory, PrSupport,
 };
 pub use prompter::Prompter;
+pub use refs_ops::ExtraRefs;
 pub use remote_ops::{RemoteView, WebTarget};
 pub use session_file::{SavedTab, SessionData, SessionLoad, SessionStore};
 pub use settings::{
