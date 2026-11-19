@@ -634,6 +634,8 @@ export interface AppSettings {
   oauthGitHubClientId?: string | null;
   /** `client_id` de la OAuth App del usuario en GitLab. */
   oauthGitLabClientId?: string | null;
+  /** Alias corto por repositorio (`ruta absoluta → alias`). Sin alias se recorta el nombre. */
+  repoAliases: Record<string, string>;
 }
 
 export type SettingsLoadStatus = 'ok' | 'missing' | 'migrated' | 'resetCorrupt';

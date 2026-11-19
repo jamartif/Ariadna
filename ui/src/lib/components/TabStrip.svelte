@@ -8,6 +8,7 @@
   import { repoHue } from '$lib/util/hue';
   import { tabIn, tabOut } from '$lib/util/motion';
   import { moveItem } from '$lib/util/virtual';
+  import { repoAliases } from '$lib/stores/repoAliases.svelte';
   import Icon from './Icon.svelte';
 
   interface Props {
@@ -17,11 +18,15 @@
     onclose: (id: string) => void;
     onnew: () => void;
     onreorder: (ids: string[]) => void;
+    /** Pide poner el alias del repo de esa pestaña (lo abre la ventana con su diálogo). */
+    onalias?: (id: string) => void;
   }
-  let { entries, activeId, onactivate, onclose, onnew, onreorder }: Props = $props();
+  let { entries, activeId, onactivate, onclose, onnew, onreorder, onalias }: Props = $props();
 
   let scroller = $state<HTMLDivElement>();
   let focusedId = $state<string | null>(null);
+  /** Pestaña con el menú contextual abierto (`null` = cerrado). */
+  let menuFor = $state<string | null>(null);
   let dragId = $state<string | null>(null);
 
   const ids = $derived(entries.map((e) => e.id));
@@ -47,7 +52,14 @@
   }
 
   function label(e: Entry): string {
-    return e.kind === 'new' ? t('tabs.newTab') : [e.info.name, details(e)].filter(Boolean).join(', ');
+    if (e.kind === 'new') return t('tabs.newTab');
+    // El tooltip lleva la **ruta completa** y el nombre real, aunque la pestaña enseñe el alias.
+    return [repoAliases.label(e.info.path, e.info.name), e.info.path, details(e)].filter(Boolean).join(', ');
+  }
+
+  /** Nombre visible de la pestaña: alias si lo hay; si no, el nombre del repo. */
+  function shownName(e: Entry): string {
+    return e.kind === 'new' ? t('tabs.newTab') : repoAliases.label(e.info.path, e.info.name);
   }
 
   function tabEls(): HTMLElement[] {
@@ -319,6 +331,11 @@
           onpointerup={endDrag}
           onpointercancel={endDrag}
           onauxclick={(e) => onAux(e, entry.id)}
+          oncontextmenu={(e) => {
+            if (entry.kind !== 'repo' || !onalias) return;
+            e.preventDefault();
+            menuFor = entry.id;
+          }}
         >
           {#if entry.kind === 'new'}
             <span class="glyph new"><Icon name="plus" size={13} /></span>
@@ -334,7 +351,7 @@
                 <span class="dot"></span>
               {/if}
             </span>
-            <span class="name">{i.name}</span>
+            <span class="name">{shownName(entry)}</span>
             {#if i.branch && !i.missing}
               <span class="branch mono">{i.branch}</span>
             {/if}
@@ -361,6 +378,23 @@
         >
           <Icon name="x" size={12} />
         </button>
+        {#if menuFor === entry.id && entry.kind === 'repo'}
+          <!-- Menú contextual de la pestaña (clic derecho): el alias es solo presentación. -->
+          <div class="tabmenu" role="menu" aria-label={t('tabs.menu')} data-testid="tab-menu">
+            <button
+              type="button"
+              role="menuitem"
+              class="mi"
+              data-testid="tab-menu-alias"
+              onclick={() => {
+                menuFor = null;
+                onalias?.(entry.id);
+              }}
+            >
+              <Icon name="pencil" size={12} />{t('tabs.alias')}
+            </button>
+          </div>
+        {/if}
         <button
           type="button"
           class="resize"
@@ -677,5 +711,38 @@
       background: CanvasText;
       box-shadow: none;
     }
+  }
+  /* Menú contextual de la pestaña (clic derecho). */
+  .tabmenu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 30;
+    min-width: 160px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-elevated, var(--bg-surface));
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.35));
+  }
+  .tabmenu .mi {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .tabmenu .mi:hover,
+  .tabmenu .mi:focus-visible {
+    background: var(--bg-hover, var(--bg-surface));
+    outline: none;
   }
 </style>

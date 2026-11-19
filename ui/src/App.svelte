@@ -10,13 +10,17 @@
   import Workspace from '$lib/components/Workspace.svelte';
   import { t } from '$lib/i18n';
   import { installShortcuts, registerHandlers } from '$lib/shortcuts/registry';
-  import { HIBERNATE_CHECK_MS, type AppStore } from '$lib/stores/app.svelte';
+  import { HIBERNATE_CHECK_MS, type AppStore, type Entry } from '$lib/stores/app.svelte';
   import { buildActions } from '$lib/stores/commands';
   import { settings } from '$lib/stores/settings.svelte';
+  import AliasDialog from '$lib/components/AliasDialog.svelte';
   import SettingsDialog from '$lib/components/SettingsDialog.svelte';
   import { settingsUi, startSettingsSync } from '$lib/stores/settingsPanel.svelte';
 
   let { app }: { app: AppStore } = $props();
+
+  /** Pestaña cuyo alias se está editando (`null` = diálogo cerrado). */
+  let aliasFor = $state<Entry | null>(null);
 
   const entry = $derived(app.activeEntry);
   const title = $derived(entry?.kind === 'repo' ? `${entry.info.name}${entry.info.branch ? ` — ${entry.info.branch}` : ''}` : '');
@@ -92,6 +96,7 @@
     onreorder={(ids) => app.reorder(ids)}
     onpalette={() => (app.paletteOpen = true)}
     onsettings={() => settingsUi.open()}
+    onalias={(id) => (aliasFor = app.entries.find((e) => e.id === id) ?? null)}
   />
 
   <main class="main">
@@ -149,6 +154,7 @@
   <SettingsDialog
     api={app.api}
     tabId={entry?.kind === 'repo' ? entry.id : undefined}
+    repos={app.entries.filter((e): e is Extract<Entry, { kind: 'repo' }> => e.kind === 'repo').map((e) => ({ path: e.info.path, name: e.info.name }))}
     onclose={() => {
       settingsUi.close();
       if (app.activeTab) void app.activeTab.ai.loadState();
@@ -158,6 +164,15 @@
 
 {#if app.paletteOpen}
   <CommandPalette actions={buildActions(app)} onclose={() => (app.paletteOpen = false)} />
+{/if}
+
+{#if aliasFor && aliasFor.kind === 'repo'}
+  <AliasDialog
+    api={app.api}
+    path={aliasFor.info.path}
+    name={aliasFor.info.name}
+    onclose={() => (aliasFor = null)}
+  />
 {/if}
 
 <Toasts />
