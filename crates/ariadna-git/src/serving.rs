@@ -9,7 +9,7 @@ use crate::error::{GitError, GitResult};
 use crate::models::{
     Branch, Commit, ConflictFile, DiffHunk, DiffScope, FileDiff, GitPath, GitStatus,
     IntegrationState, MergeFastForward, MergeResult, MergeTreeScan, Remote, RemoteCheckout,
-    Repository,
+    Repository, Worktree,
 };
 use crate::stash::{StashApplyResult, StashEntry, StashPushOptions};
 use crate::tag::Tag;
@@ -159,6 +159,10 @@ pub trait GitServing: Send + Sync {
     async fn branches(&self, repo: &Repository) -> GitResult<Vec<Branch>>;
     /// Ramas de seguimiento (`origin/main`). No incluye `origin/HEAD`.
     async fn remote_tracking_branches(&self, repo: &Repository) -> GitResult<Vec<Branch>>;
+    /// Referencias de pull request (`refs/pull/*`, `refs/merge-requests/*`).
+    async fn pull_refs(&self, repo: &Repository) -> GitResult<Vec<Branch>>;
+    /// Worktrees del repo, con su HEAD (puede estar en «detached HEAD»).
+    async fn worktrees(&self, repo: &Repository) -> GitResult<Vec<Worktree>>;
     async fn create_branch(
         &self,
         repo: &Repository,

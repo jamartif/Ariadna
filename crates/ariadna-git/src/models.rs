@@ -373,6 +373,20 @@ pub struct Remote {
     pub push_url: String,
 }
 
+/// Un worktree del repositorio (`git worktree list`). Su `HEAD` puede no estar en ninguna rama.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Worktree {
+    pub path: String,
+    /// SHA del `HEAD` de ese worktree (puede no estar en ninguna rama: detached).
+    pub head: String,
+    /// Rama en la que está, si no está en «detached HEAD».
+    pub branch: Option<String>,
+    pub detached: bool,
+    /// El worktree principal (el del propio repositorio).
+    pub is_main: bool,
+}
+
 /// Resultado de bajar la cabeza de una referencia remota a una rama local
 /// (`checkout_pull_request`): `git fetch <remoto> <referencia>` y `checkout`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

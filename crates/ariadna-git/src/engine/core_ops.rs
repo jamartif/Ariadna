@@ -675,19 +675,49 @@ impl GitCliEngine {
         args.push(OsString::from(capped.to_string()));
         args.push(OsString::from(format!("--skip={}", skip.min(10_000_000))));
         if all {
-            // Ramas locales, de seguimiento, etiquetas y HEAD. Se evita `--all` a propósito: mete
-            // además el stash, las notas y `refs/pull/*`, que no son historia del proyecto y
-            // ensucian el grafo (y lo hacen más caro de recorrer). `HEAD` solo si existe: en un
-            // repo sin commits es un argumento inválido.
-            args.extend(os(&["--branches", "--remotes", "--tags"]));
-            if has_head {
-                args.push(OsString::from("HEAD"));
+            // Historia **completa**: todas las referencias del repo (ramas, remotas, etiquetas,
+            // refs/pull…) y el HEAD de cada worktree, incluidos los que están en «detached HEAD»,
+            // que no son ninguna referencia y por eso `--branches/--remotes/--tags` no alcanza.
+            for rev in self.graph_revs(repo).await? {
+                args.push(OsString::from(rev));
             }
             args.push(OsString::from("--topo-order"));
         }
         args.extend(os(&["--no-color", "--no-show-signature", LOG_FORMAT]));
         let out = self.read(repo, &args).await?;
         Ok(parse_commit_log(&out.stdout))
+    }
+
+    /// Revisiones que cubren la historia completa del repo: todas las referencias de `refs/`
+    /// (menos las que no son historia del proyecto: `stash`, `notes`, `bisect`) más el `HEAD` de
+    /// cada worktree. `HEAD` solo si existe: en un repo sin commits es un argumento inválido.
+    pub async fn graph_revs(&self, repo: &Repository) -> GitResult<Vec<String>> {
+        let out = self
+            .read(repo, &os(&["for-each-ref", "--format=%(refname)", "refs/"]))
+            .await?;
+        let mut revs: Vec<String> = out
+            .stdout_lossy()
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .filter(|l| {
+                !l.starts_with("refs/stash")
+                    && !l.starts_with("refs/notes/")
+                    && !l.starts_with("refs/bisect/")
+            })
+            .map(str::to_owned)
+            .collect();
+        // El HEAD de cada worktree: puede no estar en ninguna rama (detached) y sus commits, sin
+        // esto, no salen en el grafo de nadie.
+        for wt in self.worktrees(repo).await.unwrap_or_default() {
+            if !wt.head.is_empty() && !revs.iter().any(|r| r == &wt.head) {
+                revs.push(wt.head);
+            }
+        }
+        if self.has_head(repo).await? && !revs.iter().any(|r| r == "HEAD") {
+            revs.push("HEAD".to_owned());
+        }
+        Ok(revs)
     }
 
     /// Busca (sin distinguir mayúsculas, texto literal) en mensaje, autor y prefijo de hash
