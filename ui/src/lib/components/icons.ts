@@ -42,6 +42,8 @@ export const ICONS = {
   trash: ['M3 6h18', 'M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6', 'M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2', 'M10 11v6', 'M14 11v6'],
   rows: ['M3 6h18', 'M3 12h18', 'M3 18h18'],
   columns: [{ r: [3, 4, 7, 16, 1] }, { r: [14, 4, 7, 16, 1] }],
+  /** Ajuste al ancho: flecha que vuelve sobre sí misma (partir líneas largas). */
+  wrap: ['M3 8h13a3 3 0 1 1 0 6H9', 'm12 11-3 3 3 3', 'M3 5v14'],
   'panel-left': [{ r: [3, 3, 18, 18, 2] }, 'M9 3v18'],
   loader: ['M21 12a9 9 0 1 1-6.219-8.56'],
   folder: ['M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z'],

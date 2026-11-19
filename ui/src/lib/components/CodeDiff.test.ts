@@ -45,7 +45,9 @@ const file: FileDiff = {
 describe('CodeDiff · vista partida', () => {
   it('con un commit se puede ver en dos columnas y el contenido queda en las dos', async () => {
     render(CodeDiff, { props: { file } });
-    expect(screen.getByText(/^@@ -1,2 \+1,2 @@$/)).toBeInTheDocument();
+    // La cabecera sale dos veces: la fila del hunk y la barra fija de arriba.
+    expect(screen.getAllByText(/^@@ -1,2 \+1,2 @@$/).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('diff-sticky-hunk')).toHaveTextContent('@@ -1,2 +1,2 @@');
 
     await userEvent.click(screen.getByRole('button', { name: /Dos columnas/ }));
     await waitFor(() => expect(document.querySelectorAll('.srow').length).toBeGreaterThan(0));

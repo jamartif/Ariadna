@@ -48,12 +48,22 @@ function loadView(): ChangesView {
 /** Cómo se ve el diff: una sola columna (unificado) o antiguo | nuevo en paralelo. */
 export type DiffLayout = 'unified' | 'split';
 const LAYOUT_KEY = 'ariadna.diffLayout.v1';
+const WRAP_KEY = 'ariadna.diffWrap.v1';
 
 function loadLayout(): DiffLayout {
   try {
     return localStorage.getItem(LAYOUT_KEY) === 'split' ? 'split' : 'unified';
   } catch {
     return 'unified';
+  }
+}
+
+/** Ajuste al ancho: parte las líneas largas en vez de pedir scroll horizontal. */
+function loadWrap(): boolean {
+  try {
+    return localStorage.getItem(WRAP_KEY) === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -70,6 +80,8 @@ class Settings {
   changesView = $state<ChangesView>(loadView());
   /** Vista del diff: unificada o partida en dos columnas (se recuerda). */
   diffLayout = $state<DiffLayout>(loadLayout());
+  /** Ajuste al ancho del diff: parte líneas largas en vez de scroll horizontal (se recuerda). */
+  diffWrap = $state<boolean>(loadWrap());
 
   constructor() {
     const s = load();
@@ -85,6 +97,16 @@ class Settings {
     this.diffLayout = v;
     try {
       localStorage.setItem(LAYOUT_KEY, v);
+    } catch {
+      /* ignorar */
+    }
+  }
+
+  /** Ajuste al ancho: se recuerda como el resto de opciones de la vista de código. */
+  setDiffWrap(v: boolean): void {
+    this.diffWrap = v;
+    try {
+      localStorage.setItem(WRAP_KEY, v ? '1' : '0');
     } catch {
       /* ignorar */
     }
