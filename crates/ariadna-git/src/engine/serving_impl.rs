@@ -11,7 +11,7 @@ use crate::error::GitResult;
 use crate::models::{
     Branch, Commit, ConflictFile, DiffHunk, DiffScope, FileDiff, GitPath, GitStatus,
     IntegrationState, MergeFastForward, MergeResult, MergeTreeScan, Remote, RemoteCheckout,
-    Repository,
+    Repository, Worktree,
 };
 use crate::serving::{Confirmation, GitServing};
 use crate::stash::{StashApplyResult, StashEntry, StashPushOptions};
@@ -194,6 +194,12 @@ impl GitServing for GitCliEngine {
     }
     async fn remote_tracking_branches(&self, repo: &Repository) -> GitResult<Vec<Branch>> {
         self.remote_tracking_branches(repo).await
+    }
+    async fn pull_refs(&self, repo: &Repository) -> GitResult<Vec<Branch>> {
+        self.pull_refs(repo).await
+    }
+    async fn worktrees(&self, repo: &Repository) -> GitResult<Vec<Worktree>> {
+        self.worktrees(repo).await
     }
     async fn create_branch(
         &self,

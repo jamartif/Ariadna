@@ -209,3 +209,127 @@ async fn el_grafo_completo_ve_ramas_solo_remotas_y_pagina_sin_perder_nada() {
         "las páginas coinciden con la lista completa"
     );
 }
+/// Criterio medible del historial completo: lo que el panel puede **listar** tiene que ser
+/// exactamente lo que hay en git — ramas, remotas, etiquetas, `refs/pull` y los worktrees —
+/// y sus commits tienen que salir en el grafo. Ni una de más ni una de menos.
+#[tokio::test]
+async fn el_panel_lista_exactamente_las_mismas_referencias_que_git() {
+    let t = TestRepo::with_initial_commit();
+    let base = t.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    let _bare = t.with_bare_origin();
+    t.git(&["push", "-q", "origin", "main"]);
+
+    // Rama que solo existe en el remoto.
+    t.git(&["checkout", "-q", "-b", "solo-remota", &base]);
+    t.write("remota.txt", b"x\n");
+    let solo_remota = t.commit_all("solo en el remoto");
+    t.git(&["push", "-q", "origin", "solo-remota"]);
+    t.git(&["checkout", "-q", "main"]);
+    t.git(&["branch", "-D", "solo-remota"]);
+    t.git(&["fetch", "-q", "origin"]);
+
+    // Etiqueta.
+    t.git(&["tag", "-a", "v1.0", "-m", "version 1.0"]);
+
+    // Una ref de pull request (como las que deja `git fetch origin refs/pull/*`).
+    t.write("pr.txt", b"pr\n");
+    let pull = t.commit_all("trabajo de una PR");
+    t.git(&["reset", "-q", "--hard", &base]);
+    t.git(&["update-ref", "refs/pull/7/head", &pull]);
+
+    // Worktree aparte en «detached HEAD» con un commit que no está en ninguna rama.
+    let wt_dir = tempfile::tempdir().unwrap();
+    let wt = wt_dir.path().join("wt");
+    t.git(&[
+        "worktree",
+        "add",
+        "-q",
+        "--detach",
+        wt.to_str().unwrap(),
+        &base,
+    ]);
+    std::fs::write(wt.join("wt.txt"), b"wt\n").unwrap();
+    let st = std::process::Command::new(common::git_path())
+        .args(["add", "-A"])
+        .current_dir(&wt)
+        .status()
+        .unwrap();
+    assert!(st.success());
+    let st = std::process::Command::new(common::git_path())
+        .args(["commit", "-q", "-m", "trabajo en otro worktree"])
+        .current_dir(&wt)
+        .status()
+        .unwrap();
+    assert!(st.success());
+    let wt_head = String::from_utf8(
+        std::process::Command::new(common::git_path())
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&wt)
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_owned();
+
+    let engine = plain_engine();
+    let repo = engine.open_repository(t.path()).await.unwrap();
+
+    // 1. Lo que el panel lista == for-each-ref (heads, remotes, tags, pull) y los worktrees.
+    let mut listadas: Vec<String> = Vec::new();
+    for b in engine.branches(&repo).await.unwrap() {
+        listadas.push(format!("refs/heads/{}", b.name));
+    }
+    for b in engine.remote_tracking_branches(&repo).await.unwrap() {
+        listadas.push(format!("refs/remotes/{}", b.name));
+    }
+    for tg in engine.tags(&repo).await.unwrap() {
+        listadas.push(format!("refs/tags/{}", tg.name));
+    }
+    for b in engine.pull_refs(&repo).await.unwrap() {
+        listadas.push(format!("refs/pull/{}", b.name));
+    }
+    let worktrees = engine.worktrees(&repo).await.unwrap();
+    assert!(
+        worktrees.iter().any(|w| w.head == wt_head && w.detached),
+        "el worktree detached aparece con su HEAD: {worktrees:?}"
+    );
+
+    let esperadas: Vec<String> = t
+        .git(&[
+            "for-each-ref",
+            "--format=%(refname)",
+            "refs/heads",
+            "refs/remotes",
+            "refs/tags",
+            "refs/pull",
+        ])
+        .lines()
+        .map(|l| l.trim().to_owned())
+        .filter(|l| !l.is_empty() && !l.ends_with("/HEAD"))
+        .collect();
+    listadas.sort();
+    let mut esperadas = esperadas;
+    esperadas.sort();
+    assert_eq!(
+        listadas, esperadas,
+        "el panel no lista las mismas refs que git"
+    );
+
+    // 2. Los commits de esas refs salen en el grafo completo.
+    let todo = engine.log_page_all(&repo, 0, 200).await.unwrap();
+    let shas: Vec<&str> = todo.iter().map(|c| c.sha.as_str()).collect();
+    assert!(shas.contains(&solo_remota.as_str()), "rama solo remota");
+    assert!(shas.contains(&pull.as_str()), "refs/pull/7/head");
+    assert!(
+        shas.contains(&wt_head.as_str()),
+        "HEAD del worktree detached"
+    );
+
+    // 3. Y el de HEAD solo no los tiene.
+    let head = engine.log_page(&repo, 0, 200).await.unwrap();
+    let head_shas: Vec<&str> = head.iter().map(|c| c.sha.as_str()).collect();
+    assert!(!head_shas.contains(&pull.as_str()));
+    assert!(!head_shas.contains(&wt_head.as_str()));
+}

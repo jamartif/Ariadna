@@ -28,7 +28,7 @@ use ariadna_git::session::{
 use ariadna_git::{
     Branch, Commit, Confirmation, ConflictFile, DiffHunk, DiffScope, FileDiff, GitError, GitPath,
     GitRunner, GitServing, GitStatus, IntegrationState, MergeFastForward, MergeResult,
-    MergeTreeScan, Remote, Repository,
+    MergeTreeScan, Remote, Repository, Worktree,
 };
 use async_trait::async_trait;
 use tokio::sync::{broadcast, Semaphore};
@@ -298,6 +298,14 @@ impl GitServing for FakeEngine {
     }
     async fn remote_tracking_branches(&self, _repo: &Repository) -> Result<Vec<Branch>, GitError> {
         self.simple_read("remote_tracking_branches").await;
+        Ok(Vec::new())
+    }
+    async fn pull_refs(&self, _repo: &Repository) -> Result<Vec<Branch>, GitError> {
+        self.simple_read("pull_refs").await;
+        Ok(Vec::new())
+    }
+    async fn worktrees(&self, _repo: &Repository) -> Result<Vec<Worktree>, GitError> {
+        self.simple_read("worktrees").await;
         Ok(Vec::new())
     }
     async fn create_branch(
