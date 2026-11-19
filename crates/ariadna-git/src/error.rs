@@ -160,9 +160,9 @@ impl AmendRefusal {
                 "Hay un merge, rebase o cherry-pick en curso. Termínalo o abórtalo antes."
                     .to_owned()
             }
-            AmendRefusal::AlreadyPublished(remote_ref) => format!(
-                "El último commit ya está en {remote_ref}. Corregirlo obligaría a un push forzado."
-            ),
+            AmendRefusal::AlreadyPublished(remote_ref) => {
+                format!("Ya está en {remote_ref}: corregirlo obligaría a un push forzado.")
+            }
         }
     }
 }

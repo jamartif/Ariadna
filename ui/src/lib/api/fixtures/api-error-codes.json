@@ -28,8 +28,12 @@
   },
   {
     "code": "CANNOT_AMEND",
-    "detail": "ya publicado",
-    "message": "No corrijo el último commit. ya publicado"
+    "detail": "Ya está en origin/main: corregirlo obligaría a un push forzado.",
+    "message": "No corrijo el último commit. Ya está en origin/main: corregirlo obligaría a un push forzado.",
+    "reason": {
+      "kind": "already_published",
+      "value": "origin/main"
+    }
   },
   {
     "code": "LOCAL_CHANGES_BLOCK_CHECKOUT",
