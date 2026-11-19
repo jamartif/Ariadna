@@ -440,6 +440,7 @@ async fn formas_json_del_contrato_con_la_ui() {
             "oauthGitLabClientId",
             "profileRules",
             "pullRebase",
+            "repoAliases",
             "theme",
             "version"
         ]
