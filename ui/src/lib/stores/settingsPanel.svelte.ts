@@ -21,6 +21,7 @@ import {
 import { t, type LanguagePref } from '$lib/i18n';
 import { normalizePattern } from '$lib/util/profileRules';
 import { settings as globalSettings } from './settings.svelte';
+import { repoAliases } from './repoAliases.svelte';
 import { toasts } from './toasts.svelte';
 
 export type SettingsSection = 'general' | 'git' | 'ai' | 'accounts' | 'about';
@@ -228,6 +229,19 @@ export class SettingsPanel {
   }
 
   /**
+   * Alias de un repositorio en el borrador de Ajustes. Se guarda con el resto («Guardar»), y el
+   * alias vacío se envía para que el núcleo lo borre.
+   */
+  setRepoAlias(path: string, alias: string): void {
+    if (!this.draft) return;
+    const next = { ...(this.draft.repoAliases ?? {}) };
+    const value = alias.trim();
+    if (value === '') delete next[path];
+    else next[path] = value;
+    this.draft.repoAliases = next;
+  }
+
+  /**
    * El idioma se aplica al momento (como el tema) y se guarda con el resto del borrador;
    * «Cancelar» devuelve el que había.
    */
@@ -327,6 +341,7 @@ export class SettingsPanel {
         language: view.settings.language
       };
       globalSettings.applyExternal(view.settings.theme, view.settings.diffFontSize, view.settings.language);
+      repoAliases.hydrate(view.settings);
       this.gitCheck = null;
       void this.loadAi(); // las reglas pueden cambiar el perfil de la pestaña
       toasts.success(t('settings.saved'));
@@ -386,6 +401,7 @@ export function startSettingsSync(api: Api): () => void {
       if (stopped) return;
       // El idioma guardado en `settings.json` manda: se aplica antes del primer pintado útil.
       globalSettings.applyExternal(view.settings.theme, view.settings.diffFontSize, view.settings.language);
+      repoAliases.hydrate(view.settings);
       if (view.load.warning) toasts.warning(t('settings.loadWarning'), view.load.warning);
       globalSettings.onChange = (s) => {
         if (timer) clearTimeout(timer);

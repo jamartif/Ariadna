@@ -14,7 +14,7 @@
   import GeneralSection from './settings/GeneralSection.svelte';
   import GitSection from './settings/GitSection.svelte';
 
-  let { api, tabId, onclose }: { api: Api; tabId?: string; onclose: () => void } = $props();
+  let { api, tabId, onclose, repos = [] }: { api: Api; tabId?: string; onclose: () => void; repos?: { path: string; name: string }[] } = $props();
 
   /** Estilos del `body` antes de abrir: se restauran al cerrar. */
   let previousOverflow = '';
@@ -144,7 +144,7 @@
             </div>
           {/if}
           {#if section === 'general'}
-            <GeneralSection {panel} />
+            <GeneralSection {panel} {repos} />
           {:else if section === 'git'}
             <GitSection {panel} />
           {:else if section === 'ai'}

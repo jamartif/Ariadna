@@ -533,7 +533,8 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       { pattern: 'github.com', profile: 'personal' }
     ],
     oauthGitHubClientId: null,
-    oauthGitLabClientId: null
+    oauthGitLabClientId: null,
+    repoAliases: {}
   };
   let gitInUse: { path: string; version: string } | null = scenario === 'nogit' ? null : { path: '/usr/bin/git', version: '2.47.0' };
   const settingsWarning =
@@ -1921,7 +1922,16 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         gitInUse = probe.ok && probe.path && probe.version ? { path: probe.path, version: probe.version } : null;
         emit('tabs-changed', appState());
       }
-      settingsData = { ...next, version: 1, gitPath: path, profileRules: rules };
+      // Alias de repos: se recortan, se acotan a 24 y se descartan los vacíos (como en Rust).
+      const aliases: Record<string, string> = {};
+      for (const [repoPath, raw] of Object.entries(next.repoAliases ?? {})) {
+        const alias = String(raw).trim();
+        if (alias === '') continue;
+        if ([...alias].length > 24) throw badSetting('repoAliases', 'el alias es demasiado largo (máximo 24 caracteres)');
+        if (!/^[\p{L}\p{N} ._/-]+$/u.test(alias)) throw badSetting('repoAliases', 'el alias solo admite letras, números, espacio y . - _ /');
+        aliases[repoPath] = alias;
+      }
+      settingsData = { ...next, version: 1, gitPath: path, profileRules: rules, repoAliases: aliases };
       return settingsView();
     },
     async detectGit(path) {

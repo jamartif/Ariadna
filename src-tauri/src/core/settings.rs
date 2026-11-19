@@ -7,6 +7,7 @@
 //! * Validación estricta de cada campo; los errores son `PARSE` con el campo en `detail`.
 //! * Ariadna **no guarda tokens**: este archivo no contiene ningún secreto.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -77,6 +78,10 @@ pub struct Settings {
     /// `client_id` de la OAuth App del usuario en GitLab.
     #[serde(rename = "oauthGitLabClientId")]
     pub oauth_gitlab_client_id: Option<String>,
+    /// Alias corto por repositorio (`ruta absoluta → alias`). Solo presentación: la ruta completa
+    /// sigue mandando en todo lo demás. Sin alias se recorta el nombre como siempre.
+    #[serde(default)]
+    pub repo_aliases: BTreeMap<String, String>,
 }
 
 impl Default for Settings {
@@ -100,6 +105,7 @@ impl Default for Settings {
             ],
             oauth_github_client_id: None,
             oauth_gitlab_client_id: None,
+            repo_aliases: BTreeMap::new(),
         }
     }
 }
@@ -190,8 +196,45 @@ impl Settings {
             normalize_client_id("oauthGitHubClientId", self.oauth_github_client_id.take())?;
         self.oauth_gitlab_client_id =
             normalize_client_id("oauthGitLabClientId", self.oauth_gitlab_client_id.take())?;
+        // Alias de repositorios: se normalizan y se descartan los vacíos (un alias vacío = sin alias).
+        let mut aliases = BTreeMap::new();
+        for (path, alias) in std::mem::take(&mut self.repo_aliases) {
+            let clean = normalize_alias(&alias)?;
+            if let Some(alias) = clean {
+                aliases.insert(path, alias);
+            }
+        }
+        self.repo_aliases = aliases;
         Ok(())
     }
+}
+
+/// Longitud máxima de un alias de repositorio (corto por definición: es para la barra superior).
+pub const MAX_ALIAS: usize = 24;
+
+/// Normaliza el alias de un repo: recorta espacios, valida longitud y caracteres y devuelve `None`
+/// si queda vacío (borrar el alias). Letras (con acentos), números, espacio, `-`, `_`, `.` y `/`.
+fn normalize_alias(value: &str) -> ApiResult<Option<String>> {
+    let v = value.trim();
+    if v.is_empty() {
+        return Ok(None);
+    }
+    if v.chars().count() > MAX_ALIAS {
+        return Err(bad(
+            "repoAliases",
+            "el alias es demasiado largo (máximo 24 caracteres)",
+        ));
+    }
+    if !v
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '/'))
+    {
+        return Err(bad(
+            "repoAliases",
+            "el alias solo admite letras, números, espacio y . - _ /",
+        ));
+    }
+    Ok(Some(v.to_owned()))
 }
 
 /// Normaliza el `client_id` de una OAuth App: vacío = `None`, y solo caracteres de un id público
@@ -799,6 +842,45 @@ mod tests {
         s.validate().unwrap();
         assert_eq!(s, Settings::default());
         assert_eq!(s.profile_rules.len(), 2);
+    }
+
+    /// El alias es solo presentación, pero se valida: se recorta, se acota y se rechaza lo que no
+    /// sirve para una barra superior corta. Un alias vacío borra el alias.
+    #[test]
+    fn los_alias_de_repositorio_se_normalizan_y_se_validan() {
+        let mut s = Settings::default();
+        s.repo_aliases
+            .insert("C:/repos/ariadna".into(), "  Ariadna  ".into());
+        s.repo_aliases.insert("C:/repos/otro".into(), "   ".into());
+        s.validate().unwrap();
+        assert_eq!(
+            s.repo_aliases.get("C:/repos/ariadna").map(String::as_str),
+            Some("Ariadna")
+        );
+        assert!(
+            !s.repo_aliases.contains_key("C:/repos/otro"),
+            "vacío = sin alias"
+        );
+
+        let mut largo = Settings::default();
+        largo
+            .repo_aliases
+            .insert("C:/r".into(), "x".repeat(MAX_ALIAS + 1));
+        let e = largo.validate().unwrap_err();
+        assert_eq!(e.code, "PARSE");
+        assert!(e.message.contains("repoAliases"), "{}", e.message);
+
+        let mut raro = Settings::default();
+        raro.repo_aliases
+            .insert("C:/r".into(), "con\u{0}control".into());
+        assert!(raro.validate().unwrap_err().message.contains("repoAliases"));
+        let mut emoji = Settings::default();
+        emoji.repo_aliases.insert("C:/r".into(), "ok 😀".into());
+        assert!(emoji
+            .validate()
+            .unwrap_err()
+            .message
+            .contains("repoAliases"));
     }
 
     #[test]
