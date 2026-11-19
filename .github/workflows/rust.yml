@@ -90,13 +90,73 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Pruebas del propio gate: los tres estados (ok / fallo real / sin runner) sobre fixtures, sin red.
+  # Si el gate se rompe, esto lo dice antes de que tumbe una release.
+  gate-tests:
+    name: gate del CI (pruebas)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/ci/rust-gate.test.sh
+
   # Job agregador: es el único que hay que marcar como obligatorio.
+  #
+  # POR QUÉ NO ES UN `test` DE `needs.*.result` (esto se perdió una vez y tumbó tres releases):
+  #   · Cuando GitHub no consigue runner para un job (capacidad de macOS arm64, por ejemplo), NO lo
+  #     marca como `failure`: lo deja en **`cancelled`** y anota en el check-run «The job was not
+  #     acquired by Runner of type hosted even after multiple attempts».
+  #   · Mirar `needs.test.result` y exigir «success» convierte esos casos en rojo: el pipeline entero
+  #     aparece fallido sin un solo test roto (pasó en alpha.8, alpha.10 y alpha.11), y la única
+  #     salida era relanzar a mano.
+  #   · Por eso aquí se clasifica en **tres** estados (scripts/ci/rust-gate.sh):
+  #       ok / fallo real / sin runner.
+  #     `sin runner` con reintentos pendientes sale en rojo **para que el workflow «Runner retry»
+  #     lo relance**; cuando se agotan los intentos queda un `warning` con «sin runner tras 3
+  #     intentos» y el gate pasa, porque no es un fallo de tests. Un `failure` de verdad (o un
+  #     `cancelled` que no sea por falta de runner) siempre sale en rojo.
   rust-ok:
     name: rust-ok
     if: always()
-    needs: [lint, test, gitleaks]
+    needs: [lint, test, gitleaks, gate-tests]
     runs-on: ubuntu-24.04
+    permissions:
+      # Leer los jobs y las anotaciones de este mismo run.
+      actions: read
+      contents: read
     steps:
-      - run: |
-          echo "lint=${{ needs.lint.result }} test=${{ needs.test.result }} gitleaks=${{ needs.gitleaks.result }}"
-          test "${{ needs.lint.result }}" = "success" -a "${{ needs.test.result }}" = "success" -a "${{ needs.gitleaks.result }}" = "success"
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci
+      - name: Clasificar el resultado (ok / fallo real / sin runner)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          auth=(-H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json")
+          curl -sfS "${auth[@]}" "$api/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" -o "$RUNNER_TEMP/jobs.json"
+
+          # Jobs cancelados/omitidos: ¿fue por falta de runner? Lo dice la anotación del check-run.
+          : > "$RUNNER_TEMP/no-runner.txt"
+          for id in $(jq -r '.jobs[] | select(.conclusion == "cancelled" or .conclusion == "skipped") | .id' "$RUNNER_TEMP/jobs.json"); do
+            if curl -sfS "${auth[@]}" "$api/check-runs/$id/annotations" | grep -qi "not acquired by Runner"; then
+              echo "$id" >> "$RUNNER_TEMP/no-runner.txt"
+            fi
+          done
+
+          rc=0
+          bash scripts/ci/rust-gate.sh \
+            --jobs "$RUNNER_TEMP/jobs.json" \
+            --no-runner "$RUNNER_TEMP/no-runner.txt" \
+            --attempt "${GITHUB_RUN_ATTEMPT:-1}" \
+            --max 3 \
+            --summary "$RUNNER_TEMP/gate.md" || rc=$?
+          { echo "## Gate de Rust"; cat "$RUNNER_TEMP/gate.md" 2>/dev/null; } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$rc" -eq 3 ]; then
+            # Rojo a propósito: el workflow «Runner retry» mira este run y relanza los jobs que no
+            # llegaron a ejecutarse. NO es un test roto.
+            echo "::error title=Sin runner::Falta runner para algún test; se relanzará automáticamente (intento ${GITHUB_RUN_ATTEMPT:-1} de 3)."
+            exit 1
+          fi
+          exit "$rc"
