@@ -23,7 +23,11 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
-      - '.github/workflows/e2e.yml'
+      # `E2E y visual` es un check obligatorio de `main`: si un PR toca el gate del CI y este
+      # workflow no se dispara, el PR queda bloqueado para siempre. Los cambios del gate pasan por
+      # la suite completa.
+      - 'scripts/ci/**'
+      - '.github/workflows/**'
   push:
     branches: [main]
     paths:

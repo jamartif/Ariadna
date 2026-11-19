@@ -6,7 +6,11 @@ on:
   pull_request:
     paths:
       - 'ui/**'
-      - '.github/workflows/ui.yml'
+      # Un cambio en el gate del CI (scripts/ci, workflows) tiene que pasar **todos** los checks
+      # obligatorios, incluidos los de este workflow: si no, el PR se queda bloqueado para siempre
+      # porque `ui-ok` nunca llega a ejecutarse.
+      - 'scripts/ci/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 concurrency:
