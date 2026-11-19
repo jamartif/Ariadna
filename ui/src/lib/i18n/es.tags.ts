@@ -1,6 +1,8 @@
 /** Textos de etiquetas (tags): lista, crear, publicar, borrar y el cursor del historial. */
 export const esTags = {
   'tags.title': 'Etiquetas',
+  /** Riel: abrir la etiqueta {name} (se gestiona en el diálogo de remotos y etiquetas). */
+  'tags.open': 'Abrir la etiqueta {name}',
   'tags.region': 'Etiquetas del repositorio',
   'tags.empty': 'Este repositorio no tiene etiquetas. Crea una para marcar una versión.',
   'tags.loadFailed': 'No se pudieron leer las etiquetas',

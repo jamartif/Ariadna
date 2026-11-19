@@ -3,6 +3,8 @@ import type { esTags } from './es.tags';
 
 export const enTags: Record<keyof typeof esTags, string> = {
   'tags.title': 'Tags',
+  /** Rail: open the {name} tag (managed in the remotes and tags dialog). */
+  'tags.open': 'Open the {name} tag',
   'tags.region': 'Repository tags',
   'tags.empty': 'This repository has no tags. Create one to mark a release.',
   'tags.loadFailed': 'Could not read the tags',

@@ -164,6 +164,8 @@ export const esScreens = {
   'branches.toggleFolder': 'Abrir o cerrar la carpeta {folder}',
   'branches.local': 'Locales',
   'branches.remote': 'Remotas',
+  /** Etiquetas: referencias del repo (`refs/tags`) que el riel lista junto a las ramas. */
+  'branches.tags': 'Etiquetas',
   'branches.current': 'actual',
   'branches.emptyTitle': 'Sin ramas',
   'branches.emptyBody': 'Haz el primer commit para que exista una rama.',
