@@ -862,6 +862,12 @@ async fn list_tags(core: State<'_, AppCore>, tab_id: String) -> Cmd<Vec<ariadna_
     core.list_tags(&tab_id).await
 }
 
+/// Refs de pull request y worktrees: lectura explícita para el riel (fuera del refresco).
+#[tauri::command]
+async fn extra_refs(core: State<'_, AppCore>, tab_id: String) -> Cmd<crate::core::ExtraRefs> {
+    core.extra_refs(&tab_id).await
+}
+
 #[tauri::command]
 async fn create_tag(
     core: State<'_, AppCore>,
@@ -1245,6 +1251,7 @@ pub fn run() {
             log,
             log_page,
             list_tags,
+            extra_refs,
             create_tag,
             delete_tag,
             push_tag,

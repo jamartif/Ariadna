@@ -14,6 +14,7 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 export function createTauriTags(): TagApi {
   return {
     listTags: (tabId) => call('list_tags', { tabId }),
+    extraRefs: (tabId) => call('extra_refs', { tabId }),
     createTag: (tabId, name, target, message) => call('create_tag', { tabId, name, target, message }),
     deleteTag: (tabId, name) => call('delete_tag', { tabId, name }),
     pushTag: (tabId, remote, name) => call('push_tag', { tabId, remote, name }),

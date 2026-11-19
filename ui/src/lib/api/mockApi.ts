@@ -162,6 +162,9 @@ interface MockRepo {
   branch: string | null;
   detached: boolean;
   missing: boolean;
+  /** Refs de PR y worktrees (los pide el riel aparte del snapshot). */
+  pullRefs?: Branch[];
+  worktrees?: { path: string; head: string; branch: string | null; detached: boolean; isMain: boolean }[];
   files: MockFile[];
   branches: Branch[];
   remoteBranches: Branch[];
