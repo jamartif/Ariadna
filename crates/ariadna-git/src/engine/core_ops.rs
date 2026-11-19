@@ -656,8 +656,19 @@ impl GitCliEngine {
         limit: usize,
         all: bool,
     ) -> GitResult<Vec<Commit>> {
-        if !self.has_head(repo).await? && !all {
+        let has_head = self.has_head(repo).await?;
+        if !has_head && !all {
             return Ok(Vec::new());
+        }
+        if !has_head {
+            // Repo sin commits: `git log --branches …` falla por el `HEAD` sin resolver, así que
+            // se comprueba antes si hay alguna referencia con historia.
+            let out = self
+                .read(repo, &os(&["rev-list", "--count", "--all"]))
+                .await?;
+            if out.stdout_lossy().trim() == "0" {
+                return Ok(Vec::new());
+            }
         }
         let capped = limit.clamp(1, MAX_LOG);
         let mut args = os(&["log", "-n"]);
@@ -666,14 +677,13 @@ impl GitCliEngine {
         if all {
             // Ramas locales, de seguimiento, etiquetas y HEAD. Se evita `--all` a propósito: mete
             // además el stash, las notas y `refs/pull/*`, que no son historia del proyecto y
-            // ensucian el grafo (y lo hacen más caro de recorrer).
-            args.extend(os(&[
-                "--branches",
-                "--remotes",
-                "--tags",
-                "HEAD",
-                "--topo-order",
-            ]));
+            // ensucian el grafo (y lo hacen más caro de recorrer). `HEAD` solo si existe: en un
+            // repo sin commits es un argumento inválido.
+            args.extend(os(&["--branches", "--remotes", "--tags"]));
+            if has_head {
+                args.push(OsString::from("HEAD"));
+            }
+            args.push(OsString::from("--topo-order"));
         }
         args.extend(os(&["--no-color", "--no-show-signature", LOG_FORMAT]));
         let out = self.read(repo, &args).await?;

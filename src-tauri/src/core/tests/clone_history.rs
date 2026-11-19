@@ -234,6 +234,64 @@ async fn credenciales_guardar_probar_y_olvidar_con_un_helper_falso() {
 
 // --- historial -------------------------------------------------------------------------------
 
+/// El caso de una rama que se queda **por detrás**: HEAD está en una rama vieja y otra rama tiene
+/// un merge por delante. El historial de HEAD no lo ve; el grafo completo sí.
+#[tokio::test]
+async fn el_grafo_completo_ve_otra_rama_cuando_head_va_por_detras() {
+    let env = Env::new();
+    let repo = env.repo("grafo");
+    env.write(&repo, "a.txt", b"uno\n");
+    env.git(&repo, &["add", "-A"]);
+    env.git(&repo, &["commit", "-q", "-m", "base"]);
+    let base = env.git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    // Una rama que se queda atrás.
+    env.git(&repo, &["checkout", "-q", "-b", "vieja", &base]);
+    env.write(&repo, "vieja.txt", b"vieja\n");
+    env.git(&repo, &["add", "-A"]);
+    env.git(&repo, &["commit", "-q", "-m", "trabajo en vieja"]);
+
+    // `main` avanza y fusiona `vieja`: su punta no es ancestro de HEAD.
+    env.git(&repo, &["checkout", "-q", "main"]);
+    env.write(&repo, "main.txt", b"main\n");
+    env.git(&repo, &["add", "-A"]);
+    env.git(&repo, &["commit", "-q", "-m", "trabajo en main"]);
+    env.git(
+        &repo,
+        &["merge", "-q", "--no-ff", "vieja", "-m", "merge de vieja"],
+    );
+    let merge = env.git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    // HEAD se queda en la rama vieja.
+    env.git(&repo, &["checkout", "-q", "vieja"]);
+    let id = env.open(&repo).await;
+
+    let actual = env
+        .core
+        .log_page(&id, 0, 50, None, Some("current".into()))
+        .await
+        .unwrap();
+    assert!(
+        !actual.iter().any(|c| c.sha == merge),
+        "el merge de main no está en el historial de HEAD"
+    );
+
+    let todo = env
+        .core
+        .log_page(&id, 0, 50, None, Some("all".into()))
+        .await
+        .unwrap();
+    assert!(
+        todo.iter().any(|c| c.sha == merge),
+        "el grafo completo tiene que ver el merge de la otra rama: {:?}",
+        todo.iter().map(|c| c.sha.clone()).collect::<Vec<_>>()
+    );
+    // Y sin ámbito explícito (lo que manda la interfaz) sigue siendo el completo por defecto de
+    // la vista: la interfaz manda `all`, pero el valor ausente no debe cambiar el resultado.
+    let sin = env.core.log_page(&id, 0, 50, None, None).await.unwrap();
+    assert!(sin.iter().any(|c| c.sha == merge));
+}
+
 #[tokio::test]
 async fn log_page_pagina_sin_solapes_y_filtra_por_texto() {
     let env = Env::new();

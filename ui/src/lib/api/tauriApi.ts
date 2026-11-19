@@ -75,7 +75,10 @@ export function createTauriApi(): Api {
     amendDraft: (tabId) => call('amend_draft', { tabId }),
     diff: (tabId, scope, paths) => call('diff', { tabId, scope, paths }),
     log: (tabId, limit, query) => call('log', { tabId, limit, query }),
-    logPage: (tabId, skip, limit, query, cursor, scope) => call('log_page', { tabId, skip, limit, query, cursor: cursor ?? null, scope: scope ?? null }),
+    logPage: (tabId, skip, limit, query, cursor, scope) =>
+      // Sin ámbito explícito se pide el **grafo completo**: es lo que muestra la vista y evita
+      // que una petición antigua se quede mirando solo HEAD.
+      call('log_page', { tabId, skip, limit, query, cursor: cursor ?? null, scope: scope ?? 'all' }),
     createBranch: (tabId, name, startPoint) => call('create_branch', { tabId, name, startPoint }),
     renameBranch: (tabId, oldName, newName) =>
       call('rename_branch', { tabId, old: oldName, new: newName }),

@@ -843,7 +843,12 @@ async fn log_page(
     // El grafo completo (`all`) no usa cursor: pagina por `skip`, que es lo que git permite con
     // `--all` sin recalcular fronteras de varias puntas.
     let searching = query.as_deref().is_some_and(|q| !q.trim().is_empty());
-    let all = scope.as_deref().map(str::trim).is_some_and(|s| s == "all");
+    // Sin ámbito se asume el **completo** (el que muestra la vista por defecto); solo «current»
+    // recorta a HEAD. Así el cursor (que es de HEAD) únicamente se usa con `current`.
+    let all = !scope
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|s| s == "current");
     match cursor {
         Some(cursor) if !searching && !all => core.log_after(&tab_id, cursor, limit).await,
         _ => core.log_page(&tab_id, skip, limit, query, scope).await,
