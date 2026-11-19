@@ -5,6 +5,26 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
+## [0.1.0-alpha.13] - 2026-11-20
+
+**Respecto a `v0.1.0-alpha.12`:** el **riel izquierdo** gana dos grupos más de referencias, para que
+no se quede nada fuera de la vista: las **refs de pull request** descargadas en el repo
+(`refs/pull/*`, `refs/merge-requests/*`) y los **otros worktrees** del repositorio — incluidos los que
+están en «detached HEAD», cuyos commits no alcanza ninguna rama.
+
+### Añadido
+- **Riel › Refs de PR**: grupo plegable con contador; cada fila con el nombre corto (`7/head`), el SHA
+  corto y el tooltip con la referencia completa (`refs/pull/7/head`).
+- **Riel › Otros worktrees**: grupo plegable con contador; muestra la rama del worktree o, si está en
+  «detached HEAD», su SHA corto con la marca «sin rama», y la ruta completa en el tooltip. El worktree
+  principal no se repite.
+- Los dos grupos respetan el **filtro** del riel y se recargan con cada revisión del repo.
+
+### Por dentro
+- Lectura **explícita** `extra_refs` (`src-tauri/src/core/refs_ops.rs`): una sola operación que pide
+  refs de PR y worktrees con `read_op`. **No pasa por el snapshot**, así que no añade lecturas al
+  refresco de la sesión ni altera las pruebas de sesión con `FakeEngine`.
+
 ## [0.1.0-alpha.12] - 2026-11-20
 
 Entra lo que llegó a `main` después de la alpha.11.
