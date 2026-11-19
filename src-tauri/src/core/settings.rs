@@ -220,7 +220,10 @@ fn normalize_alias(value: &str) -> ApiResult<Option<String>> {
         return Ok(None);
     }
     if v.chars().count() > MAX_ALIAS {
-        return Err(bad("repoAliases", "el alias es demasiado largo (máximo 24 caracteres)"));
+        return Err(bad(
+            "repoAliases",
+            "el alias es demasiado largo (máximo 24 caracteres)",
+        ));
     }
     if !v
         .chars()
@@ -846,27 +849,38 @@ mod tests {
     #[test]
     fn los_alias_de_repositorio_se_normalizan_y_se_validan() {
         let mut s = Settings::default();
-        s.repo_aliases.insert("C:/repos/ariadna".into(), "  Ariadna  ".into());
+        s.repo_aliases
+            .insert("C:/repos/ariadna".into(), "  Ariadna  ".into());
         s.repo_aliases.insert("C:/repos/otro".into(), "   ".into());
         s.validate().unwrap();
         assert_eq!(
             s.repo_aliases.get("C:/repos/ariadna").map(String::as_str),
             Some("Ariadna")
         );
-        assert!(!s.repo_aliases.contains_key("C:/repos/otro"), "vacío = sin alias");
+        assert!(
+            !s.repo_aliases.contains_key("C:/repos/otro"),
+            "vacío = sin alias"
+        );
 
         let mut largo = Settings::default();
-        largo.repo_aliases.insert("C:/r".into(), "x".repeat(MAX_ALIAS + 1));
+        largo
+            .repo_aliases
+            .insert("C:/r".into(), "x".repeat(MAX_ALIAS + 1));
         let e = largo.validate().unwrap_err();
         assert_eq!(e.code, "PARSE");
         assert!(e.message.contains("repoAliases"), "{}", e.message);
 
         let mut raro = Settings::default();
-        raro.repo_aliases.insert("C:/r".into(), "con\u{0}control".into());
+        raro.repo_aliases
+            .insert("C:/r".into(), "con\u{0}control".into());
         assert!(raro.validate().unwrap_err().message.contains("repoAliases"));
         let mut emoji = Settings::default();
         emoji.repo_aliases.insert("C:/r".into(), "ok 😀".into());
-        assert!(emoji.validate().unwrap_err().message.contains("repoAliases"));
+        assert!(emoji
+            .validate()
+            .unwrap_err()
+            .message
+            .contains("repoAliases"));
     }
 
     #[test]
