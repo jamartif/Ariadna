@@ -505,7 +505,8 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       { id: 'claude', displayName: 'Claude', availability: scenario === 'ai-not-installed' ? 'missing' : 'available', version: scenario === 'ai-not-installed' ? null : '2.1.319', hint: scenario === 'ai-not-logged' ? 'Sin sesión iniciada' : null, enabled: true, consented: false, loginCommand: 'claude auth login', sharesLogin: false, isolated: false, isolationVerified: true, model: null, models: ['sonnet', 'opus', 'haiku', 'fable'] },
       { id: 'codex', displayName: 'Codex', availability: 'missing', version: null, hint: 'No se encontró el comando «codex»', enabled: true, consented: false, loginCommand: 'codex login', sharesLogin: false, isolated: false, isolationVerified: false, model: null, models: [] },
       { id: 'copilot', displayName: 'Copilot', availability: 'failed', version: '1.0.4', hint: 'Sin sesión iniciada', enabled: true, consented: false, loginCommand: 'copilot login', sharesLogin: true, isolated: false, isolationVerified: false, model: null, models: ['auto'] }
-    ]
+    ],
+    maxContextBytes: 100_000
   };
   /** Aislamiento de sesión por perfil: Personal conserva el login normal, Empresa usa el suyo. */
   const isolationPref: Record<'personal' | 'empresa', boolean> = { personal: false, empresa: true };
@@ -1877,6 +1878,13 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         ai.providers = ai.providers.map((p) => (p.id === id ? { ...p, enabled } : p));
       }
       if (patch.isolated !== undefined) isolationPref[ai.profile.kind] = patch.isolated;
+      if (patch.maxContextBytes !== undefined) {
+        const bytes = Math.trunc(patch.maxContextBytes);
+        if (!Number.isFinite(bytes) || bytes < 4_000 || bytes > 4_000_000) {
+          throw err('INVALID_REFERENCE', 'el tamaño de contexto tiene que estar entre 4000 y 4000000 bytes (100000)', String(patch.maxContextBytes));
+        }
+        ai.maxContextBytes = bytes;
+      }
       if (patch.model) {
         const { id, model } = patch.model;
         const name = model?.trim() || null;
@@ -2003,7 +2011,15 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         if (scenario === 'ai-quota') throw err('AI_QUOTA', `${provider.displayName} ha alcanzado su límite de uso. Vuelve a intentarlo más tarde o elige otro proveedor.`);
         if (scenario === 'ai-timeout') throw err('AI_TIMEOUT', `${provider.displayName} no respondió en 120 s.`);
         if (scenario === 'ai-bad-output') throw err('AI_BAD_OUTPUT', 'El proveedor devolvió un formato que Ariadna no reconoce.');
-        if (scenario === 'ai-too-large') throw err('AI_CONTEXT_TOO_LARGE', 'Lo preparado supera el tope de 100 000 bytes que se envían a la IA.');
+        if (scenario === 'ai-too-large') {
+          // Igual que el núcleo: el detalle dice «bytes/max» y el tope sale de los ajustes, no de
+          // una constante, para que el diálogo sepa qué ajuste subir.
+          throw err(
+            'AI_CONTEXT_TOO_LARGE',
+            `Lo preparado supera el tope de ${ai.maxContextBytes} bytes que se envían a la IA.`,
+            `${ai.maxContextBytes + 20_000}/${ai.maxContextBytes}`
+          );
+        }
         if (scenario === 'ai-stale') publish(r); // el repo cambia mientras la IA piensa
         const names = staged.map((f) => f.path.split('/').pop() as string);
         const en = options.language === 'en';
@@ -2214,6 +2230,15 @@ export function createMockApi(options: MockOptions = {}): MockApi {
         });
         if (scenario === 'ai-timeout') throw err('AI_TIMEOUT', `${provider.displayName} no respondió en 120 s.`);
         if (scenario === 'ai-quota') throw err('AI_QUOTA', `${provider.displayName} ha alcanzado su límite de uso.`);
+        if (scenario === 'ai-too-large') {
+          // El informe tiene el mismo tope que el mensaje de commit: si el diff no cabe, se dice
+          // cuánto ocupa y cuál es el tope vigente (`bytes/max`), para poder subirlo desde aquí.
+          throw err(
+            'AI_CONTEXT_TOO_LARGE',
+            `El diff de este commit supera el tope de ${ai.maxContextBytes} bytes que se envían a la IA.`,
+            `${ai.maxContextBytes + 20_000}/${ai.maxContextBytes}`
+          );
+        }
         const model = provider.model ?? 'el del CLI';
         const markdown = [
           `# Informe de cambios: ${commit.subject}`,

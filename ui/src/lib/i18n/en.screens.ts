@@ -93,6 +93,8 @@ export const enScreens: Record<keyof typeof esScreens, string> = {
   'report.generating': 'Generating the report…',
   'report.retry': 'Retry',
   'report.truncated': 'The diff was cut at the AI context limit: the report only covers the part that fits.',
+  'report.tooLargeHint': 'The diff does not fit the current context limit ({limit}). Raise “Context size” in Settings › AI, or retry here with more.',
+  'report.moreContext': 'Retry with {limit}',
   'report.meta': '{provider} proposal · {files} file(s) in the commit',
   'report.fileName': 'File name',
   'report.save': 'Save to the repository',

@@ -459,6 +459,8 @@ export interface AiState {
   profile: { name: string; kind: AiProfileKind; isolated: boolean; rule?: string };
   choice: AiChoice;
   providers: ProviderState[];
+  /** Tope de bytes de contexto que se envía a la IA (informe de cambios incluido). */
+  maxContextBytes: number;
 }
 
 export interface AiSettingsPatch {
@@ -473,6 +475,8 @@ export interface AiSettingsPatch {
   model?: { id: string; model: string | null };
   /** Aislar (o no) la sesión del perfil activo por proveedor. */
   isolated?: boolean;
+  /** Tope de bytes de contexto que se manda a la IA (4 000 – 4 000 000). */
+  maxContextBytes?: number;
 }
 
 export type ExcludedReason = 'sensitive' | 'binary' | 'too-large';

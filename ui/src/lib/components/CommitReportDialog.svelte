@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AiCommitReport, Commit } from '$lib/api/types';
+  import { toApiError } from '$lib/api/types';
   import { t } from '$lib/i18n';
   import type { TabState } from '$lib/stores/tab.svelte';
   import { toasts } from '$lib/stores/toasts.svelte';
@@ -20,8 +21,25 @@
   let saving = $state(false);
   let fileName = $state('');
   let savedTo = $state<string | null>(null);
+  /**
+   * Tope de contexto con el que se intentó el informe cuando falló por tamaño. Si tiene valor, el
+   * aviso muestra el ajuste concreto («Tamaño de contexto», en Ajustes › IA) y ofrece reintentar con
+   * más sin salir del diálogo.
+   */
+  let contextLimit = $state(0);
+
+  /** Tope máximo aceptado por el núcleo (ver `MAX_CONTEXT_BYTES` en `core/ai.rs`). */
+  const MAX_CONTEXT_BYTES = 4_000_000;
+
+  const nextLimit = $derived(Math.min(MAX_CONTEXT_BYTES, Math.max(200_000, contextLimit * 2)));
 
   void start();
+
+  function formatBytes(bytes: number): string {
+    return bytes >= 1_000_000
+      ? `${(bytes / 1_000_000).toLocaleString('es-ES', { maximumFractionDigits: 1 })} MB`
+      : `${Math.round(bytes / 1000).toLocaleString('es-ES')} kB`;
+  }
 
   async function start(): Promise<void> {
     busy = true;
@@ -29,10 +47,33 @@
     try {
       report = await tab.api.aiCommitReport(tab.id, commit.sha);
       fileName = `${commit.sha.slice(0, 7)}-informe.md`;
+      contextLimit = 0;
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      const api = toApiError(e);
+      error = api.message;
+      // El tope viene en el detalle como «bytes/max»; sirve para decir cuál es el ajuste actual.
+      const parsed = api.code === 'AI_CONTEXT_TOO_LARGE' ? Number(api.detail?.split('/')[1]) : NaN;
+      contextLimit = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+      if (api.code === 'AI_CONTEXT_TOO_LARGE' && contextLimit === 0) {
+        contextLimit = 100_000;
+      }
     } finally {
       busy = false;
+    }
+  }
+
+  /**
+   * Sube el ajuste «Tamaño de contexto» (Ajustes › IA) y vuelve a pedir el informe, sin cerrar el
+   * diálogo. El ajuste queda guardado: el siguiente informe ya usa el tope nuevo.
+   */
+  async function retryWithMoreContext(): Promise<void> {
+    const target = nextLimit;
+    try {
+      await tab.api.aiUpdateSettings({ tabId: tab.id, maxContextBytes: target });
+      contextLimit = target;
+      await start();
+    } catch (e) {
+      toasts.error(e instanceof Error ? e.message : String(e), e);
     }
   }
 
@@ -111,7 +152,25 @@
     {:else if error}
       <div class="state bad" role="alert">
         <p>{error}</p>
-        <button type="button" class="btn btn-sm" onclick={() => void start()}>{t('report.retry')}</button>
+        {#if contextLimit}
+          <p class="hint" data-testid="report-context-hint">
+            {t('report.tooLargeHint', { limit: formatBytes(contextLimit) })}
+          </p>
+        {/if}
+        <div class="actions">
+          <button type="button" class="btn btn-sm" onclick={() => void start()}>{t('report.retry')}</button>
+          {#if contextLimit}
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              data-testid="report-more-context"
+              disabled={nextLimit > MAX_CONTEXT_BYTES}
+              onclick={() => void retryWithMoreContext()}
+            >
+              <Icon name="sparkles" size={13} />{t('report.moreContext', { limit: formatBytes(nextLimit) })}
+            </button>
+          {/if}
+        </div>
       </div>
     {:else if report}
       {#if report.truncated}

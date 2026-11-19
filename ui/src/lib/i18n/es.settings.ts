@@ -62,6 +62,9 @@ export const esSettings = {
   // Inteligencia artificial
   'settings.ai.enable': 'Activar la inteligencia artificial',
   'settings.ai.enableHint': 'Apagada, Ariadna no ejecuta ningún CLI de IA ni envía nada. Cada proveedor pide tu consentimiento la primera vez.',
+  'settings.ai.maxContext': 'Tamaño de contexto',
+  'settings.ai.maxContextHint': 'Bytes de diff que se envían a la IA (4 000 – 4 000 000). Lo usan el mensaje de commit y el informe de cambios: si el diff no cabe, se recorta a este tope.',
+  'settings.ai.maxContextRange': 'El tamaño de contexto tiene que estar entre {min} y {max} bytes.',
   'settings.ai.profile': 'Perfil',
   'settings.ai.profileHint': 'El perfil Empresa deja Claude desactivado hasta que lo actives expresamente. Es el que se usa en los repos sin regla.',
   'settings.ai.provider': 'Proveedor',

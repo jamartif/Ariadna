@@ -94,6 +94,8 @@ export const esScreens = {
   'report.generating': 'Generando el informe…',
   'report.retry': 'Reintentar',
   'report.truncated': 'El diff se recortó al tope de contexto de la IA: el informe cubre solo la parte que cabe.',
+  'report.tooLargeHint': 'El diff no cabe en el tope de contexto actual ({limit}). Sube «Tamaño de contexto» en Ajustes › IA, o reintenta aquí con más.',
+  'report.moreContext': 'Reintentar con {limit}',
   'report.meta': 'Propuesta de {provider} · {files} archivo(s) en el commit',
   'report.fileName': 'Nombre del archivo',
   'report.save': 'Guardar en el repositorio',
