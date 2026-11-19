@@ -5,6 +5,43 @@ mod common;
 
 use common::{os, plain_engine, TestRepo};
 
+#[tokio::test]
+async fn el_grafo_completo_ve_otra_rama_cuando_head_va_por_detras() {
+    // El caso real: HEAD está en una rama que se quedó atrás y el merge más reciente vive en
+    // otra rama. `git log --oneline HEAD` no lo muestra; el grafo completo sí.
+    let t = TestRepo::with_initial_commit();
+    let base = t.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    t.write("vieja.txt", b"vieja\n");
+    t.git(&["add", "-A"]);
+    t.git(&["commit", "-q", "-m", "trabajo en vieja"]);
+    t.git(&["branch", "-M", "vieja"]);
+
+    // `main` avanza y fusiona `vieja`: su punta no es ancestro de HEAD.
+    t.git(&["checkout", "-q", "-b", "main", &base]);
+    t.write("main.txt", b"main\n");
+    t.git(&["add", "-A"]);
+    t.git(&["commit", "-q", "-m", "trabajo en main"]);
+    t.git(&["merge", "-q", "--no-ff", "vieja", "-m", "merge de vieja"]);
+    let merge = t.git(&["rev-parse", "HEAD"]).trim().to_owned();
+
+    // HEAD vuelve a la rama vieja, que va por detrás.
+    t.git(&["checkout", "-q", "vieja"]);
+
+    let engine = plain_engine();
+    let repo = engine.open_repository(t.path()).await.unwrap();
+    let head = engine.log_page(&repo, 0, 50).await.unwrap();
+    assert!(
+        !head.iter().any(|c| c.sha == merge),
+        "el merge de main no está en el historial de HEAD"
+    );
+    let todo = engine.log_page_all(&repo, 0, 50).await.unwrap();
+    assert!(
+        todo.iter().any(|c| c.sha == merge),
+        "el grafo completo tiene que ver el merge de la otra rama: {:?}",
+        todo.iter().map(|c| c.sha.clone()).collect::<Vec<_>>()
+    );
+}
+
 /// Con dos ramas divergentes y una etiqueta, el historial de HEAD no ve la otra rama; el del
 /// grafo completo (lo que pinta la vista por defecto) sí.
 #[tokio::test]

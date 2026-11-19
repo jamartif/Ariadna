@@ -1,9 +1,21 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installShortcuts } from '$lib/shortcuts/registry';
 import type { Entry } from '$lib/stores/app.svelte';
 import TabStrip from './TabStrip.svelte';
+
+/** Fuente del componente: sirve para comprobar el contrato de maquetación de la tira. */
+const FUENTE = readFileSync(join(process.cwd(), 'src/lib/components/TabStrip.svelte'), 'utf8');
+
+/** Bloque CSS de un selector (`  .scroller {` … `}`). */
+function regla(selector: string): string {
+  const i = FUENTE.indexOf(`  ${selector} {`);
+  expect(i, `no encuentro la regla ${selector}`).toBeGreaterThan(-1);
+  return FUENTE.slice(i, FUENTE.indexOf('\n  }', i));
+}
 
 function repo(id: string, over: Partial<Extract<Entry, { kind: 'repo' }>['info']> = {}): Entry {
   return {
@@ -207,3 +219,25 @@ describe('TabStrip', () => {
       expect(left).toBe(180);
     });
   });
+
+describe('tira de repos: separación y recorte de los nombres', () => {
+  it('hay separación real entre pestañas (gap) y el nombre largo se recorta', () => {
+    // Sin `gap` las pestañas se tocan y el nombre de una se mete en la vecina.
+    const gap = /gap:\s*(\d+)px/.exec(regla('.scroller'));
+    expect(gap, '`.scroller` tiene que declarar un gap en px').toBeTruthy();
+    expect(Number(gap?.[1])).toBeGreaterThanOrEqual(6);
+
+    // La pestaña recorta su contenido: nada se pinta fuera de su caja redondeada.
+    expect(regla('.tab')).toContain('overflow: hidden');
+
+    // El nombre es el que cede el sitio: se acorta con puntos suspensivos.
+    const name = regla('.name');
+    expect(name).toContain('flex: 1 1 auto');
+    expect(name).toContain('min-width: 0');
+    expect(name).toContain('text-overflow: ellipsis');
+
+    // Y la pestaña no se encoge por debajo de su contenido útil.
+    const min = /min-width:\s*(\d+)px/.exec(regla('.tab'));
+    expect(Number(min?.[1])).toBeGreaterThanOrEqual(120);
+  });
+});

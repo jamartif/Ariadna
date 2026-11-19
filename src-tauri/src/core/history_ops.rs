@@ -23,9 +23,12 @@ impl AppCore {
         scope: Option<String>,
     ) -> ApiResult<Vec<Commit>> {
         let limit = limit.clamp(1, MAX_PAGE);
+        // El ámbito **por defecto es el grafo completo**, que es lo que muestra la vista: si el
+        // campo falta (cliente antiguo, petición sin ámbito), no se puede degradar en silencio a
+        // «solo HEAD» — es justo el fallo que se veía con `git log --oneline HEAD`.
         let all = match scope.as_deref().map(str::trim) {
-            Some("all") => true,
-            Some("") | None | Some("current") => false,
+            Some("current") => false,
+            Some("all") | Some("") | None => true,
             Some(other) => {
                 return Err(ApiError::new(
                     "INVALID_REFERENCE",

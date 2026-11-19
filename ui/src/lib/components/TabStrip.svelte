@@ -404,12 +404,14 @@
   .scroller {
     display: flex;
     align-items: center;
-    gap: 6px;
+    /* Separación **real** entre pestañas: sin esto se tocaban y el texto de una larga se metía
+       encima de la vecina. */
+    gap: 8px;
     min-width: 0;
     height: 100%;
     /* Aire arriba y abajo (la etiqueta no toca el borde) y a los lados (no se recortan las
        esquinas redondeadas ni el anillo de foco al desplazar la tira). */
-    padding: 5px 3px;
+    padding: 5px 4px;
     overflow-x: auto;
     overflow-y: hidden;
     /* Barra fina y visible: es la pista de que hay más pestañas a la derecha. */
@@ -472,13 +474,17 @@
     display: flex;
     align-items: center;
     flex: 0 1 auto;
-    min-width: 112px;
-    max-width: 264px;
+    /* Nunca por debajo de lo que ocupa su contenido útil (icono + un trozo de nombre + cerrar). */
+    min-width: 132px;
+    max-width: 260px;
     /* 28 + el aire del carril (5+5) deja la pestaña centrada sin tocar los bordes. */
     height: 28px;
     border: 1px solid transparent;
     border-radius: 9px;
     color: var(--text-muted);
+    /* Recorta lo que no cabe: con un nombre largo, el texto no se sale de la pestaña ni pisa a la
+       vecina (el nombre se acorta con puntos suspensivos, ver `.name`). */
+    overflow: hidden;
     transition:
       background-color var(--dur-fast) var(--ease),
       border-color var(--dur-fast) var(--ease),
@@ -519,7 +525,7 @@
     flex: 1;
     min-width: 0;
     height: 100%;
-    padding: 0 0 0 var(--space-3);
+    padding: 0 var(--space-2) 0 var(--space-3);
     border: none;
     border-radius: var(--radius-md);
     background: transparent;
@@ -561,10 +567,10 @@
     transform: scale(1.15);
   }
   .name {
-    flex: 0 0 auto;
-    min-width: 3ch;
-    max-width: 18ch;
-    padding-right: 2px;
+    /* El nombre es lo único que cede espacio: se acorta con puntos suspensivos en vez de
+       desbordar la pestaña (antes `flex: 0 0 auto` con `max-width` fijo lo empujaba fuera). */
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
