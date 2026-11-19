@@ -291,10 +291,20 @@ export interface OpenResult {
   warning?: string | null;
 }
 
+/** Motivo por el que no se puede corregir el último commit (enum `AmendRefusal` de Rust). */
+export type AmendRefusal =
+  | { kind: 'no_commits' }
+  | { kind: 'detached_head' }
+  | { kind: 'integration_in_progress' }
+  | { kind: 'already_published'; value: string };
+
 export interface AmendDraft {
   message: string;
   canAmend: boolean;
-  reason: string | null;
+  /** Motivo tipado por el que no se puede corregir; `null` si se puede. La UI lo traduce. */
+  reason: AmendRefusal | null;
+  /** Aviso no bloqueante (el último commit es un merge). */
+  warning: string | null;
 }
 
 export interface CommitResult {
@@ -779,17 +789,37 @@ export interface ApiErrorShape {
   code: ApiErrorCode | 'UNKNOWN';
   message: string;
   detail?: string | null;
+  /** Motivo tipado de `CANNOT_AMEND`; los demás errores no lo llevan. */
+  reason?: AmendRefusal | null;
 }
 
 export class ApiError extends Error implements ApiErrorShape {
   readonly code: ApiErrorCode | 'UNKNOWN';
   readonly detail: string | null;
+  readonly reason: AmendRefusal | null;
 
   constructor(shape: ApiErrorShape) {
     super(shape.message);
     this.name = 'ApiError';
     this.code = shape.code;
     this.detail = shape.detail ?? null;
+    this.reason = shape.reason ?? null;
+  }
+}
+
+/** Guarda del motivo tipado del amend: `{"kind":…}` con `value` solo en `already_published`. */
+function isAmendRefusal(v: unknown): v is AmendRefusal {
+  if (typeof v !== 'object' || v === null) return false;
+  const o = v as Record<string, unknown>;
+  switch (o.kind) {
+    case 'no_commits':
+    case 'detached_head':
+    case 'integration_in_progress':
+      return true;
+    case 'already_published':
+      return typeof o.value === 'string';
+    default:
+      return false;
   }
 }
 
@@ -809,7 +839,8 @@ export function toApiError(e: unknown): ApiError {
       return new ApiError({
         code: isCode(o.code) ? o.code : 'UNKNOWN',
         message: o.message,
-        detail: typeof o.detail === 'string' ? o.detail : null
+        detail: typeof o.detail === 'string' ? o.detail : null,
+        reason: isAmendRefusal(o.reason) ? o.reason : null
       });
     }
     if (typeof o.message === 'string') {

@@ -7,7 +7,8 @@
 mod common;
 
 use ariadna_git::{
-    Confirmation, DiffHunk, DiffScope, GitError, GitPath, GitStatus, Repository, StatusEntry,
+    AmendRefusal, Confirmation, DiffHunk, DiffScope, GitError, GitPath, GitStatus, Repository,
+    StatusEntry,
 };
 use common::TestRepo;
 
@@ -1039,7 +1040,9 @@ async fn amend_rewrites_unpublished_commit_only() {
         .await
         .unwrap_err();
     match err {
-        GitError::CannotAmend { reason } => assert!(reason.contains("origin/main"), "{reason}"),
+        GitError::CannotAmend { reason } => {
+            assert_eq!(reason, AmendRefusal::AlreadyPublished("origin/main".into()))
+        }
         other => panic!("{other:?}"),
     }
     assert_eq!(t.engine.log(&repo, 1).await.unwrap()[0].sha, amended);
@@ -1073,7 +1076,9 @@ async fn amend_refuses_when_another_branch_of_a_remote_contains_head() {
         .await
         .unwrap_err();
     match err {
-        GitError::CannotAmend { reason } => assert!(reason.contains("origin/otra"), "{reason}"),
+        GitError::CannotAmend { reason } => {
+            assert_eq!(reason, AmendRefusal::AlreadyPublished("origin/otra".into()))
+        }
         other => panic!("{other:?}"),
     }
 }
@@ -1090,7 +1095,7 @@ async fn amend_refuses_detached_head() {
         .await
         .unwrap_err();
     match err {
-        GitError::CannotAmend { reason } => assert!(reason.contains("rama"), "{reason}"),
+        GitError::CannotAmend { reason } => assert_eq!(reason, AmendRefusal::DetachedHead),
         other => panic!("{other:?}"),
     }
     let shas = |v: &[ariadna_git::Commit]| v.iter().map(|c| c.sha.clone()).collect::<Vec<_>>();
@@ -1119,7 +1124,7 @@ async fn amend_refuses_during_merge_and_cherry_pick() {
         .await
         .unwrap_err();
     match err {
-        GitError::CannotAmend { reason } => assert!(reason.contains("merge"), "{reason}"),
+        GitError::CannotAmend { reason } => assert_eq!(reason, AmendRefusal::IntegrationInProgress),
         other => panic!("{other:?}"),
     }
     assert_eq!(t.engine.log(&repo, 5).await.unwrap(), before);

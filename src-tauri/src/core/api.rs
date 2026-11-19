@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use ariadna_ai::{CommitLanguage, CommitStyle, ProfileKind, ProviderChoice, ProviderId};
 use ariadna_git::{
-    Branch, ConflictFile, DiffHunk, DiffLine, GitPath, GitStatus, IntegrationState,
+    AmendRefusal, Branch, ConflictFile, DiffHunk, DiffLine, GitPath, GitStatus, IntegrationState,
     RecentRepository, Remote, SessionEvent, SessionEventKind, SessionState, Snapshot,
 };
 use serde::{Deserialize, Serialize};
@@ -78,7 +78,10 @@ pub struct CommitResult {
 pub struct AmendDraft {
     pub message: String,
     pub can_amend: bool,
-    pub reason: Option<String>,
+    /// Motivo tipado por el que no se puede corregir: la UI lo traduce (`amendReason.<kind>`).
+    pub reason: Option<AmendRefusal>,
+    /// Aviso no bloqueante (el último commit es un merge): lo redacta el motor.
+    pub warning: Option<String>,
 }
 
 /// `Snapshot` serializable (el de `ariadna-git` no deriva `Serialize`). Comparte el `Arc`.

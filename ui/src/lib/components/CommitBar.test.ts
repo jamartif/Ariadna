@@ -106,10 +106,16 @@ describe('CommitBar', () => {
 
   it('amend no disponible: casilla desactivada con el motivo', async () => {
     const { tab, api } = await loadedTab();
-    api.amendDraft = async () => ({ message: '', canAmend: false, reason: 'No hay commits.' });
+    api.amendDraft = async () => ({
+      message: '',
+      canAmend: false,
+      reason: { kind: 'no_commits' },
+      warning: null
+    });
     render(CommitBar, { props: { tab } });
     await waitFor(() => expect(screen.getByRole('checkbox', { name: /Corregir el último commit/ })).toBeDisabled());
-    expect(screen.getByText('No hay commits.')).toBeInTheDocument();
+    // El motivo llega tipado desde Rust y se pinta traducido, no con el texto del motor.
+    expect(screen.getByText('Todavía no hay ningún commit que corregir.')).toBeInTheDocument();
   });
 
   it('un error de commit se muestra como toast y conserva el mensaje', async () => {

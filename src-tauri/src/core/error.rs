@@ -2,7 +2,7 @@
 //! nunca interpreta `message`.
 
 use ariadna_ai::AiError;
-use ariadna_git::GitError;
+use ariadna_git::{AmendRefusal, GitError};
 use serde::{Deserialize, Serialize};
 
 /// Error que recibe la UI al rechazarse la promesa de un comando.
@@ -13,6 +13,10 @@ pub struct ApiError {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// Motivo **tipado** de un `CANNOT_AMEND`: la UI lo traduce en vez de pintar `message`.
+    /// Los demás errores no lo llevan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<AmendRefusal>,
 }
 
 pub type ApiResult<T> = Result<T, ApiError>;
@@ -98,6 +102,7 @@ impl ApiError {
             code: code.to_owned(),
             message: message.into(),
             detail,
+            reason: None,
         }
     }
 
@@ -133,6 +138,12 @@ fn non_empty(s: &str) -> Option<String> {
 impl From<GitError> for ApiError {
     fn from(e: GitError) -> Self {
         let message = e.to_string();
+        // El motivo del amend viaja tipado para que la UI lo traduzca; el resto de errores no
+        // llevan `reason` y la clave se omite en el JSON.
+        let reason = match &e {
+            GitError::CannotAmend { reason } => Some(reason.clone()),
+            _ => None,
+        };
         // `match` exhaustivo a propósito: una variante nueva en `ariadna-git` rompe la
         // compilación aquí y obliga a darle un código.
         let (code, detail) = match &e {
@@ -147,7 +158,7 @@ impl From<GitError> for ApiError {
             GitError::NothingToCommit => ("NOTHING_TO_COMMIT", None),
             GitError::EmptyCommitMessage => ("EMPTY_COMMIT_MESSAGE", None),
             GitError::DetachedHeadCommit => ("DETACHED_HEAD_COMMIT", None),
-            GitError::CannotAmend { reason } => ("CANNOT_AMEND", non_empty(reason)),
+            GitError::CannotAmend { reason } => ("CANNOT_AMEND", Some(reason.explanation())),
             GitError::LocalChangesBlockCheckout { detail } => {
                 ("LOCAL_CHANGES_BLOCK_CHECKOUT", non_empty(detail))
             }
@@ -189,6 +200,7 @@ impl From<GitError> for ApiError {
             code: code.to_owned(),
             message,
             detail,
+            reason,
         }
     }
 }
@@ -241,6 +253,7 @@ impl From<AiError> for ApiError {
             code: code.to_owned(),
             message,
             detail,
+            reason: None,
         }
     }
 }

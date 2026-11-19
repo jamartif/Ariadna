@@ -1442,11 +1442,22 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       await delay(Math.min(latency, 60));
       const r = repoOf(tabId);
       const last = r.commits[0];
-      if (!last) return { message: '', canAmend: false, reason: 'Todavía no hay ningún commit que corregir.' };
+      if (!last)
+        return { message: '', canAmend: false, reason: { kind: 'no_commits' }, warning: null };
       if (r.integration !== 'none') {
-        return { message: '', canAmend: false, reason: 'No se puede corregir mientras hay una integración en curso.' };
+        return {
+          message: '',
+          canAmend: false,
+          reason: { kind: 'integration_in_progress' },
+          warning: null
+        };
       }
-      return { message: last.body ? `${last.subject}\n\n${last.body}` : last.subject, canAmend: true, reason: null };
+      return {
+        message: last.body ? `${last.subject}\n\n${last.body}` : last.subject,
+        canAmend: true,
+        reason: null,
+        warning: null
+      };
     },
     async diff(tabId, scope: DiffScope, paths): Promise<FileDiff[]> {
       await delay(Math.min(latency, 80));

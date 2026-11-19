@@ -17,7 +17,7 @@ use ariadna_process::ProcessOutput;
 
 use super::GitCliEngine;
 use crate::diff::parse_diff;
-use crate::error::{truncate, GitError, GitResult};
+use crate::error::{truncate, AmendRefusal, GitError, GitResult};
 use crate::listings::parse_commit_log;
 use crate::models::{
     bytes_to_os_string, Commit, DiffHunk, DiffScope, FileDiff, GitPath, GitStatus, Repository,
@@ -518,16 +518,12 @@ impl GitCliEngine {
         if message.trim().is_empty() {
             return Err(GitError::EmptyCommitMessage);
         }
-        let cannot = |reason: &str| GitError::CannotAmend {
-            reason: reason.to_owned(),
-        };
+        let cannot = |reason: AmendRefusal| GitError::CannotAmend { reason };
         if !self.has_head(repo).await? {
-            return Err(cannot("Todavía no hay ningún commit que corregir."));
+            return Err(cannot(AmendRefusal::NoCommits));
         }
         if !self.head_is_branch(repo).await? {
-            return Err(cannot(
-                "HEAD no está en una rama. Crea una rama antes de corregir el commit.",
-            ));
+            return Err(cannot(AmendRefusal::DetachedHead));
         }
         let in_progress = [
             "MERGE_HEAD",
@@ -539,9 +535,7 @@ impl GitCliEngine {
         .iter()
         .any(|f| repo.git_dir.join(f).exists());
         if in_progress {
-            return Err(cannot(
-                "Hay un merge, rebase o cherry-pick en curso. Termínalo o abórtalo antes.",
-            ));
+            return Err(cannot(AmendRefusal::IntegrationInProgress));
         }
         // Nombre completo (`refs/remotes/…`): `refname:short` de `origin/HEAD` es ambiguo.
         let published = self
@@ -557,11 +551,7 @@ impl GitCliEngine {
             .find(|r| !r.is_empty() && !r.ends_with("/HEAD"))
             .map(|r| r.strip_prefix("refs/remotes/").unwrap_or(r).to_owned());
         if let Some(remote_ref) = first {
-            return Err(GitError::CannotAmend {
-                reason: format!(
-                    "El último commit ya está en {remote_ref}. Corregirlo obligaría a un push forzado."
-                ),
-            });
+            return Err(cannot(AmendRefusal::AlreadyPublished(remote_ref)));
         }
         self.mutate(
             repo,

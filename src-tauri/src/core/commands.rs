@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use ariadna_git::session::OpFuture;
 use ariadna_git::{
-    amend, Commit, Confirmation, ConflictFile, DiffScope, FileDiff, GitError, GitPath, GitServing,
-    IntegrationState, MergeFastForward, MergeResult, RefreshOutcome, Repository, RepositorySession,
-    StashApplyResult, StashEntry, StashPushOptions,
+    amend, AmendRefusal, Commit, Confirmation, ConflictFile, DiffScope, FileDiff, GitError,
+    GitPath, GitServing, IntegrationState, MergeFastForward, MergeResult, RefreshOutcome,
+    Repository, RepositorySession, StashApplyResult, StashEntry, StashPushOptions,
 };
 
 use super::api::{AmendDraft, ApiSnapshot, CommitResult, Done, HunkArg};
@@ -381,11 +381,11 @@ impl AppCore {
         let (s, _) = self.live(tab_id)?;
         let snap = Self::fresh_snapshot(&s).await;
         let reason = if snap.status.is_unborn {
-            Some("Todavía no hay ningún commit que corregir.")
+            Some(AmendRefusal::NoCommits)
         } else if snap.status.is_detached {
-            Some("HEAD no está en una rama. Crea una rama antes de corregir el commit.")
+            Some(AmendRefusal::DetachedHead)
         } else if snap.integration != IntegrationState::None {
-            Some("Hay un merge, rebase o cherry-pick en curso. Termínalo o abórtalo antes.")
+            Some(AmendRefusal::IntegrationInProgress)
         } else {
             None
         };
@@ -393,7 +393,8 @@ impl AppCore {
             return Ok(AmendDraft {
                 message: String::new(),
                 can_amend: false,
-                reason: Some(r.to_owned()),
+                reason: Some(r),
+                warning: None,
             });
         }
         let last: Vec<Commit> = self
@@ -405,12 +406,14 @@ impl AppCore {
             Some(c) => AmendDraft {
                 message: amend::message_for(c),
                 can_amend: true,
-                reason: amend::merge_warning(c),
+                reason: None,
+                warning: amend::merge_warning(c),
             },
             None => AmendDraft {
                 message: String::new(),
                 can_amend: false,
-                reason: Some("Todavía no hay ningún commit que corregir.".to_owned()),
+                reason: Some(AmendRefusal::NoCommits),
+                warning: None,
             },
         })
     }

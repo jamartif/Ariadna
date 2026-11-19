@@ -10,6 +10,7 @@ import {
   type TabInfo
 } from '$lib/api/types';
 import { t } from '$lib/i18n';
+import { amendRefusalText } from '$lib/util/amendReason';
 import { groupEntries, SECTION_ORDER, type SectionId } from '$lib/util/changes';
 import { pathKey, pathText } from '$lib/util/gitpath';
 import { AiController } from './ai.svelte';
@@ -86,6 +87,8 @@ export class TabState {
   amend = $state(false);
   /** Lo que había antes de activar «amend», para restaurarlo al desactivar. */
   private savedFields = { summary: '', description: '' };
+  /** Turno de la activación de amend en curso: descarta lecturas que llegan tarde. */
+  private amendEpoch = 0;
   committing = $state(false);
   /** Generación de mensajes con IA (solo propone; nunca crea el commit). */
   readonly ai: AiController;
@@ -172,6 +175,9 @@ export class TabState {
   }
 
   updateInfo(info: TabInfo): void {
+    // Si la pestaña pasa a apuntar a otra carpeta es otro repositorio: cualquier lectura de amend
+    // en vuelo es de la carpeta anterior.
+    if (info.path !== this.info.path) this.invalidateAmend();
     this.info = info;
     if (info.missing && !this.sessionError) {
       this.sessionError = new ApiError({ code: 'REPO_MISSING', message: t('banner.missing', { path: info.path }) });
@@ -475,25 +481,43 @@ export class TabState {
 
   /** Activa/desactiva «corregir último commit»: rellena los campos con `amend_draft`. */
   async setAmend(on: boolean): Promise<void> {
+    // Turno de esta activación. Cada activación y cada desactivación lo invalidan: la lectura
+    // asíncrona del último commit puede llegar después de que el usuario desmarque la casilla o
+    // cambie de repositorio, y entonces no debe rellenar nada (el siguiente commit normal saldría
+    // con el mensaje del anterior).
+    const epoch = ++this.amendEpoch;
     if (!on) {
       this.amend = false;
       this.setFields(this.savedFields.summary, this.savedFields.description);
       return;
     }
+    // Se guarda lo que hay AHORA, no lo que haya cuando resuelva la lectura: desactivar mientras
+    // tanto tiene que devolver el borrador del usuario.
+    this.savedFields = { summary: this.summary, description: this.description };
     try {
       const draft = await this.api.amendDraft(this.id);
+      if (epoch !== this.amendEpoch) return;
       if (!draft.canAmend) {
         this.amend = false;
-        toasts.warning(t('commit.cannotAmend'), draft.reason ?? undefined);
+        toasts.warning(t('commit.cannotAmend'), amendRefusalText(draft.reason) ?? undefined);
         return;
       }
-      this.savedFields = { summary: this.summary, description: this.description };
       this.amend = true;
       this.setMessage(draft.message);
     } catch (e) {
+      if (epoch !== this.amendEpoch) return;
       this.amend = false;
-      toasts.error(t('commit.cannotAmend'), e);
+      // El motivo viaja tipado: se traduce aquí en vez de pintar el texto del motor.
+      const typed = e instanceof ApiError ? amendRefusalText(e.reason) : null;
+      toasts.error(t('commit.cannotAmend'), typed ?? e);
     }
+  }
+
+  /** El repositorio de la pestaña es otro (o la pestaña se cierra): el amend pendiente ya no vale. */
+  private invalidateAmend(): void {
+    this.amendEpoch += 1;
+    this.amend = false;
+    this.savedFields = { summary: '', description: '' };
   }
 
   /** Crea el commit (o lo corrige). Devuelve `true` si se hizo. */
