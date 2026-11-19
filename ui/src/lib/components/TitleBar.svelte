@@ -21,6 +21,8 @@
     onreorder: (ids: string[]) => void;
     onpalette: () => void;
     onsettings?: () => void;
+    /** Pide poner el alias del repo de esa pestaña. */
+    onalias?: (id: string) => void;
     /** Para pruebas y revisión visual; por defecto se detecta con `navigator`. */
     platform?: Platform;
     /** `undefined` = detectar Tauri; `null` = sin API de ventana (navegador). */
@@ -35,6 +37,7 @@
     onreorder,
     onpalette,
     onsettings,
+    onalias,
     platform,
     windowApi
   }: Props = $props();
@@ -74,7 +77,7 @@
     <Logo size={22} />
   </div>
 
-  <TabStrip {entries} {activeId} {onactivate} {onclose} {onnew} {onreorder} />
+  <TabStrip {entries} {activeId} {onactivate} {onclose} {onnew} {onreorder} {onalias} />
 
   <div class="grow" data-tauri-drag-region></div>
 

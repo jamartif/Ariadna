@@ -3,7 +3,7 @@
   import { DIFF_FONT_MAX, DIFF_FONT_MIN, type ThemePref } from '$lib/api/types';
   import type { SettingsPanel } from '$lib/stores/settingsPanel.svelte';
 
-  let { panel }: { panel: SettingsPanel } = $props();
+  let { panel, repos = [] }: { panel: SettingsPanel; repos?: { path: string; name: string }[] } = $props();
 
   const THEMES: { id: ThemePref; label: 'settings.general.themeSystem' | 'settings.general.themeLight' | 'settings.general.themeDark' }[] = [
     { id: 'system', label: 'settings.general.themeSystem' },
@@ -53,6 +53,29 @@
         {/each}
       </div>
     </fieldset>
+
+    {#if repos.length > 0}
+      <fieldset class="group" data-testid="settings-aliases">
+        <legend>{t('settings.general.aliases')}</legend>
+        <p class="hint">{t('settings.general.aliasesHint')}</p>
+        {#each repos as repo (repo.path)}
+          <div class="row alias">
+            <label class="lbl" for="alias-{repo.path}" title={repo.path}>{repo.name}</label>
+            <input
+              id="alias-{repo.path}"
+              class="field"
+              type="text"
+              maxlength={24}
+              placeholder={repo.name}
+              value={draft.repoAliases?.[repo.path] ?? ''}
+              aria-describedby="set-alias-hint"
+              oninput={(e) => panel.setRepoAlias(repo.path, e.currentTarget.value)}
+            />
+          </div>
+        {/each}
+        <p class="hint" id="set-alias-hint">{t('settings.general.aliasesPath')}</p>
+      </fieldset>
+    {/if}
 
     <div class="group">
       <label class="lbl" for="set-diff">{t('settings.general.diffSize')}</label>

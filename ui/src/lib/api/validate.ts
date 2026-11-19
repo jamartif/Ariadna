@@ -35,6 +35,14 @@ export const arr =
     if (!Array.isArray(v)) return void e.push(`${p}: se esperaba lista`);
     v.forEach((x, i) => inner(x, `${p}[${i}]`, e));
   };
+
+/** Mapa de clave libre → valor (alias de repositorios, por ejemplo). */
+export const dict =
+  (inner: V): V =>
+  (v, p, e) => {
+    if (!isObj(v)) return void e.push(`${p}: se esperaba objeto`);
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) inner(x, `${p}.${k}`, e);
+  };
 export const oneOf =
   (...allowed: string[]): V =>
   (v, p, e) => {
@@ -333,7 +341,9 @@ export const appSettings = obj({
   profileRules: arr(profileRule),
   // `client_id` de OAuth (públicos): sin ellos, la opción OAuth no aparece al clonar.
   oauthGitHubClientId: nullable(str),
-  oauthGitLabClientId: nullable(str)
+  oauthGitLabClientId: nullable(str),
+  /** Alias por ruta de repo: mapa libre de cadena a cadena. */
+  repoAliases: dict(str)
 });
 
 export const settingsView = obj({
