@@ -5,6 +5,42 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
+## [0.1.0-alpha.12] - 2026-11-20
+
+Entra lo que llegó a `main` después de la alpha.11.
+
+**Respecto a `v0.1.0-alpha.11`:** el **historial completo** ya no se deja referencias fuera — recorre
+todas las de `refs/` y el `HEAD` de cada worktree (también los «detached»), así que aparecen las ramas
+que solo viven en `refs/pull` o en otro worktree; el **riel** lista además las **etiquetas**; el
+**diff a dos columnas** gana ajuste al ancho, cabecera de hunk fija y salto al cambio
+anterior/siguiente; la **vista de árbol** de Cambios anida cada carpeta con su recuento; la interfaz
+se **refresca sola** al mergear una PR y al cambiar de pestaña de repo; los repos tienen **alias
+corto** en la barra superior; y el **gate de CI** distingue «sin runner» de un fallo real.
+
+### Añadido
+- **Alias de repositorios**: `repoAliases` en la configuración (`ruta → alias`), máximo 24 caracteres
+  y solo letras, números, espacio y `. - _ /`; se edita desde el menú contextual de la pestaña y desde
+  Ajustes › General, el tooltip conserva la ruta completa y sin alias se recorta el nombre.
+- **Diff a dos columnas**: «Ajustar al ancho» (persistido), cabecera del hunk fija y navegación al
+  cambio anterior/siguiente.
+- **Cambios en árbol**: cada nivel de la ruta es un nodo propio, plegable y con el recuento de ficheros
+  de su subárbol; el orden de ficheros es el mismo que en modo lista.
+- **Etiquetas en el riel**: grupo propio con contador, dentro del filtro y con el nombre completo en el
+  tooltip.
+- **Tope de contexto de la IA**: ajuste «Tamaño de contexto» en Ajustes › IA (4 000–4 000 000 bytes);
+  el aviso del informe de cambios apunta a ese ajuste y ofrece reintentar con más sin cerrar el diálogo.
+
+### Corregido
+- **Historial completo**: se construía con `--branches --remotes --tags HEAD`, que no alcanza al `HEAD`
+  de otro worktree en «detached HEAD» ni a `refs/pull/*`. Ahora se usan todas las referencias de
+  `refs/` (menos `stash`, `notes` y `bisect`) más el `HEAD` de cada worktree; hay prueba que compara lo
+  listable con `git for-each-ref` sobre heads, remotes, tags y pull.
+- **Refresco**: al completar una PR se refrescan estado, historial y lista de PRs (y si el merge falla
+  no se refresca nada a medias); al activar otra pestaña de repo se recargan sus datos, sin duplicar
+  peticiones si vuelves enseguida.
+- **Gate de CI**: `cancelled`/`abandoned` (job sin runner) ya no se cuenta como fallo de tests; el gate
+  reintenta el job y, si sigue sin runner, lo dice con su propio mensaje. `main` exige PR con checks.
+
 ## [0.1.0-alpha.11] - 2026-11-19
 
 Entra lo que llegó a `main` después de la alpha.10.
