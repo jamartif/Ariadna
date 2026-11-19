@@ -5,6 +5,29 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
+## [0.1.0-alpha.11] - 2026-11-19
+
+Entra lo que llegó a `main` después de la alpha.10.
+
+**Respecto a `v0.1.0-alpha.10`:** el **historial** con «Grafo completo» recorre de verdad todas las
+ramas y etiquetas (el ámbito por defecto ya no se degradaba a «solo HEAD»), las **pestañas de repos**
+tienen separación real y recortan los nombres largos con puntos suspensivos, y el **riel de ramas**
+muestra solo el segmento de cada entrada (el nombre completo sigue en el tooltip y el `aria-label`).
+
+### Corregido
+- **Historial**: `log_page` tomaba el ámbito ausente como «solo HEAD», así que el grafo completo podía
+  quedarse en la rama actual y no aparecía un commit que vivía en otra rama. Ahora el defecto es el
+  grafo completo (`--branches --remotes --tags HEAD`, en orden topológico) y solo `current` recorta a
+  HEAD; la interfaz manda siempre el ámbito, también al paginar, y un repo sin commits devuelve lista
+  vacía en vez de fallar.
+- **Pestañas de la barra superior**: el espaciado era interno y el nombre largo desbordaba su caja y
+  se pintaba encima de la pestaña vecina. Ahora hay `gap` real entre pestañas, la pestaña recorta su
+  contenido y el nombre se acorta con puntos suspensivos.
+- **Riel de ramas**: cada fila repite la ruta completa dentro de su carpeta (`origin/feature/rama`
+  bajo `origin/` → `feature/`). Ahora muestra solo su segmento («rama»), con el nombre completo en
+  el tooltip y el `aria-label`; la búsqueda, el menú contextual y las acciones siguen usando la
+  referencia completa.
+
 ## [0.1.0-alpha.10] - 2026-11-19
 
 Entra lo que llegó después de la alpha.9: los arreglos de la revisión de código.
