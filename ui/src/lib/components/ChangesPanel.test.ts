@@ -159,4 +159,32 @@ describe('ChangesPanel con mockApi', () => {
     await tab.load();
     await waitFor(() => expect(screen.queryByLabelText('Cargando cambios')).not.toBeInTheDocument());
   });
+
+  it('en modo árbol anida cada carpeta y pliega su contenido', async () => {
+    const { tab } = await loadedTab();
+    render(ChangesPanel, { props: { tab } });
+    await userEvent.click(screen.getByRole('button', { name: 'Ver como árbol' }));
+
+    const rowOf = (text: string) =>
+      screen.getAllByRole('row').find((r) => r.querySelector('.dir-name')?.textContent === text);
+    // `docs/ipc.md` tiene que colgar de `docs`, no salir suelto ni como «docs/ipc».
+    const docs = rowOf('docs');
+    expect(docs).toBeTruthy();
+    // La fila de la carpeta lleva su ruta completa en el tooltip y solo el nivel en el texto.
+    expect((docs as HTMLElement).querySelector('.dir-cell')?.getAttribute('title')).toBe('docs');
+    expect(within(docs as HTMLElement).getByText('docs')).toBeInTheDocument();
+    expect(screen.queryByText('docs/ipc')).not.toBeInTheDocument();
+    const file = screen.getByText('ipc.md');
+    expect(file.closest('.row')).toHaveStyle('--depth: 1');
+
+    // Plegar deja la fila visible, marca `aria-expanded=false` y el estado se recuerda.
+    await userEvent.click(docs as HTMLElement);
+    await waitFor(() =>
+      expect(rowOf('docs')?.querySelector('.dir-cell')?.getAttribute('aria-expanded')).toBe('false')
+    );
+    await userEvent.click(rowOf('docs') as HTMLElement);
+    await waitFor(() =>
+      expect(rowOf('docs')?.querySelector('.dir-cell')?.getAttribute('aria-expanded')).toBe('true')
+    );
+  });
 });
