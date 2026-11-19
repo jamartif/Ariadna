@@ -6,6 +6,7 @@
   import { branchesOf } from '$lib/stores/branches.svelte';
   import { remotesOf } from '$lib/stores/remotes.svelte';
   import { branchNameProblem } from '$lib/util/branchName';
+  import { leafLabel } from '$lib/util/branchTree';
   import { formatCombo, isMac, registerHandlers, SHORTCUTS } from '$lib/shortcuts/registry';
   import BranchMenu from './BranchMenu.svelte';
   import TagDialog from './TagDialog.svelte';
@@ -65,6 +66,8 @@
     /** Clave de plegado (`local:feature` / `remote:origin/release`). */
     key: string;
     depth: number;
+    /** Prefijo completo de lo que cuelga de este nodo (`origin/feature/`). */
+    prefix: string;
     /** Ramas que terminan exactamente en este nodo. */
     leaves: Branch[];
     children: TreeNode[];
@@ -106,12 +109,22 @@
             label: `${seg}/`,
             key: `${remote ? 'remote' : 'local'}:${prefix}${seg}`,
             depth,
+            prefix: `${prefix}${seg}/`,
             leaves: child.leaves,
             children,
             count: child.leaves.length + children.reduce((n, c) => n + c.count, 0)
           };
         });
     return { leaves: root.leaves, nodes: walk(root, '', 0) };
+  }
+
+  /**
+   * Nombre **visible** de una rama dentro del árbol: solo su propio segmento (ver
+   * [`leafLabel`](`$lib/util/branchTree`)). La referencia completa sigue en `br.name` para el
+   * tooltip, el `aria-label`, el menú y las acciones.
+   */
+  function shortName(name: string, prefix: string): string {
+    return leafLabel(name, prefix);
   }
 
   const localTree = $derived(buildTree(locals, false));
@@ -349,7 +362,8 @@
   }
 </script>
 
-{#snippet branchRow(br: Branch, remote: boolean)}
+{#snippet branchRow(br: Branch, remote: boolean, parentPrefix: string)}
+  {@const label = shortName(br.name, parentPrefix)}
   <li>
     <button
       type="button"
@@ -361,6 +375,7 @@
       tabindex={tabStop === br.name ? 0 : -1}
       aria-current={br.isHead ? 'true' : undefined}
       aria-haspopup="menu"
+      aria-label={br.name}
       title={`${br.name} — ${t('rail.menu.hint')}`}
       onfocus={() => (focusName = br.name)}
       onclick={() => open(br)}
@@ -371,7 +386,7 @@
       }}
     >
       <Icon name={remote ? 'cloud' : 'git-branch'} size={13} />
-      <span class="name mono">{br.name}</span>
+      <span class="name mono">{label}</span>
       {#if br.isHead}<span class="dot" aria-hidden="true"></span>{/if}
       {#if br.ahead > 0}<span class="sync" title={t('sidebar.ahead', { n: br.ahead })}><Icon name="arrow-up" size={10} />{br.ahead}</span>{/if}
       {#if br.behind > 0}<span class="sync" title={t('sidebar.behind', { n: br.behind })}><Icon name="arrow-down" size={10} />{br.behind}</span>{/if}
@@ -382,9 +397,9 @@
   </li>
 {/snippet}
 
-{#snippet rows(list: Branch[], remote: boolean)}
+{#snippet rows(list: Branch[], remote: boolean, parentPrefix: string)}
   <ul class="rows">
-    {#each list as br (br.name)}{@render branchRow(br, remote)}{/each}
+    {#each list as br (br.name)}{@render branchRow(br, remote, parentPrefix)}{/each}
   </ul>
 {/snippet}
 
@@ -404,7 +419,7 @@
       <span class="subcount num">{n.count}</span>
     </button>
     {#if openGroup(n.key)}
-      {#if n.leaves.length > 0}{@render rows(n.leaves, remote)}{/if}
+      {#if n.leaves.length > 0}{@render rows(n.leaves, remote, n.prefix)}{/if}
       {#if n.children.length > 0}{@render treeNodes(n.children, remote)}{/if}
     {/if}
   {/each}
@@ -639,7 +654,7 @@
             <span class="chip num">{locals.length}</span>
           </button>
           {#if localOpen}
-            {#if localTree.leaves.length > 0}{@render rows(localTree.leaves, false)}{/if}
+            {#if localTree.leaves.length > 0}{@render rows(localTree.leaves, false, '')}{/if}
             {@render treeNodes(localTree.nodes, false)}
             {#if locals.length === 0}<p class="none sm">{t('branches.noMatches', { query: filter.trim() })}</p>{/if}
           {/if}
