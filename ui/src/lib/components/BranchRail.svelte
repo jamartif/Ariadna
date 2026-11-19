@@ -5,6 +5,7 @@
   import type { TabState } from '$lib/stores/tab.svelte';
   import { branchesOf } from '$lib/stores/branches.svelte';
   import { remotesOf } from '$lib/stores/remotes.svelte';
+  import { tagsOf } from '$lib/stores/tags.svelte';
   import { branchNameProblem } from '$lib/util/branchName';
   import { leafLabel } from '$lib/util/branchTree';
   import { formatCombo, isMac, registerHandlers, SHORTCUTS } from '$lib/shortcuts/registry';
@@ -47,6 +48,7 @@
   let cleaning = $state(false);
   let localOpen = $state(true);
   let remoteOpen = $state(true);
+  let tagsOpen = $state(true);
   let closedGroups = $state.raw<ReadonlySet<string>>(new Set());
   let focusName = $state<string | null>(null);
 
@@ -180,6 +182,18 @@
   $effect(() => {
     void remoteSig;
     if (!tab.hibernated) void r.load();
+  });
+
+  /*
+   * Etiquetas: son referencias del repo igual que las ramas (`refs/tags`), así que el riel las
+   * lista para que lo que se ve coincida con `git for-each-ref refs/heads refs/remotes refs/tags`
+   * y no parezca que faltan referencias. Se recargan con cada revisión del repo.
+   */
+  const tagCtl = $derived(tagsOf(tab));
+  const tags = $derived(tagCtl.tags.filter((x) => q === '' || x.name.toLowerCase().includes(q)));
+  $effect(() => {
+    void tab.revision;
+    if (!tab.hibernated) void tagCtl.load();
   });
 
   onMount(() =>
@@ -670,6 +684,34 @@
             {#if remoteOpen}
               {@render treeNodes(remoteTree.nodes, true)}
               {#if remotes.length === 0}<p class="none sm">{t('branches.noMatches', { query: filter.trim() })}</p>{/if}
+            {/if}
+          </div>
+        {/if}
+
+        {#if tagCtl.tags.length > 0}
+          <div class="section" data-testid="rail-tags">
+            <button type="button" class="grouphead" aria-expanded={tagsOpen} onclick={() => (tagsOpen = !tagsOpen)}>
+              <Icon name={tagsOpen ? 'chevron-down' : 'chevron-right'} size={11} />
+              <span>{t('branches.tags')}</span>
+              <span class="chip num">{tags.length}</span>
+            </button>
+            {#if tagsOpen}
+              {#each tags as tg (tg.name)}
+                <button
+                  type="button"
+                  class="row tag-row"
+                  title={tg.name}
+                  aria-label={t('tags.open', { name: tg.name })}
+                  data-testid="rail-tag"
+                  tabindex="-1"
+                  onclick={() => onrepo()}
+                >
+                  <Icon name="tag" size={12} />
+                  <span class="name">{tg.name}</span>
+                  {#if tg.annotated}<span class="kind">{t('tags.annotated')}</span>{/if}
+                </button>
+              {/each}
+              {#if tags.length === 0}<p class="none sm">{t('branches.noMatches', { query: filter.trim() })}</p>{/if}
             {/if}
           </div>
         {/if}

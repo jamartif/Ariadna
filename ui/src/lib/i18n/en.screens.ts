@@ -161,6 +161,8 @@ export const enScreens: Record<keyof typeof esScreens, string> = {
   'branches.toggleFolder': 'Open or close the {folder} folder',
   'branches.local': 'Local',
   'branches.remote': 'Remote',
+  /** Tags: repo references (`refs/tags`) that the rail lists next to branches. */
+  'branches.tags': 'Tags',
   'branches.current': 'current',
   'branches.emptyTitle': 'No branches',
   'branches.emptyBody': 'Make the first commit so a branch exists.',

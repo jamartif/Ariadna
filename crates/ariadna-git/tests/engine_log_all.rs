@@ -105,3 +105,77 @@ async fn el_historial_completo_incluye_otras_ramas_y_etiquetas() {
     assert!(out.contains(&lateral_commit));
     let _ = os(&["log"]);
 }
+
+/// Caso medido en el repo real: ramas que **solo** existen en el remoto, nombres con varias barras y
+/// paginación. El grafo completo tiene que verlas y ninguna página puede perder commits.
+#[tokio::test]
+async fn el_grafo_completo_ve_ramas_solo_remotas_y_pagina_sin_perder_nada() {
+    let t = TestRepo::with_initial_commit();
+    let base = t.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    let _bare = t.with_bare_origin();
+    t.git(&["push", "-q", "origin", "main"]);
+
+    // HEAD se queda en `main`; la rama nace en el remoto y aquí no existe como local.
+    t.git(&["checkout", "-q", "-b", "ccr-466506c4-f6y78p", &base]);
+    t.write("remota.txt", b"remota\n");
+    let solo_remota = t.commit_all("trabajo solo en el remoto");
+    t.git(&["push", "-q", "origin", "ccr-466506c4-f6y78p"]);
+    t.git(&["checkout", "-q", "main"]);
+    t.git(&["branch", "-D", "ccr-466506c4-f6y78p"]);
+    t.git(&["fetch", "-q", "origin"]);
+    // Se borra la referencia local de la rama: solo queda `remotes/origin/...`.
+    assert!(t
+        .git(&["branch", "--list", "ccr-466506c4-f6y78p"])
+        .trim()
+        .is_empty());
+
+    // Nombre con varias barras, también solo en el remoto.
+    t.git(&["checkout", "-q", "-b", "claude/ariadna-amend-epoch-fix-bgz9lc", &base]);
+    t.write("barras.txt", b"barras\n");
+    let varias_barras = t.commit_all("trabajo con nombre de varias barras");
+    t.git(&["push", "-q", "origin", "claude/ariadna-amend-epoch-fix-bgz9lc"]);
+    t.git(&["checkout", "-q", "main"]);
+    t.git(&["branch", "-D", "claude/ariadna-amend-epoch-fix-bgz9lc"]);
+    t.git(&["fetch", "-q", "origin"]);
+
+    let engine = plain_engine();
+    let repo = engine.open_repository(t.path()).await.unwrap();
+
+    // 1. La enumeración de referencias coincide con `for-each-ref` de ramas y remotas.
+    let locales = engine.branches(&repo).await.unwrap();
+    let remotas = engine.remote_tracking_branches(&repo).await.unwrap();
+    let esperadas: Vec<String> = t
+        .git(&["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads", "refs/remotes"])
+        .lines()
+        .map(|l| l.trim().to_owned())
+        .filter(|l| !l.is_empty() && !l.ends_with("/HEAD"))
+        .collect();
+    let mut vistas: Vec<String> = locales
+        .iter()
+        .chain(remotas.iter())
+        .map(|b| b.name.clone())
+        .collect();
+    vistas.sort();
+    let mut esperadas_ordenadas = esperadas.clone();
+    esperadas_ordenadas.sort();
+    assert_eq!(vistas, esperadas_ordenadas, "el panel lista las mismas refs que git");
+
+    // 2. Sus commits salen en el grafo completo y no en el de HEAD.
+    let head = engine.log_page(&repo, 0, 50).await.unwrap();
+    assert!(!head.iter().any(|c| c.sha == solo_remota || c.sha == varias_barras));
+    let todo = engine.log_page_all(&repo, 0, 50).await.unwrap();
+    let shas: Vec<&str> = todo.iter().map(|c| c.sha.as_str()).collect();
+    assert!(shas.contains(&solo_remota.as_str()), "rama solo remota: {shas:?}");
+    assert!(shas.contains(&varias_barras.as_str()), "nombre con varias barras: {shas:?}");
+
+    // 3. Paginando de uno en uno no se pierde ni se repite ningún commit.
+    let total = engine.log_page_all(&repo, 0, 500).await.unwrap();
+    let mut paginado: Vec<String> = Vec::new();
+    for skip in 0..total.len() {
+        let pagina = engine.log_page_all(&repo, skip, 1).await.unwrap();
+        assert_eq!(pagina.len(), 1, "skip {skip} devuelve un commit");
+        paginado.push(pagina[0].sha.clone());
+    }
+    let esperado: Vec<String> = total.iter().map(|c| c.sha.clone()).collect();
+    assert_eq!(paginado, esperado, "las páginas coinciden con la lista completa");
+}
