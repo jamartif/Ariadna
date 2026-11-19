@@ -109,6 +109,38 @@ describe('Riel de ramas: lista y jerarquía', () => {
     expect(row('origin/release/1.0/hotfix')).toBeInTheDocument();
   });
 
+  it('la fila muestra solo su segmento y la referencia completa sigue intacta', async () => {
+    await setup();
+    await screen.findByRole('navigation', { name: 'Árbol de ramas' });
+
+    // Local bajo `feature/`: la etiqueta visible es `command-palette`.
+    const local = row('feature/command-palette');
+    expect(local.querySelector('.name')?.textContent?.trim()).toBe('command-palette');
+    // Remota a dos niveles bajo `origin/` → `release/` → `1.0/`: `hotfix`.
+    const hotfix = row('origin/release/1.0/hotfix');
+    expect(hotfix.querySelector('.name')?.textContent?.trim()).toBe('hotfix');
+    expect(row('origin/release/1.0').querySelector('.name')?.textContent?.trim()).toBe('1.0');
+
+    // El contexto no se pierde: nombre completo en el tooltip y en el aria-label.
+    for (const [el, full] of [
+      [local, 'feature/command-palette'],
+      [hotfix, 'origin/release/1.0/hotfix']
+    ] as const) {
+      expect(el.getAttribute('title')).toContain(full);
+      expect(el).toHaveAttribute('aria-label', full);
+      expect(el.dataset.brailName).toBe(full);
+    }
+
+    // La búsqueda sigue siendo por el nombre completo.
+    const filter = screen.getByLabelText('Buscar rama');
+    await userEvent.type(filter, 'release/1.0');
+    expect(row('origin/release/1.0/hotfix')).toBeInTheDocument();
+    await userEvent.clear(filter);
+    await userEvent.type(filter, '1.0/hotfix');
+    expect(row('origin/release/1.0/hotfix')).toBeInTheDocument();
+    expect(document.querySelector('[data-brail-name="origin/main"]')).toBeNull();
+  });
+
   it('filtra al instante y explica cuando no hay coincidencias', async () => {
     await setup();
     const filter = screen.getByLabelText('Buscar rama');
