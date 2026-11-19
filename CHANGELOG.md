@@ -5,9 +5,16 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [0.1.0-alpha.10] - 2026-11-19
 
-Lo que hay encima de `v0.1.0-alpha.9`.
+Entra lo que llegó después de la alpha.9: los arreglos de la revisión de código.
+
+**Respecto a `v0.1.0-alpha.9`:** los **conflictos de una PR** ya se leen de verdad (el código de
+salida 1 de `merge-tree` dejaba la lista siempre vacía), un fichero recortado o binario no se puede
+«resolver» con IA, el fetch baja `refs/pull/N/head` (PRs de forks), la rama local **no se fuerza**
+nunca, el modelo de IA rechaza nombres que empiecen por `-` y el informe de cambios filtra lo
+sensible. Además, actualizar una rama sin cambiarte a ella ya no da un error falso cuando está al
+día.
 
 ### Corregido
 - **Conflictos de PR con IA**: `git merge-tree` sale con 1 cuando hay conflictos y se tomaba por
