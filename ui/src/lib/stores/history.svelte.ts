@@ -40,7 +40,17 @@ export class HistoryController {
   constructor(
     readonly tab: TabState,
     private readonly pageSize = PAGE_SIZE
-  ) {}
+  ) {
+    // Si el repo cambia (merge de una PR, checkout, fetch…), el historial se recarga solo.
+    tab.onRepoChanged(() => {
+      if (this.loadedRevision !== -1) void this.reload();
+    });
+  }
+
+  /** Carga la primera página si aún no hay nada cargado (lo usa el refresco al cambiar de pestaña). */
+  ensureLoaded(): void {
+    if (this.loadedRevision === -1 && !this.loading) void this.reload();
+  }
 
   get searching(): boolean {
     return this.query.trim() !== '';

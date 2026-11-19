@@ -25,6 +25,12 @@ export type Panel = 'changes' | 'history' | 'branches' | 'stashes' | 'conflicts'
 
 const DRAFT_PREFIX = 'ariadna.draft:';
 
+/**
+ * Ventana en la que no se repite la petición de estado al cambiar de pestaña: volver enseguida a la
+ * pestaña que acabas de dejar no debe duplicar llamadas.
+ */
+const REPO_REFRESH_COALESCE_MS = 1500;
+
 /** Une resumen y descripción: sin línea en blanco sobrante si no hay descripción. */
 export function joinMessage(summary: string, description: string): string {
   const s = summary.trim();
@@ -94,6 +100,10 @@ export class TabState {
   private pendingTimer: ReturnType<typeof setTimeout> | null = null;
   private unlisten: (() => void)[] = [];
   private disposed = false;
+  /** Oyentes de «este repo cambió» (los registran el historial y las PRs al crearse). */
+  private repoWatchers = new Set<() => void>();
+  /** Última vez que se pidió el estado del repo, para no repetirlo al cambiar de pestaña. */
+  private lastRepoRefresh = 0;
 
   readonly sections = $derived(groupEntries(this.snapshot?.status.entries ?? []));
   readonly revision = $derived(this.snapshot?.revision ?? 0);
@@ -395,6 +405,38 @@ export class TabState {
       if (s) this.applySnapshot(s);
     } catch (e) {
       this.sessionError = toApiError(e);
+    }
+  }
+
+  /**
+   * Se suscribe a «este repo cambió» (merge de una PR, checkout, fetch…). Devuelve la baja.
+   * Lo usan el historial y las PRs para recargar lo suyo sin que el usuario fuerce nada.
+   */
+  onRepoChanged(fn: () => void): () => void {
+    this.repoWatchers.add(fn);
+    return () => {
+      this.repoWatchers.delete(fn);
+    };
+  }
+
+  /**
+   * Refresca el estado del repo (ramas, cambios pendientes y los contadores de la cabecera) y avisa
+   * a los que dependen de él. Con `force = false` no repite la petición si acaba de refrescarse:
+   * cambiar de pestaña y volver enseguida no duplica llamadas.
+   */
+  async refreshRepo(force = false): Promise<void> {
+    const now = Date.now();
+    if (!force && now - this.lastRepoRefresh < REPO_REFRESH_COALESCE_MS) return;
+    this.lastRepoRefresh = now;
+    await this.refresh();
+    if (this.disposed) return;
+    for (const fn of [...this.repoWatchers]) {
+      try {
+        fn();
+      } catch (e) {
+        // Un oyente roto no puede tumbar el refresco del resto.
+        console.error('repo watcher', e);
+      }
     }
   }
 
