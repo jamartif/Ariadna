@@ -18,7 +18,7 @@
 
   type Item =
     | { type: 'header'; section: SectionId; count: number }
-    | { type: 'dir'; section: SectionId; key: string; name: string; depth: number; entries: StatusEntry[]; open: boolean }
+    | { type: 'dir'; section: SectionId; key: string; name: string; path: string; depth: number; entries: StatusEntry[]; open: boolean }
     | { type: 'file'; section: SectionId; entry: StatusEntry; depth: number };
 
   let collapsed = $state<Record<string, boolean>>({});
@@ -416,7 +416,7 @@
               onkeydown={() => {}}
               tabindex="-1"
             >
-              <div role="gridcell" class="cell dir-cell" aria-expanded={it.open}>
+              <div role="gridcell" class="cell dir-cell" aria-expanded={it.open} title={it.path}>
                 <Icon name={it.open ? 'chevron-down' : 'chevron-right'} size={12} />
                 <Icon name="folder" size={13} />
                 <span class="dir-name">{it.name}</span>
