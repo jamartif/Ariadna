@@ -18,7 +18,7 @@ use crate::listings::{parse_branches, parse_remotes};
 use crate::models::{
     Branch, ConflictFile, ConflictKind, ConflictSide, DiffScope, FileDiff, GitPath,
     IntegrationState, MergeFastForward, MergeResult, MergeTreeScan, Remote, RemoteCheckout,
-    Repository,
+    Repository, Worktree,
 };
 use crate::path_safety::{
     git_pathspec_args, validate_ref, validate_repo_path_components, validate_revision_arg,
@@ -308,6 +308,29 @@ impl GitCliEngine {
     /// Ramas locales.
     pub async fn branches(&self, repo: &Repository) -> GitResult<Vec<Branch>> {
         self.bo_list_refs(repo, "refs/heads").await
+    }
+
+    /// Referencias de pull request del remoto (`refs/pull/*` en GitHub, `refs/merge-requests/*` en
+    /// GitLab). Son historia del proyecto y hay ramas que **solo** viven aquí hasta que se fusionan.
+    pub async fn pull_refs(&self, repo: &Repository) -> GitResult<Vec<Branch>> {
+        let mut all = self.bo_list_refs(repo, "refs/pull").await?;
+        all.extend(self.bo_list_refs(repo, "refs/merge-requests").await?);
+        all.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(all)
+    }
+
+    /// Worktrees del repositorio (`git worktree list --porcelain`), con la ruta, su HEAD y la rama
+    /// si está en una. Una rama o un HEAD en **otro** worktree también es historia del proyecto:
+    /// un worktree en «detached HEAD» puede tener commits que ninguna otra referencia alcanza.
+    pub async fn worktrees(&self, repo: &Repository) -> GitResult<Vec<Worktree>> {
+        let out = self
+            .bo_ok(
+                repo,
+                CommandKind::Read,
+                &["worktree", "list", "--porcelain"],
+            )
+            .await?;
+        Ok(parse_worktrees(&out.stdout))
     }
 
     /// Ramas de seguimiento (`origin/main`). No incluye `origin/HEAD`.
@@ -1321,4 +1344,51 @@ async fn read_working_file(root: PathBuf, rel: GitPath) -> Option<Vec<u8>> {
     .await
     .ok()
     .flatten()
+}
+
+/// Parsea `git worktree list --porcelain`: bloques separados por línea en blanco con `worktree`,
+/// `HEAD`, `branch` o `detached`.
+fn parse_worktrees(out: &[u8]) -> Vec<Worktree> {
+    let text = String::from_utf8_lossy(out);
+    let mut list = Vec::new();
+    let mut path = String::new();
+    let mut head = String::new();
+    let mut branch: Option<String> = None;
+    let mut detached = false;
+    let flush = |path: &mut String,
+                 head: &mut String,
+                 branch: &mut Option<String>,
+                 detached: &mut bool,
+                 list: &mut Vec<Worktree>| {
+        if path.is_empty() && head.is_empty() {
+            return;
+        }
+        // El primer bloque de `worktree list` es siempre el worktree principal.
+        let is_main = list.is_empty();
+        list.push(Worktree {
+            path: std::mem::take(path),
+            head: std::mem::take(head),
+            branch: branch.take(),
+            detached: std::mem::replace(detached, false),
+            is_main,
+        });
+    };
+    for line in text.lines() {
+        let line = line.trim_end();
+        if line.is_empty() {
+            flush(&mut path, &mut head, &mut branch, &mut detached, &mut list);
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("worktree ") {
+            path = rest.to_owned();
+        } else if let Some(rest) = line.strip_prefix("HEAD ") {
+            head = rest.to_owned();
+        } else if let Some(rest) = line.strip_prefix("branch ") {
+            branch = Some(rest.trim_start_matches("refs/heads/").to_owned());
+        } else if line == "detached" {
+            detached = true;
+        }
+    }
+    flush(&mut path, &mut head, &mut branch, &mut detached, &mut list);
+    list
 }
