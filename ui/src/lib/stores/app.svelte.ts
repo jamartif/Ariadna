@@ -11,6 +11,8 @@ import {
 import { t } from '$lib/i18n';
 import { runMenuAction } from '$lib/shortcuts/registry';
 import { moveItem } from '$lib/util/virtual';
+import { historyOf } from './history.svelte';
+import { prOf } from './pullRequests.svelte';
 import { TabState } from './tab.svelte';
 import { toasts } from './toasts.svelte';
 
@@ -18,6 +20,12 @@ export type Entry = { id: string; kind: 'repo'; info: TabInfo } | { id: string; 
 
 /** Tope blando de pestañas (spec §8): avisa pero no impide abrir. */
 export const SOFT_TAB_LIMIT = 20;
+
+/**
+ * Ventana en la que volver a una pestaña no repite el refresco: cambiar y volver enseguida no debe
+ * lanzar dos veces las mismas peticiones.
+ */
+const REPO_REACTIVATE_COALESCE_MS = 1500;
 
 /** Una pestaña que lleva este tiempo sin verse libera sus datos pesados (spec §8). */
 export const HIBERNATE_AFTER_MS = 10 * 60 * 1000;
@@ -41,6 +49,8 @@ export class AppStore {
   opening = $state(false);
 
   private tabStores = new Map<string, TabState>();
+  /** Última activación de cada pestaña de repo, para no repetir el refresco al volver enseguida. */
+  private activatedAt = new Map<string, number>();
   private unlisten: (() => void)[] = [];
   private draftCounter = 0;
   /** Desde cuándo no se ve cada pestaña (ms). Solo cuentan las que no son la activa. */
@@ -244,7 +254,28 @@ export class AppStore {
     if (!this.entries.some((e) => e.id === id)) return;
     this.activeId = id;
     const e = this.entries.find((x) => x.id === id);
-    if (e?.kind === 'repo') void this.api.activateTab(id).catch(() => undefined);
+    if (e?.kind !== 'repo') return;
+    void this.api.activateTab(id).catch(() => undefined);
+    // Lo que se ve en memoria es del repo anterior: al activar se recarga lo suyo.
+    void this.refreshRepoData(id);
+  }
+
+  /**
+   * Recarga los datos de una pestaña de repo al activarla: estado (ramas, cambios y contadores),
+   * historial y PRs. Si vuelves enseguida a la misma pestaña no se repite la petición.
+   */
+  private async refreshRepoData(id: string): Promise<void> {
+    const now = Date.now();
+    if (now - (this.activatedAt.get(id) ?? 0) < REPO_REACTIVATE_COALESCE_MS) return;
+    this.activatedAt.set(id, now);
+    const tab = this.tabState(id);
+    if (!tab) return;
+    // El historial y las PRs de esa pestaña se crean (y cargan) aunque su panel no esté montado, para
+    // que al abrirlo ya estén frescos.
+    historyOf(tab).ensureLoaded();
+    void prOf(tab).ensureLoaded();
+    // `false` = sin forzar: la propia pestaña también descarta repetir dentro de su ventana.
+    await tab.refreshRepo();
   }
 
   gotoIndex(n: number): void {

@@ -105,6 +105,11 @@ export class PullRequestsController {
 
   constructor(readonly tab: TabState) {
     tab.onHibernate(() => this.release());
+    // El repo cambió por fuera de la UI de PRs (merge, checkout, fetch…): se recarga lo suyo.
+    tab.onRepoChanged(() => {
+      if (this.supported) void this.loadList(this.page, true);
+      if (this.selectedId !== null) void this.loadDetail(this.selectedId, true);
+    });
   }
 
   get api() {
@@ -113,6 +118,17 @@ export class PullRequestsController {
 
   get supported(): boolean {
     return this.support?.supported === true;
+  }
+
+  /**
+   * Deja la vista de PRs lista para una pestaña: soporte y primera página, si no estaban pedidos.
+   * Lo usa el refresco al activar una pestaña de repo, aunque su panel no esté montado.
+   */
+  async ensureLoaded(): Promise<void> {
+    if (!this.supportLoaded) await this.loadSupport();
+    if (this.supported && this.items.length === 0 && !this.listLoading) {
+      await this.loadList(this.page, true);
+    }
   }
 
   get caps(): PrCapabilities | null {
@@ -352,7 +368,9 @@ export class PullRequestsController {
     }
     if (res.detail) this.applyDetail(res.detail);
     toasts.success(message);
-    void this.loadList(this.page, true);
+    // Completar una PR cambia el repo (merge, rama borrada, contadores): se refresca estado,
+    // historial y la propia lista. Si la acción falló no se llega aquí: el estado se queda igual.
+    void this.tab.refreshRepo(true);
     return true;
   }
 
