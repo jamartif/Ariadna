@@ -25,7 +25,7 @@ use ariadna_ai::resolve::{resolve_binary, SearchEnv};
 use ariadna_ai::{
     is_valid_model_name, suggested_models, AiContextPolicy, AiError, AiProvider, AiSettings,
     Availability, CallContext, CliProvider, CliProviderConfig, CommitLanguage, CommitOptions,
-    ProviderChoice, ProviderId,
+    ProviderChoice, ProviderId, DEFAULT_MAX_CONTEXT_BYTES,
 };
 use ariadna_git::{
     CommandKind, ConflictFile, ConflictKind, ConflictSide, DiffScope, FileDiff, GitPath,
@@ -361,6 +361,22 @@ impl AiService {
         if let Some(iso) = patch.isolated {
             next.profile_mut().isolated = Some(iso);
         }
+        if let Some(bytes) = patch.max_context_bytes {
+            // El tope lo usan todos los flujos de IA (informe de cambios incluido). Se acota para
+            // que un valor absurdo no reviente la app ni mande medio repositorio al CLI.
+            let (min, max) = (MIN_CONTEXT_BYTES, MAX_CONTEXT_BYTES);
+            if !(min..=max).contains(&bytes) {
+                return Err(ApiError::new(
+                    "INVALID_REFERENCE",
+                    format!(
+                        "el tamaño de contexto tiene que estar entre {min} y {max} bytes ({})",
+                        DEFAULT_MAX_CONTEXT_BYTES
+                    ),
+                    Some(bytes.to_string()),
+                ));
+            }
+            next.settings.max_context_bytes = bytes;
+        }
         if let Some(b) = &patch.binary_path {
             let id = parse_provider(&b.id)?;
             let path = b
@@ -659,6 +675,10 @@ struct Consent<'a> {
 
 /// Carpeta (relativa a la raíz del repo) donde se guardan los informes de cambios.
 pub(crate) const REPORT_DIR: &str = "informes-cambios";
+
+/// Tope mínimo y máximo del tamaño de contexto de la IA (bytes).
+const MIN_CONTEXT_BYTES: usize = 4_000;
+const MAX_CONTEXT_BYTES: usize = 4_000_000;
 
 /// Datos de un commit leídos de git, tal como los necesita el informe.
 struct CommitRaw {
@@ -994,6 +1014,7 @@ pub(crate) fn compose_state(st: &StoredAi, avail: &[(ProviderId, Availability)])
         },
         choice: st.settings.provider,
         providers,
+        max_context_bytes: st.settings.max_context_bytes,
     }
 }
 

@@ -29,6 +29,7 @@ pub use models::{
     is_valid_model_name, suggested_models, AccountInfo, AccountState, AiContextPolicy, AiError,
     AiSettings, AiSuggestion, Availability, CommitLanguage, CommitOptions, CommitStyle,
     ConflictOption, ProviderChoice, ProviderId, SuggestionKind, SuggestionStatus, SummaryStyle,
+    DEFAULT_MAX_CONTEXT_BYTES,
 };
 pub use orchestrator::{Limiter, Orchestrator, Profile, ProfileKind};
 pub use provider::{AiProvider, CallContext, CliProvider, CliProviderConfig};

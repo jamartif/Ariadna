@@ -347,6 +347,8 @@ pub struct AiState {
     pub profile: AiProfileInfo,
     pub choice: ProviderChoice,
     pub providers: Vec<AiProviderState>,
+    /// Tope de bytes de contexto que se envía a la IA (lo usa el informe de cambios).
+    pub max_context_bytes: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -378,6 +380,8 @@ pub struct AiSettingsPatch {
     pub model: Option<ModelPatch>,
     /// Aislar (o no) el login del perfil activo por proveedor.
     pub isolated: Option<bool>,
+    /// Tope de bytes de contexto que se manda a la IA (informe de cambios incluido).
+    pub max_context_bytes: Option<usize>,
 }
 
 /// Modelo elegido para un proveedor (`None` = el que use el CLI por defecto).

@@ -236,7 +236,9 @@ export const aiState = obj({
   enabled: bool,
   profile: obj({ name: str, kind: oneOf('personal', 'empresa'), isolated: bool }, { rule: str }),
   choice: oneOf('auto', 'claude', 'codex', 'copilot'),
-  providers: arr(providerState)
+  providers: arr(providerState),
+  /** Tope de bytes de contexto que se envía a la IA (informe de cambios incluido). */
+  maxContextBytes: num
 });
 
 export const contextPreview = obj({

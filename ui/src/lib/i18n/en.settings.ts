@@ -64,6 +64,9 @@ export const enSettings: Record<keyof typeof esSettings, string> = {
   // Artificial intelligence
   'settings.ai.enable': 'Enable artificial intelligence',
   'settings.ai.enableHint': 'When off, Ariadna runs no AI CLI and sends nothing. Each provider asks for your consent the first time.',
+  'settings.ai.maxContext': 'Context size',
+  'settings.ai.maxContextHint': 'Bytes of diff sent to the AI (4,000 – 4,000,000). Used by the commit message and the change report: when the diff does not fit, it is trimmed to this limit.',
+  'settings.ai.maxContextRange': 'The context size must be between {min} and {max} bytes.',
   'settings.ai.profile': 'Profile',
   'settings.ai.profileHint': 'The Company profile leaves Claude disabled until you turn it on explicitly. It is used in repositories with no matching rule.',
   'settings.ai.provider': 'Provider',

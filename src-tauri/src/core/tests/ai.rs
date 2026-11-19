@@ -165,6 +165,70 @@ async fn sin_nada_preparado_falla_y_no_llama_al_cli() {
 }
 
 #[tokio::test]
+async fn el_tope_de_contexto_se_guarda_y_se_valida() {
+    let ai = Ai::new(ok_script).await;
+    // Por defecto el informe usa 100 000 bytes; el ajuste lo puede subir y el estado lo refleja.
+    assert_eq!(
+        ai.env
+            .core
+            .ai_state("tab-1")
+            .await
+            .unwrap()
+            .max_context_bytes,
+        100_000
+    );
+
+    let estado = patch(
+        &ai,
+        AiSettingsPatch {
+            max_context_bytes: Some(250_000),
+            ..AiSettingsPatch::default()
+        },
+    )
+    .await;
+    assert_eq!(estado.max_context_bytes, 250_000, "el ajuste se guarda");
+    assert_eq!(
+        ai.env
+            .core
+            .ai_state("tab-1")
+            .await
+            .unwrap()
+            .max_context_bytes,
+        250_000,
+        "y sobrevive a la siguiente lectura"
+    );
+
+    // Fuera de rango se rechaza con un error tipado, no con un `panic`.
+    for malo in [1_000usize, 0, 9_000_000] {
+        let e = ai
+            .env
+            .core
+            .ai_update_settings(AiSettingsPatch {
+                max_context_bytes: Some(malo),
+                ..AiSettingsPatch::default()
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(e.code, "INVALID_REFERENCE", "{malo}: {e:?}");
+        assert!(
+            e.message.contains("4000") && e.message.contains("4000000"),
+            "el aviso dice el rango: {}",
+            e.message
+        );
+    }
+    assert_eq!(
+        ai.env
+            .core
+            .ai_state("tab-1")
+            .await
+            .unwrap()
+            .max_context_bytes,
+        250_000,
+        "un valor inválido no toca el ajuste vigente"
+    );
+}
+
+#[tokio::test]
 async fn ia_desactivada_no_ejecuta_nada() {
     let ai = Ai::new(ok_script).await;
     ai.stage("a.txt", b"uno\n").await;

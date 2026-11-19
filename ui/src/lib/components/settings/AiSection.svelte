@@ -29,6 +29,28 @@
   /** Misma regla que el núcleo (`is_valid_model_name`): 1–64, sin espacios ni controles. */
   const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,63}$/;
 
+  /** Límites del contexto de IA, iguales a los del núcleo (`core/ai.rs`). */
+  const MIN_CONTEXT_BYTES = 4_000;
+  const MAX_CONTEXT_BYTES = 4_000_000;
+
+  /**
+   * Guarda el tamaño de contexto. Si el valor no sirve se avisa y se devuelve el campo al valor
+   * vigente: nunca se manda al núcleo algo que va a rechazar (y menos en silencio).
+   */
+  function saveMaxContext(input: HTMLInputElement): void {
+    const bytes = Math.trunc(Number(input.value));
+    if (!Number.isFinite(bytes) || bytes < MIN_CONTEXT_BYTES || bytes > MAX_CONTEXT_BYTES) {
+      toasts.error(
+        t('settings.ai.maxContextRange', { min: MIN_CONTEXT_BYTES, max: MAX_CONTEXT_BYTES }),
+        null
+      );
+      input.value = String(ai?.maxContextBytes ?? MIN_CONTEXT_BYTES);
+      return;
+    }
+    if (bytes === ai?.maxContextBytes) return;
+    void panel.patchAi({ maxContextBytes: bytes });
+  }
+
   function selectModel(id: string, value: string): void {
     if (value === '__other') {
       manualModel = { ...manualModel, [id]: true };
@@ -122,6 +144,29 @@
         {:else if !panel.tabId}
           <p class="hint">{t('settings.ai.noRepo')}</p>
         {/if}
+      </fieldset>
+
+      <fieldset class="group" disabled={!ai.enabled}>
+        <legend>{t('settings.ai.maxContext')}</legend>
+        <label class="fieldwrap">
+          <span class="sronly">{t('settings.ai.maxContext')}</span>
+          <!-- Se guarda al salir del campo o con Enter; un valor fuera de rango se rechaza con aviso. -->
+          <input
+            class="field mono"
+            type="number"
+            min={MIN_CONTEXT_BYTES}
+            max={MAX_CONTEXT_BYTES}
+            step={1000}
+            value={ai.maxContextBytes}
+            aria-describedby="set-ai-ctx-hint"
+            data-testid="settings-ai-max-context"
+            onchange={(e) => saveMaxContext(e.currentTarget)}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') saveMaxContext(e.currentTarget);
+            }}
+          />
+        </label>
+        <p class="hint" id="set-ai-ctx-hint">{t('settings.ai.maxContextHint')}</p>
       </fieldset>
 
       <fieldset class="group" disabled={!ai.enabled}>
