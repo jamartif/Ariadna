@@ -280,14 +280,28 @@ impl GitCliEngine {
     // Ramas
     // -----------------------------------------------------------------------
 
-    async fn bo_list_refs(&self, repo: &Repository, namespace: &str) -> GitResult<Vec<Branch>> {
-        let format = "--format=%(refname:lstrip=2)%00%(objectname)%00%(HEAD)%00%(upstream:short)\
-                      %00%(upstream:track)%00%(symref)";
+    /// Lista referencias de un namespace con el formato que espera [`parse_branches`].
+    ///
+    /// `full` decide el nombre que acaba en `Branch::name`: recortado al namespace
+    /// (`refs/heads/feature` → `feature`) para ramas y remotos, o **completo**
+    /// (`refs/pull/7/head`) para las refs de pull request, que necesitan su namespace porque
+    /// dos proveedores distintos (`refs/pull`, `refs/merge-requests`) pueden repetir el resto.
+    async fn bo_list_refs(
+        &self,
+        repo: &Repository,
+        namespace: &str,
+        full: bool,
+    ) -> GitResult<Vec<Branch>> {
+        let strip = if full { "" } else { ":lstrip=2" };
+        let format = format!(
+            "--format=%(refname{strip})%00%(objectname)%00%(HEAD)%00%(upstream:short)\
+             %00%(upstream:track)%00%(symref)"
+        );
         let out = self
             .bo_ok(
                 repo,
                 CommandKind::Read,
-                &["for-each-ref", format, namespace],
+                &["for-each-ref", &format, namespace],
             )
             .await?;
         // Se descartan las referencias simbólicas (`origin/HEAD`) por su campo `symref`.
@@ -307,15 +321,26 @@ impl GitCliEngine {
 
     /// Ramas locales.
     pub async fn branches(&self, repo: &Repository) -> GitResult<Vec<Branch>> {
-        self.bo_list_refs(repo, "refs/heads").await
+        self.bo_list_refs(repo, "refs/heads", false).await
     }
 
     /// Referencias de pull request del remoto (`refs/pull/*` en GitHub, `refs/merge-requests/*` en
     /// GitLab). Son historia del proyecto y hay ramas que **solo** viven aquí hasta que se fusionan.
+    ///
+    /// `Branch::name` es la referencia **completa** (`refs/pull/7/head`), no el resto del namespace:
+    /// un repo espejo puede tener `refs/pull/7/head` y `refs/merge-requests/7/head` a la vez, y con
+    /// el nombre recortado las dos serían `7/head` (clave repetida en el riel). Se descarta
+    /// `refs/pull/N/merge` (la fusión de prueba que publica el servidor): duplica la PR sin aportar.
+    /// El orden es por **número de PR**, no lexicográfico (`10` después de `9`, no antes de `1`).
     pub async fn pull_refs(&self, repo: &Repository) -> GitResult<Vec<Branch>> {
-        let mut all = self.bo_list_refs(repo, "refs/pull").await?;
-        all.extend(self.bo_list_refs(repo, "refs/merge-requests").await?);
-        all.sort_by(|a, b| a.name.cmp(&b.name));
+        let mut all = self.bo_list_refs(repo, "refs/pull", true).await?;
+        all.extend(self.bo_list_refs(repo, "refs/merge-requests", true).await?);
+        all.retain(|b| !b.name.ends_with("/merge"));
+        all.sort_by(|a, b| {
+            pull_ref_number(&a.name)
+                .cmp(&pull_ref_number(&b.name))
+                .then_with(|| a.name.cmp(&b.name))
+        });
         Ok(all)
     }
 
@@ -335,7 +360,7 @@ impl GitCliEngine {
 
     /// Ramas de seguimiento (`origin/main`). No incluye `origin/HEAD`.
     pub async fn remote_tracking_branches(&self, repo: &Repository) -> GitResult<Vec<Branch>> {
-        self.bo_list_refs(repo, "refs/remotes").await
+        self.bo_list_refs(repo, "refs/remotes", false).await
     }
 
     pub async fn create_branch(
@@ -1344,6 +1369,16 @@ async fn read_working_file(root: PathBuf, rel: GitPath) -> Option<Vec<u8>> {
     .await
     .ok()
     .flatten()
+}
+
+/// Número de la pull request de una referencia (`refs/pull/12/head` → 12). Las que no encajan van
+/// al final. Sirve para ordenar como un humano lo espera: `9` antes que `10`.
+fn pull_ref_number(name: &str) -> u64 {
+    name.split('/')
+        .rev()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(u64::MAX)
 }
 
 /// Parsea `git worktree list --porcelain`: bloques separados por línea en blanco con `worktree`,

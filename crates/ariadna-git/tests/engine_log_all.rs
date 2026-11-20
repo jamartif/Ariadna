@@ -288,7 +288,8 @@ async fn el_panel_lista_exactamente_las_mismas_referencias_que_git() {
         listadas.push(format!("refs/tags/{}", tg.name));
     }
     for b in engine.pull_refs(&repo).await.unwrap() {
-        listadas.push(format!("refs/pull/{}", b.name));
+        // `pull_refs` ya devuelve la referencia completa (`refs/pull/7/head`).
+        listadas.push(b.name);
     }
     let worktrees = engine.worktrees(&repo).await.unwrap();
     assert!(

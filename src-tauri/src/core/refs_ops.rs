@@ -22,12 +22,12 @@ pub struct ExtraRefs {
 }
 
 impl AppCore {
-    /// Refs de PR y worktrees del repo de una pestaña. Una sola lectura, dos consultas a git.
+    /// Refs de PR y worktrees del repo de una pestaña. Una sola lectura, dos consultas a git
+    /// **en paralelo**: son independientes y cada una es un proceso de git distinto.
     pub async fn extra_refs(&self, tab_id: &str) -> ApiResult<ExtraRefs> {
         self.read_op(tab_id, "referencias", |e, r| {
             Box::pin(async move {
-                let pull_refs = e.pull_refs(&r).await?;
-                let worktrees = e.worktrees(&r).await?;
+                let (pull_refs, worktrees) = tokio::try_join!(e.pull_refs(&r), e.worktrees(&r))?;
                 Ok(ExtraRefs {
                     pull_refs,
                     worktrees,
