@@ -54,7 +54,10 @@
   function label(e: Entry): string {
     if (e.kind === 'new') return t('tabs.newTab');
     // El tooltip lleva la **ruta completa** y el nombre real, aunque la pestaña enseñe el alias.
-    return [repoAliases.label(e.info.path, e.info.name), e.info.path, details(e)].filter(Boolean).join(', ');
+    return [repoAliases.label(e.info.path, e.info.name), e.info.path, details(e)]
+      .filter(Boolean)
+      .join(', ')
+      .concat(onalias ? ` · ${t('tabs.aliasHintShort')}` : '');
   }
 
   /** Nombre visible de la pestaña: alias si lo hay; si no, el nombre del repo. */
@@ -335,6 +338,12 @@
             if (entry.kind !== 'repo' || !onalias) return;
             e.preventDefault();
             menuFor = entry.id;
+          }}
+          ondblclick={(e) => {
+            // Doble clic en la pestaña = poner alias (el menú contextual sigue estando).
+            if (entry.kind !== 'repo' || !onalias) return;
+            e.preventDefault();
+            onalias(entry.id);
           }}
         >
           {#if entry.kind === 'new'}

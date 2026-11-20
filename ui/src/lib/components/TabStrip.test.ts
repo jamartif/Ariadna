@@ -241,3 +241,27 @@ describe('tira de repos: separación y recorte de los nombres', () => {
     expect(Number(min?.[1])).toBeGreaterThanOrEqual(120);
   });
 });
+
+/**
+ * El alias del repo se abre con doble clic en la pestaña además de con el menú contextual: si solo
+ * estuviera escondido en el clic derecho, no se descubre.
+ */
+describe('TabStrip · alias del repositorio', () => {
+  it('el doble clic pide el alias del repo de esa pestaña', async () => {
+    const onalias = vi.fn();
+    const props = {
+      entries: [repo('a'), repo('b')],
+      activeId: 'a',
+      onactivate: vi.fn(),
+      onclose: vi.fn(),
+      onnew: vi.fn(),
+      onreorder: vi.fn(),
+      onalias
+    };
+    render(TabStrip, { props });
+    const tab = screen.getByRole('tab', { name: /^a/ });
+    await userEvent.dblClick(tab);
+    expect(onalias).toHaveBeenCalledTimes(1);
+    expect(onalias.mock.calls[0]?.[0]).toMatch(/^[ab]$/);
+  });
+});

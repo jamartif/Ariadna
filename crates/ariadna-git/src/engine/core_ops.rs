@@ -665,11 +665,18 @@ impl GitCliEngine {
         args.push(OsString::from(capped.to_string()));
         args.push(OsString::from(format!("--skip={}", skip.min(10_000_000))));
         if all {
-            // Historia **completa**: todas las referencias del repo (ramas, remotas, etiquetas,
-            // refs/pull…) y el HEAD de cada worktree, incluidos los que están en «detached HEAD»,
-            // que no son ninguna referencia y por eso `--branches/--remotes/--tags` no alcanza.
-            for rev in self.graph_revs(repo).await? {
-                args.push(OsString::from(rev));
+            // Historia **completa**: `--all` cubre ramas, remotas, etiquetas y `refs/pull/*` sin
+            // enumerar cientos de referencias (en Windows una lista larga se pasa del límite de la
+            // línea de comandos), y se excluyen las que no son historia del proyecto. Los `HEAD`
+            // de los worktrees se añaden aparte: un worktree en «detached HEAD» no es referencia.
+            args.extend(os(&[
+                "--all",
+                "--exclude=refs/stash",
+                "--exclude=refs/notes/*",
+                "--exclude=refs/bisect/*",
+            ]));
+            for tip in self.graph_tips(repo).await? {
+                args.push(OsString::from(tip));
             }
             args.push(OsString::from("--topo-order"));
         }
@@ -678,36 +685,16 @@ impl GitCliEngine {
         Ok(parse_commit_log(&out.stdout))
     }
 
-    /// Revisiones que cubren la historia completa del repo: todas las referencias de `refs/`
-    /// (menos las que no son historia del proyecto: `stash`, `notes`, `bisect`) más el `HEAD` de
-    /// cada worktree. `HEAD` solo si existe: en un repo sin commits es un argumento inválido.
-    pub async fn graph_revs(&self, repo: &Repository) -> GitResult<Vec<String>> {
-        let out = self
-            .read(repo, &os(&["for-each-ref", "--format=%(refname)", "refs/"]))
-            .await?;
-        let mut revs: Vec<String> = out
-            .stdout_lossy()
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .filter(|l| {
-                !l.starts_with("refs/stash")
-                    && !l.starts_with("refs/notes/")
-                    && !l.starts_with("refs/bisect/")
-            })
-            .map(str::to_owned)
-            .collect();
-        // El HEAD de cada worktree: puede no estar en ninguna rama (detached) y sus commits, sin
-        // esto, no salen en el grafo de nadie.
+    /// Revisiones que **no** alcanzan `--all`: el `HEAD` de cada worktree, que puede estar en
+    /// «detached HEAD» y no ser ninguna referencia. Es una lista corta (un SHA por worktree).
+    pub async fn graph_tips(&self, repo: &Repository) -> GitResult<Vec<String>> {
+        let mut tips: Vec<String> = Vec::new();
         for wt in self.worktrees(repo).await.unwrap_or_default() {
-            if !wt.head.is_empty() && !revs.iter().any(|r| r == &wt.head) {
-                revs.push(wt.head);
+            if !wt.head.is_empty() && !tips.contains(&wt.head) {
+                tips.push(wt.head);
             }
         }
-        if self.has_head(repo).await? && !revs.iter().any(|r| r == "HEAD") {
-            revs.push("HEAD".to_owned());
-        }
-        Ok(revs)
+        Ok(tips)
     }
 
     /// Busca (sin distinguir mayúsculas, texto literal) en mensaje, autor y prefijo de hash
