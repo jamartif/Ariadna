@@ -200,18 +200,44 @@
   /*
    * Refs de pull request y worktrees: lectura **explícita** (no van en el snapshot diario, que se
    * refresca a menudo). Así el riel las enseña sin añadir lecturas al refresco de la sesión.
+   *
+   * El motor devuelve la referencia **completa** (`refs/pull/7/head`, `refs/merge-requests/7/head`):
+   * es lo único que distingue un PR de GitHub de un MR de GitLab con el mismo número, y es también
+   * la clave de la lista (con el nombre recortado las dos serían `7/head` y Svelte 5 rompe el `#each`).
    */
   let extra = $state.raw<ExtraRefs>({ pullRefs: [], worktrees: [] });
+  /** Turno de la última lectura: una respuesta vieja no debe pisar a la nueva. */
+  let extraSeq = 0;
   $effect(() => {
     void tab.revision;
     if (tab.hibernated) return;
+    const mio = ++extraSeq;
     void tab.api
       .extraRefs(tab.id)
-      .then((r) => (extra = r))
-      .catch(() => (extra = { pullRefs: [], worktrees: [] }));
+      .then((r) => {
+        if (mio === extraSeq) extra = r;
+      })
+      .catch((e) => {
+        if (mio !== extraSeq) return;
+        // Sin refs el riel sigue sirviendo: se vacían los grupos, pero el fallo queda en consola.
+        extra = { pullRefs: [], worktrees: [] };
+        console.warn('extraRefs falló: el riel oculta pull requests y worktrees', e);
+      });
   });
-  const pullRefs = $derived(extra.pullRefs.filter((x) => match(x)));
-  const otherWorktrees = $derived(extra.worktrees.filter((w) => !w.isMain && (q === '' || (w.branch ?? w.head).toLowerCase().includes(q))));
+
+  /** Misma regla para todos los grupos: filtro vacío = todo; si no, busca en cualquiera de los campos. */
+  const hits = (...campos: (string | null)[]) =>
+    q === '' || campos.some((c) => (c ?? '').toLowerCase().includes(q));
+  /** «#7/head» para `refs/pull/7/head`, «!7/head» para `refs/merge-requests/7/head`. */
+  function refLabel(name: string): string {
+    const gitlab = name.startsWith('refs/merge-requests/');
+    const resto = name.replace(/^refs\/(pull|merge-requests)\//, '');
+    return `${gitlab ? '!' : '#'}${resto}`;
+  }
+
+  const pullRefs = $derived(extra.pullRefs.filter((x) => hits(x.name, refLabel(x.name))));
+  const worktrees = $derived(extra.worktrees.filter((w) => !w.isMain));
+  const otherWorktrees = $derived(worktrees.filter((w) => hits(w.branch, w.head, w.path)));
   let pullOpen = $state(true);
   let worktreesOpen = $state(true);
 
@@ -744,9 +770,9 @@
             </button>
             {#if pullOpen}
               {#each pullRefs as ref (ref.name)}
-                <div class="row tag-row" title={`refs/pull/${ref.name}`} data-testid="rail-pull-ref">
+                <div class="row tag-row" title={ref.name} data-testid="rail-pull-ref">
                   <Icon name="git-pull-request" size={12} />
-                  <span class="name">{ref.name}</span>
+                  <span class="name">{refLabel(ref.name)}</span>
                   <span class="kind mono">{ref.oid.slice(0, 7)}</span>
                 </div>
               {/each}
@@ -755,7 +781,7 @@
           </div>
         {/if}
 
-        {#if otherWorktrees.length > 0}
+        {#if worktrees.length > 0}
           <div class="section" data-testid="rail-worktrees">
             <button type="button" class="grouphead" aria-expanded={worktreesOpen} onclick={() => (worktreesOpen = !worktreesOpen)}>
               <Icon name={worktreesOpen ? 'chevron-down' : 'chevron-right'} size={11} />
@@ -770,6 +796,7 @@
                   {#if wt.detached}<span class="kind">{t('branches.detached')}</span>{/if}
                 </div>
               {/each}
+              {#if otherWorktrees.length === 0}<p class="none sm">{t('branches.noMatches', { query: filter.trim() })}</p>{/if}
             {/if}
           </div>
         {/if}

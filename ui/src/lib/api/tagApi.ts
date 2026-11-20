@@ -12,7 +12,12 @@ export interface Worktree {
 
 /** Lo que el riel necesita para sus grupos «Pull requests» y «Otros worktrees». */
 export interface ExtraRefs {
+  /**
+   * Refs de pull request con su nombre **completo** (`refs/pull/7/head`, `refs/merge-requests/7/head`):
+   * el namespace distingue GitHub de GitLab y sirve de clave única en la lista. Sin `refs/*\/merge`.
+   */
   pullRefs: Branch[];
+  /** Todos los worktrees; el principal va primero (`isMain`). */
   worktrees: Worktree[];
 }
 

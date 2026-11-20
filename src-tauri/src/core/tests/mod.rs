@@ -10,6 +10,7 @@ mod errors;
 mod fixtures;
 mod merge;
 mod pull_requests;
+mod refs;
 mod remotes;
 mod safe_directory;
 mod session;
