@@ -63,5 +63,13 @@ async fn extra_refs_distingue_proveedores_y_trae_los_worktrees() {
     assert!(otro.detached, "{otro:?}");
     assert_eq!(otro.branch, None);
     assert_eq!(otro.head, head);
-    assert_eq!(otro.path, Env::s(&detached));
+    // Git escribe la ruta con los separadores del sistema (`C:\...`) y aquí se construyó con `/`:
+    // se comparan con una sola forma para que valga en Windows y en Unix.
+    let normal = |p: &str| {
+        p.split(['\\', '/'])
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("/")
+    };
+    assert_eq!(normal(&otro.path), normal(&Env::s(&detached)));
 }
