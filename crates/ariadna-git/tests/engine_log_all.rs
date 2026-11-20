@@ -106,6 +106,58 @@ async fn el_historial_completo_incluye_otras_ramas_y_etiquetas() {
     let _ = os(&["log"]);
 }
 
+/// El stash **no** entra en el grafo, y las exclusiones solo funcionan si van delante de `--all`
+/// (en git `--exclude` afecta únicamente a la siguiente opción `--all`/`--branches`/`--glob`).
+/// Sin este caso, poner las exclusiones detrás de `--all` pasaría desapercibido: el stash aparecería
+/// en el grafo y nadie lo notaría.
+#[tokio::test]
+async fn el_stash_y_las_refs_internas_no_entran_en_el_grafo() {
+    let t = TestRepo::with_initial_commit();
+    let base = t.git(&["rev-parse", "HEAD"]).trim().to_owned();
+
+    // Un commit que solo vive en `refs/stash`: el árbol modificado que se guarda al hacer stash.
+    t.write("secreto.txt", b"contenido que no esta en ninguna rama\n");
+    t.git(&["add", "secreto.txt"]);
+    t.git(&["stash", "push", "-q", "-m", "cambio aparcado"]);
+    let stash = t.git(&["rev-parse", "refs/stash"]).trim().to_owned();
+    assert!(!stash.is_empty(), "el stash existe");
+
+    // Un commit que solo cuelga de una ref interna del producto (`refs/ariadna/*`): tampoco es
+    // historia del proyecto.
+    t.git(&["checkout", "-q", "-b", "interna"]);
+    t.write("interna.txt", b"interna\n");
+    let interna = t.commit_all("solo en la ref interna");
+    t.git(&["checkout", "-q", "main"]);
+    t.git(&["branch", "-D", "interna"]);
+    t.git(&["update-ref", "refs/ariadna/estado", &interna]);
+
+    // Control: sin exclusiones, `git log --all` los ve a los dos (si no, el test sería vacío).
+    let todo_git = t.git(&["log", "--all", "--format=%H"]);
+    assert!(
+        todo_git.contains(&stash),
+        "el stash es alcanzable por --all sin exclusiones"
+    );
+    assert!(
+        todo_git.contains(&interna),
+        "el commit de refs/ariadna es alcanzable por --all sin exclusiones"
+    );
+
+    let engine = plain_engine();
+    let repo = engine.open_repository(t.path()).await.unwrap();
+    let grafo = engine.log_page_all(&repo, 0, 200).await.unwrap();
+    let shas: Vec<&str> = grafo.iter().map(|c| c.sha.as_str()).collect();
+    assert!(
+        !shas.contains(&stash.as_str()),
+        "el stash no puede aparecer en el grafo: {shas:?}"
+    );
+    assert!(
+        !shas.contains(&interna.as_str()),
+        "refs/ariadna/* tampoco entra en el grafo: {shas:?}"
+    );
+    // Lo que sí tiene que estar sigue estando.
+    assert!(shas.contains(&base.as_str()), "el commit de la rama sigue");
+}
+
 /// Caso medido en el repo real: ramas que **solo** existen en el remoto, nombres con varias barras y
 /// paginación. El grafo completo tiene que verlas y ninguna página puede perder commits.
 #[tokio::test]

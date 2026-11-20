@@ -665,11 +665,23 @@ impl GitCliEngine {
         args.push(OsString::from(capped.to_string()));
         args.push(OsString::from(format!("--skip={}", skip.min(10_000_000))));
         if all {
-            // Historia **completa**: todas las referencias del repo (ramas, remotas, etiquetas,
-            // refs/pull…) y el HEAD de cada worktree, incluidos los que están en «detached HEAD»,
-            // que no son ninguna referencia y por eso `--branches/--remotes/--tags` no alcanza.
-            for rev in self.graph_revs(repo).await? {
-                args.push(OsString::from(rev));
+            // Historia **completa**: `--all` cubre ramas, remotas, etiquetas y `refs/pull/*` sin
+            // enumerar cientos de referencias (en Windows una lista larga se pasa del límite de la
+            // línea de comandos). Los `HEAD` de los worktrees se añaden aparte: un worktree en
+            // «detached HEAD» no es referencia.
+            //
+            // OJO: en git `--exclude` **solo afecta a la siguiente** opción `--all`/`--branches`/
+            // `--glob`, así que las exclusiones van DELANTE de `--all`. Puestas detrás no hacen
+            // nada y el stash (y las notas) se colarían en el grafo.
+            args.extend(os(&[
+                "--exclude=refs/stash",
+                "--exclude=refs/notes/*",
+                "--exclude=refs/bisect/*",
+                "--exclude=refs/ariadna/*",
+                "--all",
+            ]));
+            for tip in self.graph_tips(repo).await? {
+                args.push(OsString::from(tip));
             }
             args.push(OsString::from("--topo-order"));
         }
@@ -678,36 +690,48 @@ impl GitCliEngine {
         Ok(parse_commit_log(&out.stdout))
     }
 
-    /// Revisiones que cubren la historia completa del repo: todas las referencias de `refs/`
-    /// (menos las que no son historia del proyecto: `stash`, `notes`, `bisect`) más el `HEAD` de
-    /// cada worktree. `HEAD` solo si existe: en un repo sin commits es un argumento inválido.
-    pub async fn graph_revs(&self, repo: &Repository) -> GitResult<Vec<String>> {
-        let out = self
-            .read(repo, &os(&["for-each-ref", "--format=%(refname)", "refs/"]))
-            .await?;
-        let mut revs: Vec<String> = out
-            .stdout_lossy()
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .filter(|l| {
-                !l.starts_with("refs/stash")
-                    && !l.starts_with("refs/notes/")
-                    && !l.starts_with("refs/bisect/")
-            })
-            .map(str::to_owned)
-            .collect();
-        // El HEAD de cada worktree: puede no estar en ninguna rama (detached) y sus commits, sin
-        // esto, no salen en el grafo de nadie.
-        for wt in self.worktrees(repo).await.unwrap_or_default() {
-            if !wt.head.is_empty() && !revs.iter().any(|r| r == &wt.head) {
-                revs.push(wt.head);
+    /// Revisiones que **no** alcanzan `--all`: el `HEAD` de cada worktree, que puede estar en
+    /// «detached HEAD» y no ser ninguna referencia. Es una lista corta (un SHA por worktree).
+    ///
+    /// Si `git worktree list` falla se deja rastro en el log en vez de devolver una lista vacía en
+    /// silencio (el grafo saldría sin esos commits y nadie se enteraría). Y antes de añadir un SHA
+    /// se comprueba que es un commit de verdad: un worktree *prunable* puede apuntar a un objeto ya
+    /// recolectado y `git log` fallaría con «bad revision».
+    pub async fn graph_tips(&self, repo: &Repository) -> GitResult<Vec<String>> {
+        let worktrees = match self.worktrees(repo).await {
+            Ok(list) => list,
+            Err(e) => {
+                eprintln!(
+                    "ariadna-git: no se pudieron leer los worktrees ({e:?}); el grafo sale sin sus HEAD"
+                );
+                Vec::new()
+            }
+        };
+        let mut tips: Vec<String> = Vec::new();
+        for wt in worktrees {
+            if wt.head.is_empty() || tips.contains(&wt.head) {
+                continue;
+            }
+            if self.is_commit(repo, &wt.head).await.unwrap_or(false) {
+                tips.push(wt.head);
+            } else {
+                eprintln!(
+                    "ariadna-git: el worktree {} apunta a {} y ese commit no existe; se ignora",
+                    wt.path, wt.head
+                );
             }
         }
-        if self.has_head(repo).await? && !revs.iter().any(|r| r == "HEAD") {
-            revs.push("HEAD".to_owned());
+        Ok(tips)
+    }
+
+    /// ¿`sha` es un commit que existe en el repo? (`git cat-file -e <sha>^{commit}`)
+    async fn is_commit(&self, repo: &Repository, sha: &str) -> GitResult<bool> {
+        if sha.is_empty() || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Ok(false);
         }
-        Ok(revs)
+        let mut args = os(&["cat-file", "-e"]);
+        args.push(std::ffi::OsString::from(format!("{sha}^{{commit}}")));
+        Ok(self.read(repo, &args).await?.success())
     }
 
     /// Busca (sin distinguir mayúsculas, texto literal) en mensaje, autor y prefijo de hash
