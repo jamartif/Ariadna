@@ -56,8 +56,15 @@
     // El tooltip lleva la **ruta completa** y el nombre real, aunque la pestaña enseñe el alias.
     return [repoAliases.label(e.info.path, e.info.name), e.info.path, details(e)]
       .filter(Boolean)
-      .join(', ')
-      .concat(onalias ? ` · ${t('tabs.aliasHintShort')}` : '');
+      .join(', ');
+  }
+
+  /**
+   * Pista de uso para `aria-description`: NO puede formar parte del nombre accesible, o el lector
+   * de pantalla repetiría «doble clic para poner alias» en cada pestaña al recorrerlas.
+   */
+  function hint(e: Entry): string | undefined {
+    return e.kind === 'repo' && onalias ? t('tabs.aliasHintShort') : undefined;
   }
 
   /** Nombre visible de la pestaña: alias si lo hay; si no, el nombre del repo. */
@@ -323,6 +330,7 @@
           data-tab-kind={entry.kind}
           aria-selected={isActive}
           aria-controls={isActive ? 'tabpanel-main' : undefined}
+          aria-describedby={hint(entry) ? `tab-hint-${entry.id}` : undefined}
           title={label(entry)}
           tabindex={tabStop === entry.id ? 0 : -1}
           class="tab-btn"
@@ -374,6 +382,11 @@
             <span class="sr-only">{details(entry)}</span>
           {/if}
         </button>
+        {#if hint(entry)}
+          <!-- Pista de uso **fuera** del nombre accesible: `aria-describedby` no lo incluye en el
+               nombre, así que el lector no lo repite como si fuera el título de la pestaña. -->
+          <span class="sr-only" id="tab-hint-{entry.id}">{hint(entry)}</span>
+        {/if}
         <!-- Un `tablist` solo admite hijos `tab`: el botón de cerrar queda fuera del árbol de
              accesibilidad (el teclado cierra con Supr o Mod+W sobre la pestaña enfocada). -->
         <button

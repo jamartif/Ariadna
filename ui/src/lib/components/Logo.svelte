@@ -1,5 +1,21 @@
+<script module lang="ts">
+  // Contador en el ámbito del **módulo**: dentro de la instancia siempre valdría 1 y seguiría
+  // habiendo ids repetidos con varios logos en la misma página.
+  let nextBgId = 0;
+
+  /** Id único del degradado de fondo para cada instancia de `Logo`. */
+  export function logoBgId(): string {
+    nextBgId += 1;
+    return `ariadna-bg-${nextBgId}`;
+  }
+</script>
+
 <script lang="ts">
   let { size = 24 }: { size?: number } = $props();
+
+  // Único por instancia: con varios logos en la misma página `url(#ariadna-bg)` apuntaría al
+  // degradado de otro componente.
+  const bgId = logoBgId();
 </script>
 
 <!--
@@ -9,12 +25,12 @@
 -->
 <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true" focusable="false">
   <defs>
-    <linearGradient id="ariadna-bg" x1="0" y1="0" x2="0" y2="32" gradientUnits="userSpaceOnUse">
+    <linearGradient id={bgId} x1="0" y1="0" x2="0" y2="32" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#0e1d2d" />
       <stop offset="1" stop-color="#07101a" />
     </linearGradient>
   </defs>
-  <rect x="0" y="0" width="32" height="32" rx="7" fill="url(#ariadna-bg)" />
+  <rect x="0" y="0" width="32" height="32" rx="7" fill="url(#{bgId})" />
   <!-- El hilo: por detrás de la corona y un tramo por delante, para que se vea que la atraviesa. -->
   <path d="M1.5 17.6c3.6 1.2 5.2 1.6 8.3 1.2" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" />
   <path d="M22.2 18.8c3.1-.4 4.7-.8 8.3-2" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" />

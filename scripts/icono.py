@@ -3,6 +3,12 @@
 Diseño: **corona de Ariadne** (Corona Borealis) en oro, una sola silueta con tres puntas y sus
 joyas, y el **hilo** cian que la atraviesa en diagonal. Se dibuja con PIL (sin rsvg/inkscape) y
 todo está pensado para leerse a 16 px: formas gruesas, dos colores y márgenes generosos.
+
+Requisitos: **Pillow** (`python3 -m pip install pillow`); es lo único que hace falta, y no hay
+dependencia de ImageMagick, rsvg ni de las herramientas de Tauri.
+
+Si el ICNS no se puede escribir, el script termina con código 1 para que nadie publique un
+`icon.icns` viejo creyendo que se regeneró.
 """
 import os
 from PIL import Image, ImageDraw
@@ -82,7 +88,8 @@ def draw_icon() -> Image.Image:
     return img
 
 
-def main() -> None:
+def main() -> int:
+    """Escribe todos los Tamaños; devuelve 0 solo si el ICNS también se escribió."""
     big = draw_icon()
     big.save(os.path.join(OUT, "source-1024.png"))
     big.save(os.path.join(OUT, "icon.png"))
@@ -92,18 +99,25 @@ def main() -> None:
         os.path.join(OUT, "icon.ico"),
         sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
     )
+    icns_ok = True
     try:
         big.save(
             os.path.join(OUT, "icon.icns"),
             sizes=[(16, 16), (32, 32), (64, 64), (128, 128), (256, 256), (512, 512), (1024, 1024)],
         )
     except Exception as exc:  # noqa: BLE001
-        print("ICNS no generado:", exc)
+        # No se deja un `icon.icns` viejo por ahí: o se regenera o el script falla.
+        print(f"ERROR: no se pudo escribir icon.icns ({exc}); el que hay en disco es el viejo")
+        icns_ok = False
     os.makedirs(UI, exist_ok=True)
     big.resize((512, 512), Image.LANCZOS).save(os.path.join(UI, "icon-512.png"))
     big.resize((64, 64), Image.LANCZOS).save(os.path.join(UI, "icon-64.png"))
+    if not icns_ok:
+        print("icono incompleto: falta el ICNS de macOS")
+        return 1
     print("icono generado")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -247,21 +247,46 @@ describe('tira de repos: separación y recorte de los nombres', () => {
  * estuviera escondido en el clic derecho, no se descubre.
  */
 describe('TabStrip · alias del repositorio', () => {
-  it('el doble clic pide el alias del repo de esa pestaña', async () => {
-    const onalias = vi.fn();
-    const props = {
-      entries: [repo('a'), repo('b')],
-      activeId: 'a',
-      onactivate: vi.fn(),
-      onclose: vi.fn(),
-      onnew: vi.fn(),
-      onreorder: vi.fn(),
-      onalias
-    };
-    render(TabStrip, { props });
-    const tab = screen.getByRole('tab', { name: /^a/ });
-    await userEvent.dblClick(tab);
+  const props = (
+    entries: Entry[],
+    onalias: ReturnType<typeof vi.fn<(id: string) => void>>,
+    activeId = 'a'
+  ) => ({
+    entries,
+    activeId,
+    onactivate: vi.fn(),
+    onclose: vi.fn(),
+    onnew: vi.fn(),
+    onreorder: vi.fn(),
+    onalias
+  });
+
+  it('el doble clic pide el alias del repo de **esa** pestaña', async () => {
+    const onalias = vi.fn<(id: string) => void>();
+    render(TabStrip, { props: props([repo('a'), repo('b')], onalias) });
+    // La segunda pestaña, no la primera: con `toMatch(/^[ab]$/)` daba lo mismo pedir el alias de
+    // la pestaña equivocada.
+    await userEvent.dblClick(screen.getByRole('tab', { name: /^b/ }));
     expect(onalias).toHaveBeenCalledTimes(1);
-    expect(onalias.mock.calls[0]?.[0]).toMatch(/^[ab]$/);
+    expect(onalias).toHaveBeenCalledWith('b');
+  });
+
+  it('la pista del alias no contamina el nombre accesible', async () => {
+    const onalias = vi.fn<(id: string) => void>();
+    render(TabStrip, { props: props([repo('a')], onalias) });
+    const tab = screen.getByRole('tab', { name: /^a/ });
+    // El lector de pantalla no debe repetir «doble clic para poner alias» en cada pestaña: la pista
+    // se enlaza con `aria-describedby`, que queda **fuera** del nombre accesible.
+    const descrito = tab.getAttribute('aria-describedby');
+    expect(descrito).toBeTruthy();
+    expect(document.getElementById(descrito ?? '')?.textContent ?? '').toMatch(/alias/i);
+    expect(tab.textContent ?? '').not.toMatch(/alias/i);
+  });
+
+  it('el doble clic en la pestaña «nueva» no pide alias', async () => {
+    const onalias = vi.fn<(id: string) => void>();
+    render(TabStrip, { props: props([repo('a'), { id: 'new:1', kind: 'new' }], onalias, 'new:1') });
+    await userEvent.dblClick(screen.getByRole('tab', { name: /nueva|new/i }));
+    expect(onalias).not.toHaveBeenCalled();
   });
 });
