@@ -5,6 +5,40 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
+## [0.1.0-alpha.14] - 2026-11-20
+
+**Respecto a `v0.1.0-alpha.13`:** identidad propia (icono nuevo), la **pestaña del repositorio** se
+puede abreviar con alias de un doble clic, y el **historial completo** deja de colar cosas que no son
+del proyecto y de perderse worktrees en silencio. Además, las refs de pull request se muestran con el
+nombre completo que usa cada proveedor.
+
+### Añadido
+- **Icono nuevo**: corona de Ariadne con el hilo cian que la atraviesa, en todos los tamaños (PNG,
+  ICO multi-tamaño e ICNS) y en la barra superior. `scripts/icono.py` lo regenera entero (solo
+  necesita Pillow) y falla con código 1 si no puede escribir el ICNS, para no publicar uno viejo.
+- **Alias del repositorio**: **doble clic en la pestaña** abre el diálogo, además del menú contextual
+  y de Ajustes; el tooltip muestra la ruta completa. La pista de uso va en `aria-describedby`, fuera
+  del nombre accesible, para que el lector de pantalla no la repita.
+- **Riel › Refs de PR**: nombre completo por proveedor (`refs/pull/7/head` en GitHub,
+  `refs/merge-requests/7/head` en GitLab), ordenadas por número de PR, con un solo filtro compartido
+  con el grupo de worktrees.
+
+### Corregido
+- **Historial completo**: `--exclude` de git solo afecta a la opción `--all`/`--branches`/`--glob`
+  **siguiente**. Iban detrás de `--all`, así que no hacían nada: el `stash`, las notas y las entradas
+  de `bisect` se colaban en el grafo. Ahora van delante y se excluye también `refs/ariadna/*`.
+- **Worktrees**: si `git worktree list` falla se deja rastro en el log en vez de devolver una lista
+  vacía en silencio, y cada `HEAD` se valida con `git cat-file -e <sha>^{commit}` antes de pasarlo a
+  `git log` (un worktree *prunable* podía apuntar a un objeto recolectado y romper con «bad revision»).
+- **Grafo sin límite de referencias**: `--all` en vez de enumerar cada ref en la línea de comandos,
+  que en repos con cientos de ramas se pasa del límite de Windows y dejaba el grafo incompleto.
+- **Logo**: el `id` del degradado es único por instancia; con varios logos `url(#…)` podía resolver
+  al de otro componente.
+
+### Por dentro
+- `pull_refs` y `worktrees` se leen **en paralelo**, y siguen fuera del snapshot (`extra_refs`), así
+  que no añaden lecturas al refresco de la sesión.
+
 ## [0.1.0-alpha.13] - 2026-11-20
 
 **Respecto a `v0.1.0-alpha.12`:** el **riel izquierdo** gana dos grupos más de referencias, para que
