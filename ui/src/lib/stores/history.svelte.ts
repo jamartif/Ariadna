@@ -64,6 +64,9 @@ export class HistoryController {
   async reload(): Promise<void> {
     const mine = ++this.gen;
     this.loading = true;
+    // Una página siguiente en vuelo queda descartada (`gen`) y su `finally` ya no la libera: sin
+    // esto `loadingMore` se quedaba en `true` y el historial dejaba de paginar (commits que faltan).
+    this.loadingMore = false;
     this.error = null;
     this.graph = emptyGraphState();
     try {

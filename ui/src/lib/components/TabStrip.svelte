@@ -347,12 +347,6 @@
             e.preventDefault();
             menuFor = entry.id;
           }}
-          ondblclick={(e) => {
-            // Doble clic en la pestaña = poner alias (el menú contextual sigue estando).
-            if (entry.kind !== 'repo' || !onalias) return;
-            e.preventDefault();
-            onalias(entry.id);
-          }}
         >
           {#if entry.kind === 'new'}
             <span class="glyph new"><Icon name="plus" size={13} /></span>
@@ -369,9 +363,6 @@
               {/if}
             </span>
             <span class="name">{shownName(entry)}</span>
-            {#if i.branch && !i.missing}
-              <span class="branch mono">{i.branch}</span>
-            {/if}
             {#if i.conflictCount > 0}
               <span class="pill conflict" title={tn('tabs.a11y.conflicts', i.conflictCount)}>
                 <Icon name="triangle-alert" size={10} />{i.conflictCount}
@@ -630,17 +621,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .branch {
-    flex: 0 20 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--text-subtle);
-    font-size: var(--text-2xs);
-    font-weight: 400;
-    opacity: 0.85;
   }
   .pill {
     display: inline-flex;

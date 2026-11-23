@@ -486,7 +486,7 @@
               <div role="gridcell" class="cell name" title={pathText(e.path)}>
                 <span class="base">{pathBase(e.path)}</span>
                 {#if !tree || e.originalPath}
-                  <span class="dir mono">
+                  <span class="path mono">
                     {#if e.originalPath}{pathText(e.originalPath)} → {/if}{!tree ? pathDir(e.path) || t('changes.root') : ''}
                   </span>
                 {/if}
@@ -816,7 +816,7 @@
     font-size: var(--text-sm);
     font-weight: 560;
   }
-  .dir {
+  .path {
     flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
@@ -825,7 +825,7 @@
     color: var(--text-subtle);
     font-size: var(--text-2xs);
   }
-  :global([data-density='compact']) .dir {
+  :global([data-density='compact']) .path {
     display: none;
   }
   .cell.extra {
