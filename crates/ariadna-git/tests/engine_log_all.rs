@@ -386,3 +386,48 @@ async fn el_panel_lista_exactamente_las_mismas_referencias_que_git() {
     assert!(!head_shas.contains(&pull.as_str()));
     assert!(!head_shas.contains(&wt_head.as_str()));
 }
+
+/// `log_page_ref`: el historial de una rama (local o remota) sin hacer checkout, y un error claro
+/// con una referencia que no existe (la interfaz no se puede quedar cargando).
+#[tokio::test]
+async fn el_historial_por_referencia_no_toca_head_y_falla_claro_con_una_inexistente() {
+    let t = TestRepo::with_initial_commit();
+    let base = t.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    t.git(&["checkout", "-q", "-b", "otra"]);
+    t.write("otra.txt", b"otra\n");
+    t.git(&["add", "-A"]);
+    t.git(&["commit", "-q", "-m", "commit en otra"]);
+    let punta = t.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    // Una «remota» simulada: refs/remotes/origin/otra apunta a la misma punta.
+    t.git(&["update-ref", "refs/remotes/origin/otra", &punta]);
+    t.git(&["checkout", "-q", "-"]);
+
+    let engine = plain_engine();
+    let repo = engine.open_repository(t.path()).await.unwrap();
+    let head = engine.log_page(&repo, 0, 10).await.unwrap();
+    assert!(
+        head.iter().all(|c| c.sha != punta),
+        "HEAD no ve el commit de la otra rama"
+    );
+
+    let local = engine.log_page_ref(&repo, "otra", 0, 10).await.unwrap();
+    assert_eq!(local.first().map(|c| c.sha.as_str()), Some(punta.as_str()));
+    assert!(local.iter().any(|c| c.sha == base));
+    let remota = engine
+        .log_page_ref(&repo, "origin/otra", 0, 10)
+        .await
+        .unwrap();
+    assert_eq!(remota.first().map(|c| c.sha.as_str()), Some(punta.as_str()));
+    // Paginar con `skip` salta commits.
+    let tras = engine.log_page_ref(&repo, "otra", 1, 10).await.unwrap();
+    assert_eq!(tras.first().map(|c| c.sha.as_str()), Some(base.as_str()));
+
+    assert!(engine
+        .log_page_ref(&repo, "no-existe", 0, 10)
+        .await
+        .is_err());
+    assert!(engine
+        .log_page_ref(&repo, "--output=/tmp/x", 0, 10)
+        .await
+        .is_err());
+}

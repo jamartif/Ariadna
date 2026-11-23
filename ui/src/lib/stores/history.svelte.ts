@@ -37,6 +37,7 @@ export class HistoryController {
   /** Frontera del historial cargado: el cursor de `logPage` (ver `util/cursor.ts`). */
   private frontier = new Frontier();
   private gen = 0;
+  private focusSeq = 0;
   private detailGen = 0;
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private loadedRevision = -1;
@@ -163,6 +164,8 @@ export class HistoryController {
   async focusBranch(name: string | null, tipSha?: string): Promise<void> {
     const changed = name !== this.ref;
     this.ref = name;
+    // Dos ramas pinchadas seguidas: solo la última puede elegir la selección.
+    const mine = ++this.focusSeq;
     if (this.scope === 'current') {
       if (!changed) return;
       this.selected = null;
@@ -173,9 +176,12 @@ export class HistoryController {
     if (!changed || !name || !tipSha) return;
     // Grafo completo: el commit puede no estar en las páginas cargadas; se pagina hasta dar con él.
     for (let i = 0; i < 40 && !this.commits.some((c) => c.sha === tipSha) && this.hasMore; i++) {
-      if (this.loading) return;
+      // Si hay una carga en curso se espera a que acabe en vez de abandonar sin seleccionar nada.
+      while (this.loading || this.loadingMore) await new Promise((r) => setTimeout(r, 30));
+      if (mine !== this.focusSeq) return;
       await this.loadMore();
     }
+    if (mine !== this.focusSeq) return;
     const tip = this.commits.find((c) => c.sha === tipSha);
     if (!tip) return;
     await this.select(tip);

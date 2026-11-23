@@ -187,4 +187,15 @@ describe('ChangesPanel con mockApi', () => {
       expect(rowOf('docs')?.querySelector('.dir-cell')?.getAttribute('aria-expanded')).toBe('true')
     );
   });
+
+  it('un archivo sin seguimiento se prepara y se quita desde su casilla (sección «Sin preparar»)', async () => {
+    const { tab } = await loadedTab();
+    render(ChangesPanel, { props: { tab } });
+    expect(tab.sections.unstaged.some((e) => e.path === 'notas.txt')).toBe(true);
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Preparar notas.txt' }));
+    await waitFor(() => expect(tab.sections.staged.some((e) => e.path === 'notas.txt')).toBe(true));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Quitar de preparados notas.txt' }));
+    await waitFor(() => expect(tab.sections.unstaged.some((e) => e.path === 'notas.txt')).toBe(true));
+    expect(tab.sections.staged.some((e) => e.path === 'notas.txt')).toBe(false);
+  });
 });

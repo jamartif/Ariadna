@@ -196,6 +196,8 @@ export const es = {
   'changes.stageDir': 'Preparar la carpeta {name}',
   'changes.unstageDir': 'Quitar de preparados la carpeta {name}',
   'changes.stageOne': 'Preparar',
+  'changes.nestedRepo': 'repo anidado',
+  'changes.nestedRepoHint': 'Repositorio git dentro del repositorio: «Preparar todo» no lo incluye porque se añadiría como gitlink sin .gitmodules. Prepáralo con su casilla solo si es lo que quieres.',
   'changes.unstageOne': 'Quitar de preparados',
 
   // Operaciones

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FileDiff, StatusEntry } from '$lib/api/types';
 import { fuzzyFilter, fuzzyMatch } from './fuzzy';
-import { groupEntries, displayStatus } from './changes';
+import { groupEntries, displayStatus, isNestedRepo, bulkStageable } from './changes';
 import { GIANT_LINES, countLines, diffStats, flattenDiff, isGiant, truncateLine, LONG_LINE } from './diff';
 import { pathBase, pathDir, pathEq, pathKey, pathText } from './gitpath';
 import { buildOffsets, indexAt, moveItem, visibleRange } from './virtual';
@@ -140,5 +140,17 @@ describe('tiempo relativo', () => {
     expect(relativeTime('2026-08-01T09:00:00Z', now)).toBe('hace 3 meses');
     expect(relativeTime('2024-11-01T09:00:00Z', now)).toBe('hace 2 años');
     expect(relativeTime('basura', now)).toBe('');
+  });
+});
+
+describe('repos anidados', () => {
+  it('un directorio sin seguimiento (barra final) es un repo anidado y «Preparar todo» lo deja fuera', () => {
+    const nested = entry({ path: 'vendor/lib/', isUntracked: true, workTreeStatus: '?' });
+    const file = entry({ path: 'a.txt', isUntracked: true, workTreeStatus: '?' });
+    const tracked = entry({ path: 'dir/', workTreeStatus: 'M' });
+    expect(isNestedRepo(nested)).toBe(true);
+    expect(isNestedRepo(file)).toBe(false);
+    expect(isNestedRepo(tracked)).toBe(false);
+    expect(bulkStageable([nested, file, tracked]).map((e) => e.path)).toEqual(['a.txt', 'dir/']);
   });
 });
