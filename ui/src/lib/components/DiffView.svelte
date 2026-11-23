@@ -396,10 +396,12 @@
           </div>
         {/if}
         {#if split}
+          <!-- Sin `horizontal`: con el ancho `max-content` las dos columnas `1fr` medían lo que la línea
+               más larga, y en un archivo nuevo la izquierda (vacía) empujaba la derecha fuera de la vista.
+               Cada mitad ocupa la mitad del panel y recorta con «…» (el texto completo va en el tooltip). -->
           <VirtualList
             items={splitRows}
             heightOf={heightOfSplit}
-            horizontal
             role="region"
             label={t('diff.codeLabel', { path: pathText(file.path) })}
             tabindex={0}

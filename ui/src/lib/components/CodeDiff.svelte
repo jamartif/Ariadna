@@ -163,7 +163,7 @@
       {#if shownHunk?.heading}<span class="hunk-heading">{shownHunk.heading}</span>{/if}
     </div>
     {#if split}
-      <VirtualList bind:this={splitList} items={splitRows} heightOf={heightOfSplit} horizontal={!wrap} role="region" label={t('diff.codeLabel', { path: pathText(file.path) })} tabindex={0} overscan={12} onscroll={(top) => (scrollTop = top)}>
+      <VirtualList bind:this={splitList} items={splitRows} heightOf={heightOfSplit} role="region" label={t('diff.codeLabel', { path: pathText(file.path) })} tabindex={0} overscan={12} onscroll={(top) => (scrollTop = top)}>
         {#snippet row(r)}
           {#if r.type === 'hunk'}
             <div class="hunk-row" style:height="{hunkH}px">
