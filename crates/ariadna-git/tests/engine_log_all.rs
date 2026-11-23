@@ -101,7 +101,7 @@ async fn el_historial_completo_incluye_otras_ramas_y_etiquetas() {
     assert!(only_head.iter().all(|c| c.sha != lateral_commit));
 
     // Comprobación directa de los argumentos que usa el motor para el grafo completo.
-    let out = t.git(&["log", "--all", "--topo-order", "--format=%H"]);
+    let out = t.git(&["log", "--all", "--date-order", "--format=%H"]);
     assert!(out.contains(&lateral_commit));
     let _ = os(&["log"]);
 }

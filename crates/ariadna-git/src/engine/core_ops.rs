@@ -683,7 +683,10 @@ impl GitCliEngine {
             for tip in self.graph_tips(repo).await? {
                 args.push(OsString::from(tip));
             }
-            args.push(OsString::from("--topo-order"));
+            // `--date-order` (no `--topo-order`): por fecha como GitKraken, y siempre hijos antes que
+            // padres. `--topo-order` agrupa cada rama entera y las 100 primeras filas dejaban fuera
+            // commits recientes de otras ramas (parecían «faltar»).
+            args.push(OsString::from("--date-order"));
         }
         args.extend(os(&["--no-color", "--no-show-signature", LOG_FORMAT]));
         let out = self.read(repo, &args).await?;
@@ -788,7 +791,7 @@ impl GitCliEngine {
                     "--remotes",
                     "--tags",
                     "HEAD",
-                    "--topo-order",
+                    "--date-order",
                 ]));
             }
             a.extend(os(&[
