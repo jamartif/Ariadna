@@ -5,6 +5,22 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
+## [0.1.0-alpha.16] - 2026-11-23
+
+**Respecto a `v0.1.0-alpha.15`:** los divisores del riel de ramas y del panel de detalle ahora sí se
+pueden arrastrar, las pestañas se ajustan al nombre y el menú de alias se ve.
+
+### Cambiado
+- **Pestañas de repositorio**: se quita el tirador para cambiar su ancho; cada pestaña se ajusta al
+  nombre del repo o a su alias (mínimo 96 px, máximo 260 px).
+
+### Corregido
+- **Divisores del riel y del detalle**: el contenedor del divisor era un bloque y medía 0 px de alto,
+  así que no se podía agarrar; ahora ocupa toda la altura.
+- **Alias**: el menú contextual de la pestaña (clic derecho) quedaba recortado por la propia
+  pestaña (`overflow: hidden`) y no se veía. Ahora aparece junto al cursor y se cierra con un clic
+  fuera o con Escape.
+
 ## [0.1.0-alpha.15] - 2026-11-23
 
 **Respecto a `v0.1.0-alpha.14`:** logo nuevo, historial completo ordenado por fecha como GitKraken,
