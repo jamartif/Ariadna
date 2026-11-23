@@ -461,6 +461,9 @@
   .splitslot {
     flex: none;
     width: 0;
+    /* Flex para que el divisor se estire a toda la altura: sin esto medía 0 px de alto y no se
+       podía agarrar. */
+    display: flex;
     overflow: visible;
     z-index: 4;
   }
