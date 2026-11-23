@@ -85,12 +85,12 @@ describe('changes', () => {
       entry({ path: 'conf', isConflicted: true, indexStatus: 'U', workTreeStatus: 'U' })
     ]);
     expect(g.staged.map((e) => e.path)).toEqual(['both', 'staged']);
-    expect(g.unstaged.map((e) => e.path)).toEqual(['both', 'wt']);
-    expect(g.untracked.map((e) => e.path)).toEqual(['new']);
+    // Los archivos sin seguimiento van en «Sin preparar», tras los modificados.
+    expect(g.unstaged.map((e) => e.path)).toEqual(['both', 'wt', 'new']);
     expect(g.ignored.map((e) => e.path)).toEqual(['ign']);
     expect(g.conflicts.map((e) => e.path)).toEqual(['conf']);
     expect(displayStatus(entry({ indexStatus: 'R' }), 'staged')).toBe('R');
-    expect(displayStatus(entry({}), 'untracked')).toBe('?');
+    expect(displayStatus(entry({ isUntracked: true, workTreeStatus: '?' }), 'unstaged')).toBe('?');
   });
 });
 

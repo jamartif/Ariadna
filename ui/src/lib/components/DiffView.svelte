@@ -109,7 +109,7 @@
       !file.isBinary &&
       !split &&
       sel !== null &&
-      (sel.section === 'staged' || sel.section === 'unstaged' || sel.section === 'untracked')
+      (sel.section === 'staged' || sel.section === 'unstaged')
   );
   let linePick = $state.raw<{ hunk: number; lines: number[] } | null>(null);
   let anchor = $state.raw<{ hunk: number; line: number } | null>(null);
@@ -271,7 +271,7 @@
   {#if h.heading}<span class="hunk-heading mono">{h.heading}</span>{/if}
   <span class="spacer"></span>
   <span class="bar-actions">
-  {#if sel && (sel.section === 'staged' || sel.section === 'unstaged' || sel.section === 'untracked')}
+  {#if sel && (sel.section === 'staged' || sel.section === 'unstaged')}
     <button
       type="button"
       class="btn btn-sm hunk-btn"

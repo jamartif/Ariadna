@@ -162,7 +162,6 @@ export const en: Record<MessageKey, string> = {
   'changes.gridLabel': 'Changed files. Arrow keys to move, Space to stage or unstage, Enter to see the diff.',
   'changes.staged': 'Staged',
   'changes.unstaged': 'Unstaged',
-  'changes.untracked': 'Untracked',
   'changes.ignored': 'Ignored',
   'changes.conflicts': 'Conflicts',
   'changes.filter': 'Filter files…',

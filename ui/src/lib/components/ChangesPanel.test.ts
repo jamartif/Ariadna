@@ -12,13 +12,13 @@ afterEach(resetGlobals);
 const sectionHeaders = () => screen.getAllByRole('row').filter((r) => r.classList.contains('header')).map((r) => r.textContent?.replace(/\s+/g, ' ').trim());
 
 describe('ChangesPanel con mockApi', () => {
-  it('agrupa en Preparados / Sin preparar / Sin seguimiento / Conflictos y oculta ignorados', async () => {
+  it('agrupa en Preparados / Sin preparar (con los nuevos) / Conflictos y oculta ignorados', async () => {
     const { tab } = await loadedTab();
     render(ChangesPanel, { props: { tab } });
     const headers = sectionHeaders();
     expect(headers.some((h) => h?.startsWith('Preparados'))).toBe(true);
     expect(headers.some((h) => h?.startsWith('Sin preparar'))).toBe(true);
-    expect(headers.some((h) => h?.startsWith('Sin seguimiento'))).toBe(true);
+    expect(headers.some((h) => h?.startsWith('Sin seguimiento'))).toBe(false);
     expect(headers.some((h) => h?.startsWith('Ignorados'))).toBe(false);
     expect(screen.queryByText('.env.local')).not.toBeInTheDocument();
   });
@@ -78,7 +78,7 @@ describe('ChangesPanel con mockApi', () => {
     expect(toast.kind).toBe('error');
     expect(toast.title).toBe('No se pudo preparar');
     expect(toast.detail).toContain('index.lock');
-    expect(tab.sections.untracked.some((e) => e.path === 'docs/error-demo.md')).toBe(true);
+    expect(tab.sections.unstaged.some((e) => e.path === 'docs/error-demo.md')).toBe(true);
   });
 
   it('descartar llama al comando (la confirmación es nativa) y respeta la cancelación', async () => {

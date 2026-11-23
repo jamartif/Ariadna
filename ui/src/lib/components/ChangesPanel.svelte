@@ -55,17 +55,16 @@
   const rowId = (i: number) => `${gridId}-r${i}`;
   const keyOf = (section: SectionId, e: StatusEntry) => `${section}:${pathKey(e.path)}`;
 
-  const SECTION_LABEL: Record<SectionId, 'changes.staged' | 'changes.unstaged' | 'changes.untracked' | 'changes.ignored' | 'changes.conflicts'> = {
+  const SECTION_LABEL: Record<SectionId, 'changes.staged' | 'changes.unstaged' | 'changes.ignored' | 'changes.conflicts'> = {
     staged: 'changes.staged',
     unstaged: 'changes.unstaged',
-    untracked: 'changes.untracked',
     ignored: 'changes.ignored',
     conflicts: 'changes.conflicts'
   };
 
   function toggleEntry(section: SectionId, entry: StatusEntry) {
     if (section === 'staged') void tab.unstage([entry]);
-    else if (section === 'unstaged' || section === 'untracked') void tab.stage(section, [entry]);
+    else if (section === 'unstaged') void tab.stage(section, [entry]);
   }
 
   function sectionEntries(section: SectionId): StatusEntry[] {
@@ -81,7 +80,7 @@
     for (const it of items) if (it.type === 'file' && multi.has(keyOf(it.section, it.entry))) out.push({ section: it.section, entry: it.entry });
     return out;
   });
-  const pickedStageable = $derived(picked.filter((p) => p.section === 'unstaged' || p.section === 'untracked'));
+  const pickedStageable = $derived(picked.filter((p) => p.section === 'unstaged'));
   const pickedStaged = $derived(picked.filter((p) => p.section === 'staged'));
 
   function activate(i: number) {
@@ -393,7 +392,7 @@
                   <button type="button" class="btn btn-ghost btn-sm head-act" tabindex="-1" onclick={() => tab.unstage(sectionEntries('staged'))}>
                     {t('changes.unstageAll')}
                   </button>
-                {:else if it.section === 'unstaged' || it.section === 'untracked'}
+                {:else if it.section === 'unstaged'}
                   <button type="button" class="btn btn-ghost btn-sm head-act" tabindex="-1" onclick={() => tab.stage(it.section, sectionEntries(it.section))}>
                     {t('changes.stageAll')}
                   </button>
@@ -443,7 +442,7 @@
             {@const key = keyOf(it.section, e)}
             {@const busy = tab.pending.has(key)}
             {@const isStagedSection = it.section === 'staged'}
-            {@const canToggle = it.section === 'staged' || it.section === 'unstaged' || it.section === 'untracked'}
+            {@const canToggle = it.section === 'staged' || it.section === 'unstaged'}
             {@const picked1 = tab.isSelected(it.section, e) || multi.has(key)}
             <div
               class="row file"
@@ -495,7 +494,7 @@
                 {#if e.conflictKind}
                   <span class="chip conflict">{t(`conflict.${e.conflictKind}`)}</span>
                 {/if}
-                {#if it.section === 'unstaged' || it.section === 'untracked'}
+                {#if it.section === 'unstaged'}
                   <button
                     type="button"
                     class="btn btn-ghost btn-icon btn-sm hover-act"
@@ -705,9 +704,6 @@
   }
   [data-section='unstaged'] .bullet {
     background: var(--st-modified-fg);
-  }
-  [data-section='untracked'] .bullet {
-    background: var(--st-untracked-fg);
   }
   [data-section='conflicts'] .bullet {
     background: var(--st-unmerged-fg);
