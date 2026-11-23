@@ -302,7 +302,7 @@ async fn fixtures_del_contrato_coinciden_con_el_motor() {
     commit_on(&env, &repo, "main: cambia b", 4);
 
     // La pestaña ya estaba abierta; el merge lo hace el comando real.
-    env.core.refresh(&id).await.unwrap();
+    env.core.refresh(&id, None).await.unwrap();
     let r = env
         .core
         .merge(&id, "feature".into(), MergeFastForward::Allow)
@@ -318,7 +318,7 @@ async fn fixtures_del_contrato_coinciden_con_el_motor() {
     env.git(&repo, &["add", "docs/guia.md"]);
     env.write(&repo, "docs/guia.md", b"# Guia\n\npaso 1\npaso 2\n");
     env.write(&repo, "notas.md", b"sin seguimiento\n");
-    env.core.refresh(&id).await.unwrap();
+    env.core.refresh(&id, None).await.unwrap();
 
     let snapshot = env.core.get_snapshot(&id).await.unwrap();
     let st = &snapshot.0.status;

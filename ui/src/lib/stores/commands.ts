@@ -128,7 +128,7 @@ export function buildActions(app: AppStore): PaletteAction[] {
       id: 'changes.toggleIgnored',
       label: tab.showIgnored ? t('palette.hideIgnored') : t('palette.showIgnored'),
       group: g2,
-      run: () => (tab.showIgnored = !tab.showIgnored)
+      run: () => void tab.setShowIgnored(!tab.showIgnored)
     });
     if (tab.stagedCount > 0) {
       add({ id: 'info.staged', label: tn('commit.staged', tab.stagedCount), group: g2, run: () => (tab.panel = 'changes') });

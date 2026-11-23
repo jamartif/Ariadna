@@ -55,7 +55,7 @@ export function createTauriApi(): Api {
     oauthDeviceCancel: (flowId) => call('oauth_device_cancel', { flowId }),
 
     getSnapshot: (tabId) => call('get_snapshot', { tabId }),
-    refresh: (tabId) => call('refresh', { tabId }),
+    refresh: (tabId, includeIgnored) => call('refresh', { tabId, includeIgnored: includeIgnored ?? null }),
     stage: (tabId, paths) => call('stage', { tabId, paths }),
     unstage: (tabId, paths) => call('unstage', { tabId, paths }),
     stageHunk: (tabId, path, hunk) => call('stage_hunk', { tabId, path, hunk }),

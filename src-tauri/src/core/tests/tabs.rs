@@ -322,7 +322,7 @@ async fn los_eventos_llegan_con_snapshot_tab_updated_y_session_event() {
     let repo = env.repo("eventos");
     let id = env.open(&repo).await;
     env.write(&repo, "a.txt", b"uno\n");
-    env.core.refresh(&id).await.unwrap();
+    env.core.refresh(&id, None).await.unwrap();
     let before = env.core.get_snapshot(&id).await.unwrap().0.revision;
 
     env.core.stage(&id, vec!["a.txt".into()]).await.unwrap();
@@ -392,7 +392,7 @@ async fn cancelar_una_operacion_por_su_id() {
     assert!(env.core.cancel_operation(&id, op.unwrap()).unwrap());
     assert_eq!(task.await.unwrap().unwrap_err().code, "CANCELLED");
     // La pestaña sigue viva y utilizable.
-    assert!(env.core.refresh(&id).await.is_ok());
+    assert!(env.core.refresh(&id, None).await.is_ok());
 }
 
 #[tokio::test]

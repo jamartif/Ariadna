@@ -522,7 +522,7 @@ async fn merge_limpio_funciona_y_con_conflictos_aborta_con_error_tipado() {
     assert_eq!(e.code, "MERGE_CONFLICTS", "{e:?}");
     assert!(e.message.contains("choca") && e.detail.as_deref().unwrap_or("").contains("c.txt"));
     // Aborto limpio: sin merge en curso, mismo HEAD y archivo intacto.
-    let snap = env.core.refresh(&id).await.unwrap().unwrap();
+    let snap = env.core.refresh(&id, None).await.unwrap().unwrap();
     assert_eq!(snap.0.integration, IntegrationState::None);
     assert_eq!(env.git(&repo, &["rev-parse", "HEAD"]), head_before);
     assert_eq!(

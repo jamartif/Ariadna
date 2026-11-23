@@ -506,7 +506,7 @@ async fn formas_json_del_contrato_con_la_ui() {
         &repo,
         &["remote", "add", "origin", "https://github.com/a/b.git"],
     );
-    env.core.refresh(&tab).await.unwrap();
+    env.core.refresh(&tab, None).await.unwrap();
     let st = serde_json::to_value(env.core.ai_state(&tab).await.unwrap()).unwrap();
     assert_eq!(claves(&st["profile"]), ["isolated", "kind", "name", "rule"]);
 

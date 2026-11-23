@@ -87,6 +87,21 @@ fn validated_nul_list(paths: &[GitPath]) -> GitResult<Vec<u8>> {
     Ok(out)
 }
 
+/// `git status -uall` lista un repositorio anidado sin seguimiento como un directorio (`nested/`,
+/// con barra final). Esa barra haría fallar la validación («componente vacío») y, con ella, **todo**
+/// el lote de «Preparar todo»; se quita aquí, y `git add nested` lo trata igual que `git add -A`.
+fn without_dir_slash(paths: &[GitPath]) -> Vec<GitPath> {
+    paths
+        .iter()
+        .map(|p| match p.as_bytes() {
+            [rest @ .., b'/'] if !rest.is_empty() && rest.last() != Some(&b'/') => {
+                GitPath::from(rest)
+            }
+            _ => p.clone(),
+        })
+        .collect()
+}
+
 fn validated_pathspec_args(paths: &[GitPath]) -> GitResult<Vec<OsString>> {
     validate_all(paths)?;
     git_pathspec_args(paths.iter().map(GitPath::as_bytes)).map_err(|e| unsafe_path(b"", e))
@@ -259,6 +274,7 @@ impl GitCliEngine {
         if paths.is_empty() {
             return Ok(());
         }
+        let paths = &without_dir_slash(paths);
         if paths.len() > BULK_PATHS {
             // Lineal; trata las rutas como archivos literales (ni globs ni carpetas) y
             // registra los borrados igual que `git add`.
@@ -277,6 +293,7 @@ impl GitCliEngine {
         if paths.is_empty() {
             return Ok(());
         }
+        let paths = &without_dir_slash(paths);
         if paths.len() > BULK_PATHS && self.has_head(repo).await? {
             return self.unstage_bulk(repo, paths).await;
         }

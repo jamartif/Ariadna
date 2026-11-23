@@ -109,8 +109,15 @@ impl AppCore {
         Ok(ApiSnapshot(Self::fresh_snapshot(&s).await))
     }
 
-    pub async fn refresh(&self, tab_id: &str) -> ApiResult<Option<ApiSnapshot>> {
+    pub async fn refresh(
+        &self,
+        tab_id: &str,
+        include_ignored: Option<bool>,
+    ) -> ApiResult<Option<ApiSnapshot>> {
         let (s, _) = self.live(tab_id)?;
+        if let Some(on) = include_ignored {
+            s.set_include_ignored(on);
+        }
         match s.refresh().await? {
             RefreshOutcome::Published(snap) => Ok(Some(ApiSnapshot(snap))),
             RefreshOutcome::Skipped => Ok(None),

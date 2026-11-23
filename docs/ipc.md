@@ -67,7 +67,7 @@ La sesión (pestañas abiertas y orden) se guarda en `session.json` (versionado,
 | Comando | Argumentos | Devuelve |
 |---|---|---|
 | `get_snapshot` | — | `Snapshot` (`revision`, `status`, `branches`, `remoteBranches`, `remotes`, `integration`, `conflicts`) |
-| `refresh` | — | `Snapshot` o `null` si se omitió |
+| `refresh` | `includeIgnored?: boolean` (activa o desactiva que los snapshots traigan los ignorados; omitido = sin cambios) | `Snapshot` o `null` si se omitió |
 | `stage` / `unstage` | `paths: GitPath[]` | `void` |
 | `stage_hunk` / `unstage_hunk` | `path: GitPath, hunk: DiffHunk` | `void` |
 | `stage_lines` / `unstage_lines` | `path: GitPath, hunk: DiffHunk, lines: number[]` | `void` (ver «Líneas sueltas y stash»; `lines` son índices en `hunk.lines`) |
