@@ -255,7 +255,7 @@ export const enScreens: Record<keyof typeof esScreens, string> = {
   'rail.syncActions': 'Fetch, pull and push the current branch',
   'rail.detailTitle': 'Branch details',
   'rail.back': 'Back to details',
-  'rail.resize': 'Resize the branch rail',
+  'rail.resize': 'Resize the branch rail (double-click to reset)',
   'rail.clearSelection': 'Clear the selection',
 
   // Branch rail context menu (right click or Menu/Shift+F10)
