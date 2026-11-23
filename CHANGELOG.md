@@ -5,6 +5,27 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
+## [0.1.0-alpha.17] - 2026-11-23
+
+**Respecto a `v0.1.0-alpha.16`:** «Preparar todo» deja de fallar con repositorios anidados, el
+interruptor «Ignorados» muestra de verdad los archivos ignorados, los archivos nuevos van en «Sin
+preparar» y la vista de dos columnas ya no esconde la mitad derecha.
+
+### Cambiado
+- **Cambios**: los archivos **sin seguimiento** van en «Sin preparar», junto a los modificados; el
+  icono de estado (`M`, `D`, `+`) ya los distingue. Una sola lista y un solo «Preparar todo».
+
+### Corregido
+- **Preparar todo / «+»**: git lista un repositorio anidado sin seguimiento como `nombre/` (barra
+  final). La validación de rutas lo rechazaba («componente vacío») y fallaba **todo** el lote. Ahora
+  `stage`/`unstage` quitan la barra final (`git add nombre`, igual que `git add -A`).
+- **Interruptor «Ignorados»**: la sesión nunca pedía los archivos ignorados, así que activarlo no
+  mostraba nada. `refresh` admite `includeIgnored` (opt-in, para no recorrer `node_modules`/`bin`
+  cuando nadie los mira) y la interfaz lo envía al marcar o desmarcar el interruptor.
+- **Diff a dos columnas**: en un archivo nuevo la mitad derecha quedaba fuera de la vista y había que
+  hacer scroll horizontal (el ancho `max-content` igualaba las dos columnas a la línea más larga).
+  Cada mitad ocupa ahora la mitad del panel y recorta con «…» (el texto completo va en el tooltip).
+
 ## [0.1.0-alpha.16] - 2026-11-23
 
 **Respecto a `v0.1.0-alpha.15`:** los divisores del riel de ramas y del panel de detalle ahora sí se
