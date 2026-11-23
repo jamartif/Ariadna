@@ -47,8 +47,9 @@ impl AppCore {
         };
         self.read_op(tab_id, "historial", move |e, r| {
             Box::pin(async move {
-                match query.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-                    Some(q) => {
+                let query = query.as_deref().map(str::trim).filter(|q| !q.is_empty());
+                match (query, rev.as_deref()) {
+                    (Some(q), _) => {
                         let all_commits = if all {
                             e.search_all_log(&r, q, skip.saturating_add(limit)).await?
                         } else {
@@ -56,12 +57,9 @@ impl AppCore {
                         };
                         Ok(all_commits.into_iter().skip(skip).collect())
                     }
-                    None if rev.is_some() => {
-                        e.log_ref_page(&r, rev.as_deref().unwrap_or("HEAD"), skip, limit)
-                            .await
-                    }
-                    None if all => e.log_all_page(&r, skip, limit).await,
-                    None => e.log_page(&r, skip, limit).await,
+                    (None, Some(rev)) => e.log_ref_page(&r, rev, skip, limit).await,
+                    (None, None) if all => e.log_all_page(&r, skip, limit).await,
+                    (None, None) => e.log_page(&r, skip, limit).await,
                 }
             })
         })

@@ -11,7 +11,7 @@ import {
 } from '$lib/api/types';
 import { t } from '$lib/i18n';
 import { amendRefusalText } from '$lib/util/amendReason';
-import { groupEntries, SECTION_ORDER, type SectionId } from '$lib/util/changes';
+import { bulkStageable, groupEntries, SECTION_ORDER, type SectionId } from '$lib/util/changes';
 import { pathKey, pathText } from '$lib/util/gitpath';
 import { AiController } from './ai.svelte';
 import { toasts } from './toasts.svelte';
@@ -77,6 +77,7 @@ export class TabState {
   panel = $state<Panel>('changes');
   selected = $state.raw<Selection | null>(null);
   showIgnored = $state(false);
+  private ignoredSeq = 0;
   filter = $state('');
   /** Claves `sección:ruta` con una operación en curso hasta el próximo snapshot. */
   pending = $state.raw<ReadonlySet<string>>(new Set());
@@ -357,7 +358,7 @@ export class TabState {
 
   async stageAll(): Promise<void> {
     const s = this.sections;
-    await this.stage('unstaged', s.unstaged);
+    await this.stage('unstaged', bulkStageable(s.unstaged));
   }
 
   async unstageAll(): Promise<void> {
@@ -407,11 +408,21 @@ export class TabState {
 
   /** Muestra u oculta los ignorados; al mostrarlos hay que pedírselos a Rust, que no los lista si nadie los mira. */
   async setShowIgnored(on: boolean): Promise<void> {
+    const before = this.showIgnored;
     this.showIgnored = on;
+    // Pulsaciones seguidas: solo vale la respuesta de la última (pueden llegar desordenadas).
+    const seq = ++this.ignoredSeq;
     try {
-      const s = await this.api.refresh(this.id, on);
-      if (s) this.applySnapshot(s);
+      let s = await this.api.refresh(this.id, on);
+      // `null` = refresco omitido (había otro en curso o una mutación): se repite una vez, o los
+      // ignorados no aparecerían hasta el siguiente refresco.
+      if (!s && seq === this.ignoredSeq) {
+        await new Promise((r) => setTimeout(r, 250));
+        if (seq === this.ignoredSeq) s = await this.api.refresh(this.id, on);
+      }
+      if (seq === this.ignoredSeq && s) this.applySnapshot(s);
     } catch (e) {
+      if (seq === this.ignoredSeq) this.showIgnored = before;
       this.sessionError = toApiError(e);
     }
   }

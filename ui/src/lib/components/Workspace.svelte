@@ -266,7 +266,7 @@
       {#if !railCollapsed && !narrow}
         <div class="splitslot">
           <Splitter
-            value={rail}
+            value={railWidth}
             min={MIN_RAIL}
             max={maxRail}
             label={t('rail.resize')}
@@ -350,7 +350,7 @@
       {#if !narrow}
         <div class="splitslot">
           <Splitter
-            value={mid}
+            value={Math.min(mid, maxMid)}
             min={MIN_MID}
             max={maxMid}
             label={t('layout.resizeMiddle')}

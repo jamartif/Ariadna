@@ -47,8 +47,16 @@
   $effect(() => {
     const r = h.reveal;
     if (!r) return;
-    const i = h.commits.findIndex((c) => c.sha === r.sha);
-    if (i >= 0) queueMicrotask(() => list?.scrollToIndex(i));
+    // `untrack`: leer `commits` aquí volvía a ejecutar el efecto con cada página nueva y devolvía el
+    // scroll al commit revelado mientras se bajaba por la lista. Se consume una sola vez.
+    untrack(() => {
+      const i = h.commits.findIndex((c) => c.sha === r.sha);
+      if (i >= 0)
+        queueMicrotask(() => {
+          list?.scrollToIndex(i);
+          h.reveal = null;
+        });
+    });
   });
 
   // Un commit, checkout o merge (nueva revisión) recarga la primera página.

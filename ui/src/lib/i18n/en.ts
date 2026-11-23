@@ -197,6 +197,8 @@ export const en: Record<MessageKey, string> = {
   'changes.stageDir': 'Stage the folder {name}',
   'changes.unstageDir': 'Unstage the folder {name}',
   'changes.stageOne': 'Stage',
+  'changes.nestedRepo': 'nested repo',
+  'changes.nestedRepoHint': 'A git repository inside the repository: "Stage all" skips it because it would be added as a gitlink without .gitmodules. Stage it with its checkbox only if that is what you want.',
   'changes.unstageOne': 'Unstage',
 
   // Operations

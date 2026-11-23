@@ -1,4 +1,5 @@
 import type { StatusEntry } from '$lib/api/types';
+import { pathText } from './gitpath';
 
 export type SectionId = 'staged' | 'unstaged' | 'ignored' | 'conflicts';
 
@@ -31,6 +32,20 @@ export function groupEntries(entries: readonly StatusEntry[]): Sections {
     }
   }
   return out;
+}
+
+/**
+ * Un repositorio git anidado sin seguimiento: `git status -uall` lo lista como un directorio (`nombre/`,
+ * con barra final). Prepararlo lo mete como *gitlink* embebido (modo 160000) sin `.gitmodules`, y quien
+ * clone después se encuentra una carpeta vacía; por eso solo se prepara si se pide **expresamente**.
+ */
+export function isNestedRepo(e: StatusEntry): boolean {
+  return e.isUntracked && pathText(e.path).endsWith('/');
+}
+
+/** Lo que entra en un «Preparar todo» o en el botón de una carpeta: todo menos los repos anidados. */
+export function bulkStageable(entries: readonly StatusEntry[]): StatusEntry[] {
+  return entries.filter((e) => !isNestedRepo(e));
 }
 
 /** Letra que se muestra en el icono de estado de la fila. */

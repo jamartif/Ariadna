@@ -4,7 +4,7 @@
   import type { TabState } from '$lib/stores/tab.svelte';
   import { settings } from '$lib/stores/settings.svelte';
   import { SHORTCUTS, formatCombo, isMac } from '$lib/shortcuts/registry';
-  import { displayStatus, SECTION_ORDER, type SectionId } from '$lib/util/changes';
+  import { bulkStageable, displayStatus, isNestedRepo, SECTION_ORDER, type SectionId } from '$lib/util/changes';
   import { pathBase, pathDir, pathKey, pathText } from '$lib/util/gitpath';
   import { buildTreeRows } from '$lib/util/tree';
   import EmptyState from './EmptyState.svelte';
@@ -162,7 +162,7 @@
 
   function dirAction(section: SectionId, entries: StatusEntry[]) {
     if (section === 'staged') void tab.unstage(entries);
-    else void tab.stage(section, entries);
+    else void tab.stage(section, bulkStageable(entries));
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -393,7 +393,7 @@
                     {t('changes.unstageAll')}
                   </button>
                 {:else if it.section === 'unstaged'}
-                  <button type="button" class="btn btn-ghost btn-sm head-act" tabindex="-1" onclick={() => tab.stage(it.section, sectionEntries(it.section))}>
+                  <button type="button" class="btn btn-ghost btn-sm head-act" tabindex="-1" onclick={() => tab.stage(it.section, bulkStageable(sectionEntries(it.section)))}>
                     {t('changes.stageAll')}
                   </button>
                 {/if}
@@ -493,6 +493,9 @@
               <div role="gridcell" class="cell extra">
                 {#if e.conflictKind}
                   <span class="chip conflict">{t(`conflict.${e.conflictKind}`)}</span>
+                {/if}
+                {#if isNestedRepo(e)}
+                  <span class="chip" title={t('changes.nestedRepoHint')}>{t('changes.nestedRepo')}</span>
                 {/if}
                 {#if it.section === 'unstaged'}
                   <button
