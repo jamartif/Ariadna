@@ -1,8 +1,10 @@
 """Genera el icono de Ariadna en todos los tamaños que usa la app.
 
-Diseño: **corona de Ariadne** (Corona Borealis) en oro, una sola silueta con tres puntas y sus
-joyas, y el **hilo** cian que la atraviesa en diagonal. Se dibuja con PIL (sin rsvg/inkscape) y
-todo está pensado para leerse a 16 px: formas gruesas, dos colores y márgenes generosos.
+Diseño: monograma **«A» hecho con el hilo de Ariadna** (cian) y **nodos de commit** (oro): el hilo
+entra por el anillo de abajo a la izquierda, sube al vértice, baja y sale por el nodo dorado; la
+barra es una rama. Es el mismo dibujo que `ui/src/lib/components/Logo.svelte` (cuadrícula de 32).
+Se dibuja con PIL (sin rsvg/inkscape) y está pensado para leerse a 16 px: trazos gruesos, tres
+colores y márgenes generosos.
 
 Requisitos: **Pillow** (`python3 -m pip install pillow`); es lo único que hace falta, y no hay
 dependencia de ImageMagick, rsvg ni de las herramientas de Tauri.
@@ -18,9 +20,8 @@ UI = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "
 S = 1024
 
 GOLD = (247, 197, 84)
-GOLD_DARK = (206, 150, 40)
 CYAN = (34, 211, 238)
-CYAN_DARK = (14, 116, 144)
+NIGHT = (11, 24, 38)
 
 
 def rounded_bg(size: int) -> Image.Image:
@@ -41,50 +42,49 @@ def rounded_bg(size: int) -> Image.Image:
     return img
 
 
-def bezier(p0, p1, p2, p3, steps=160):
-    """Puntos de una curva cúbica: el hilo no puede tener quiebres."""
-    pts = []
-    for i in range(steps + 1):
-        t = i / steps
-        u = 1 - t
-        x = u**3 * p0[0] + 3 * u**2 * t * p1[0] + 3 * u * t**2 * p2[0] + t**3 * p3[0]
-        y = u**3 * p0[1] + 3 * u**2 * t * p1[1] + 3 * u * t**2 * p2[1] + t**3 * p3[1]
-        pts.append((x, y))
-    return pts
+K = S / 32  # el dibujo se define en una cuadrícula de 32 (como el SVG) y se escala
+
+
+def stroke(d: ImageDraw.ImageDraw, pts, width, fill):
+    """Polilínea de trazo grueso con extremos y uniones redondos."""
+    px = [(x * K, y * K) for x, y in pts]
+    d.line(px, fill=fill, width=round(width * K), joint="curve")
+    r = width * K / 2
+    for x, y in px:
+        d.ellipse([x - r, y - r, x + r, y + r], fill=fill)
+
+
+def node(d: ImageDraw.ImageDraw, cx, cy, r, fill, hole=None, ring=None):
+    """Nodo de commit: disco, con agujero oscuro (`hole`) o como anillo (`ring` = grosor)."""
+    x, y = cx * K, cy * K
+    if ring:  # como un trazo SVG: `r` es el radio medio y `ring` el grosor
+        r += ring / 2
+    rr = r * K
+    d.ellipse([x - rr, y - rr, x + rr, y + rr], fill=fill)
+    if hole:
+        h = hole * K
+        d.ellipse([x - h, y - h, x + h, y + h], fill=NIGHT)
+    if ring:
+        h = (r - ring) * K
+        d.ellipse([x - h, y - h, x + h, y + h], fill=NIGHT)
 
 
 def draw_icon() -> Image.Image:
     img = rounded_bg(S)
     d = ImageDraw.Draw(img)
-
-    # --- Hilo de Ariadna: sale por abajo a la izquierda, cruza por detrás de la corona y termina
-    # en un ovillo a la derecha. Trazo grueso (se ve a 16 px) y curva suave.
-    thread = bezier((96, 566), (360, 640), (664, 500), (928, 566))
-    d.line(thread, fill=CYAN_DARK, width=88, joint="curve")
-    d.line(thread, fill=CYAN, width=56, joint="curve")
-
-    # --- Corona: una sola silueta (base + tres puntas y dos valles), centrada.
-    crown = [
-        (268, 690),
-        (268, 560),
-        (330, 336),
-        (452, 470),
-        (512, 258),
-        (572, 470),
-        (694, 336),
-        (756, 560),
-        (756, 690),
-    ]
-    d.polygon(crown, fill=GOLD)
-    d.rounded_rectangle([252, 636, 772, 726], radius=34, fill=GOLD)
-    d.rounded_rectangle([252, 690, 772, 726], radius=20, fill=GOLD_DARK)
-    for jx, jy in [(330, 320), (512, 242), (694, 320)]:
-        d.ellipse([jx - 34, jy - 34, jx + 34, jy + 34], fill=GOLD)
-        d.ellipse([jx - 12, jy - 12, jx + 12, jy + 12], fill=CYAN)
-    # El hilo pasa **por delante** del centro de la corona: así se ve que la atraviesa.
-    front = thread[int(len(thread) * 0.44) : int(len(thread) * 0.58)]
-    d.line(front, fill=CYAN_DARK, width=84, joint="curve")
-    d.line(front, fill=CYAN, width=60, joint="curve")
+    # El vértice es una curva cuadrática: se muestrea para que no haya quiebre.
+    apex = []
+    for i in range(0, 21):
+        t = i / 20
+        u = 1 - t
+        apex.append((u * u * 14.1 + 2 * u * t * 16 + t * t * 17.9, u * u * 9.3 + 2 * u * t * 6 + t * t * 9.3))
+    stroke(d, [(3.5, 27)] + apex + [(28.5, 27)], 2.9, CYAN)
+    stroke(d, [(10, 19), (22, 19)], 2.4, CYAN)
+    node(d, 16, 7.4, 3, GOLD, hole=1.1)
+    node(d, 10, 19, 1.8, GOLD)
+    node(d, 22, 19, 1.8, GOLD)
+    node(d, 3.9, 26.4, 2, CYAN, ring=1.5)
+    node(d, 28.1, 26.4, 2.3, GOLD)
     return img
 
 

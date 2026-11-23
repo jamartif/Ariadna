@@ -19,9 +19,10 @@
 </script>
 
 <!--
-  Corona de Ariadne (Corona Borealis) en oro, con el hilo cian que la atraviesa: el hilo que
-  Ariadna le dio a Teseo para salir del laberinto. Formas gruesas y tres colores para que se
-  reconozca también a 16 px (los PNG/ICO/ICNS de `src-tauri/icons` salen del mismo dibujo).
+  Monograma «A» hecho con el hilo de Ariadna (el que le dio a Teseo para salir del laberinto) y
+  con nodos de commit: el hilo entra por el anillo de abajo a la izquierda, sube hasta el
+  vértice, baja y sale por el nodo dorado; la barra es una rama. Trazos gruesos y tres colores
+  para que se lea a 16 px. `scripts/icono.py` repite este dibujo para los PNG/ICO/ICNS.
 -->
 <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true" focusable="false">
   <defs>
@@ -31,20 +32,15 @@
     </linearGradient>
   </defs>
   <rect x="0" y="0" width="32" height="32" rx="7" fill="url(#{bgId})" />
-  <!-- El hilo: por detrás de la corona y un tramo por delante, para que se vea que la atraviesa. -->
-  <path d="M1.5 17.6c3.6 1.2 5.2 1.6 8.3 1.2" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" />
-  <path d="M22.2 18.8c3.1-.4 4.7-.8 8.3-2" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" />
-  <!-- Corona: base y tres puntas. -->
-  <path d="M7.9 21.6v-3.4l1.9-7.1 3.6 4 2.6-7 2.6 7 3.6-4 1.9 7.1v3.4z" fill="#f7c554" />
-  <rect x="7.6" y="19.6" width="16.8" height="3.2" rx="1.4" fill="#f7c554" />
-  <rect x="7.6" y="21.5" width="16.8" height="1.3" rx="0.65" fill="#ce9628" />
-  <!-- Joyas en las puntas. -->
-  <circle cx="9.8" cy="9.9" r="1.5" fill="#f7c554" />
-  <circle cx="9.8" cy="9.9" r="0.75" fill="#22d3ee" />
-  <circle cx="16" cy="7.4" r="1.7" fill="#f7c554" />
-  <circle cx="16" cy="7.4" r="0.85" fill="#22d3ee" />
-  <circle cx="22.2" cy="9.9" r="1.5" fill="#f7c554" />
-  <circle cx="22.2" cy="9.9" r="0.75" fill="#22d3ee" />
-  <!-- Tramo del hilo por delante del centro de la corona. -->
-  <path d="M13.6 18.2c1.6.3 3.2.3 4.8 0" stroke="#22d3ee" stroke-width="2.1" stroke-linecap="round" />
+  <!-- El hilo: las dos patas de la «A» con el vértice redondeado. -->
+  <path d="M3.5 27 L14.1 9.3 Q16 6 17.9 9.3 L28.5 27" stroke="#22d3ee" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round" />
+  <!-- La rama que une las dos patas. -->
+  <path d="M10 19 H22" stroke="#22d3ee" stroke-width="2.4" stroke-linecap="round" />
+  <!-- Nodos de commit: vértice, empalmes de la rama, entrada (anillo) y salida (oro). -->
+  <circle cx="16" cy="7.4" r="3" fill="#f7c554" />
+  <circle cx="16" cy="7.4" r="1.1" fill="#0b1826" />
+  <circle cx="10" cy="19" r="1.8" fill="#f7c554" />
+  <circle cx="22" cy="19" r="1.8" fill="#f7c554" />
+  <circle cx="3.9" cy="26.4" r="2" fill="#0b1826" stroke="#22d3ee" stroke-width="1.5" />
+  <circle cx="28.1" cy="26.4" r="2.3" fill="#f7c554" />
 </svg>
