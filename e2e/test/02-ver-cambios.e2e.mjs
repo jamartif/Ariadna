@@ -24,10 +24,11 @@ describe('Flujo 2 · ver cambios y diff', () => {
       );
     }
 
-    // Las tres secciones se distinguen por `data-section`, no por su texto traducible.
+    // Las secciones se distinguen por `data-section`, no por su texto traducible.
     assert.equal(await fileSection(fx.preparado), 'staged', 'falta la sección de archivos preparados');
     assert.equal(await fileSection('docs/guia.md'), 'unstaged', 'falta la sección de cambios sin preparar');
-    assert.equal(await fileSection(fx.nuevo), 'untracked', 'falta la sección de archivos sin seguimiento');
+    // Los archivos nuevos (sin seguimiento) van en «Sin preparar», junto a los modificados.
+    assert.equal(await fileSection(fx.nuevo), 'unstaged', 'el archivo nuevo debería estar en «Sin preparar»');
 
     const rows = await getBrowser().execute(
       () => document.querySelector('[data-testid="changes-summary"]')?.textContent?.trim() ?? ''

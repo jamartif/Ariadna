@@ -161,7 +161,6 @@ export const es = {
   'changes.gridLabel': 'Archivos con cambios. Flechas para moverte, Espacio para preparar o quitar, Intro para ver el diff.',
   'changes.staged': 'Preparados',
   'changes.unstaged': 'Sin preparar',
-  'changes.untracked': 'Sin seguimiento',
   'changes.ignored': 'Ignorados',
   'changes.conflicts': 'Conflictos',
   'changes.filter': 'Filtrar archivos…',

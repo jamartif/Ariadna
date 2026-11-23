@@ -340,7 +340,7 @@ export async function fileStaged(path) {
 
 /**
  * Sección del panel de cambios en la que está un archivo (`staged`, `unstaged`,
- * `untracked`, `conflicts`, `ignored`) o `null` si no está en la lista. Se recorre
+ * `conflicts`, `ignored`) o `null` si no está en la lista. Se recorre
  * la rejilla en orden: la cabecera de sección lleva `data-section`.
  */
 export async function fileSection(path) {

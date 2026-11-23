@@ -167,7 +167,7 @@ describe('DiffView: líneas sueltas', () => {
 
   it('un archivo nuevo sin seguimiento también permite elegir líneas', async () => {
     const { tab, api } = await loadedTab();
-    const entry = pick(tab, 'untracked', 'notas.txt');
+    const entry = pick(tab, 'unstaged', 'notas.txt');
     render(DiffView, { props: { tab } });
     const cbs = await boxes();
     expect(cbs.length).toBeGreaterThan(2);

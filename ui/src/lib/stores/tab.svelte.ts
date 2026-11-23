@@ -357,7 +357,7 @@ export class TabState {
 
   async stageAll(): Promise<void> {
     const s = this.sections;
-    await this.stage('unstaged', [...s.unstaged, ...s.untracked]);
+    await this.stage('unstaged', s.unstaged);
   }
 
   async unstageAll(): Promise<void> {

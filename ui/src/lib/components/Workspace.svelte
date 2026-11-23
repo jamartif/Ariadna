@@ -135,7 +135,7 @@
 
   const snap = $derived(tab.snapshot);
   const branchName = $derived(snap?.status.isDetached ? t('status.detached') : (snap?.status.branchName ?? tab.info.branch ?? '—'));
-  const totalChanges = $derived(tab.sections.staged.length + tab.sections.unstaged.length + tab.sections.untracked.length);
+  const totalChanges = $derived(tab.sections.staged.length + tab.sections.unstaged.length);
 
   // El soporte de PR se pregunta a Rust (local) al abrir la pestaña y cuando cambian los remotos.
   const remoteSig = $derived((tab.snapshot?.remotes ?? []).map((r) => `${r.name}=${r.fetchUrl}`).join('|'));
