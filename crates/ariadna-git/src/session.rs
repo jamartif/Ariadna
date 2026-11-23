@@ -22,7 +22,7 @@ use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -388,6 +388,9 @@ struct Core {
     snapshot_tx: watch::Sender<Arc<Snapshot>>,
     state_tx: watch::Sender<SessionState>,
     events: broadcast::Sender<SessionEvent>,
+    /// ¿Los snapshots traen también los archivos ignorados? Lo activa la UI con «Ignorados»: listarlos
+    /// (`--ignored=matching` con `-uall`) recorre `node_modules`, `bin/`… y no se paga si nadie los mira.
+    include_ignored: AtomicBool,
 }
 
 /// Registro de una operación: se da de baja (y sale de la cola) al soltarlo.
@@ -788,9 +791,10 @@ impl Core {
         token: &CancellationToken,
         revision: u64,
     ) -> GitResult<Option<Snapshot>> {
+        let include_ignored = self.include_ignored.load(Ordering::Relaxed);
         let Some(status) = self
             .refresh_step(token, |e, r| {
-                Box::pin(async move { e.status(&r, false).await })
+                Box::pin(async move { e.status(&r, include_ignored).await })
             })
             .await?
         else {
@@ -1010,6 +1014,7 @@ impl RepositorySession {
             snapshot_tx,
             state_tx,
             events,
+            include_ignored: AtomicBool::new(false),
         };
         Self {
             core: Arc::new(core),
@@ -1267,6 +1272,11 @@ impl RepositorySession {
                 () = guard.token.cancelled() => Err(GitError::Cancelled),
             }
         })
+    }
+
+    /// Activa o desactiva que los snapshots incluyan los archivos ignorados (aplica al siguiente refresco).
+    pub fn set_include_ignored(&self, on: bool) {
+        self.core.include_ignored.store(on, Ordering::Relaxed);
     }
 
     pub fn refresh(&self) -> impl Future<Output = GitResult<RefreshOutcome>> + Send + 'static {

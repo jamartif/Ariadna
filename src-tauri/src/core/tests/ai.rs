@@ -420,7 +420,7 @@ async fn la_regla_de_perfil_decide_con_que_perfil_se_genera_y_donde_se_guarda_el
             "https://github.com/javie/ariadna.git",
         ],
     );
-    ai.env.core.refresh(&ai.tab).await.unwrap();
+    ai.env.core.refresh(&ai.tab, None).await.unwrap();
     ai.stage("saludo.txt", b"hola\n").await;
 
     let s = ai
@@ -874,7 +874,7 @@ impl Ai {
 async fn propone_titulo_y_descripcion_de_pr_sin_tocar_el_repo() {
     let ai = Ai::new(pr_script).await;
     ai.branch_with_commits();
-    ai.env.core.refresh(&ai.tab).await.unwrap();
+    ai.env.core.refresh(&ai.tab, None).await.unwrap();
     let head = ai.head();
     let status = ai.env.git(&ai.repo, &["status", "--porcelain"]);
 
@@ -913,7 +913,7 @@ async fn propone_titulo_y_descripcion_de_pr_sin_tocar_el_repo() {
 async fn pr_respeta_el_consentimiento_y_la_desactivacion() {
     let ai = Ai::new(pr_script).await;
     ai.branch_with_commits();
-    ai.env.core.refresh(&ai.tab).await.unwrap();
+    ai.env.core.refresh(&ai.tab, None).await.unwrap();
     ai.env.prompter.reject_all();
     let e = ai.pr(Some("main")).await.unwrap_err();
     assert_eq!(e.code, "AI_CONSENT_REQUIRED");
@@ -936,7 +936,7 @@ async fn pr_errores_de_base_y_ramas_sin_cambios() {
     // En `main` no hay base distinta de la propia rama.
     assert_eq!(ai.pr(None).await.unwrap_err().code, "AI_BASE_NOT_FOUND");
     ai.env.git(&ai.repo, &["checkout", "-q", "-b", "vacia"]);
-    ai.env.core.refresh(&ai.tab).await.unwrap();
+    ai.env.core.refresh(&ai.tab, None).await.unwrap();
     // Una rama sin commits propios no tiene nada que describir.
     assert_eq!(
         ai.pr(Some("main")).await.unwrap_err().code,
@@ -962,7 +962,7 @@ async fn pr_solo_con_archivos_sensibles_no_envia_nada() {
     e.write(r, ".env", b"CLAVE=1\n");
     e.git(r, &["add", "-f", ".env"]);
     e.git(r, &["commit", "-q", "-m", "config"]);
-    ai.env.core.refresh(&ai.tab).await.unwrap();
+    ai.env.core.refresh(&ai.tab, None).await.unwrap();
     assert_eq!(
         ai.pr(Some("main")).await.unwrap_err().code,
         "AI_SENSITIVE_FILE"

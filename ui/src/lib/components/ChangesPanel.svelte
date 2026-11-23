@@ -288,7 +288,7 @@
       </button>
     </div>
     <label class="switch" title={t('changes.showIgnored')}>
-      <input type="checkbox" role="switch" bind:checked={tab.showIgnored} />
+      <input type="checkbox" role="switch" checked={tab.showIgnored} onchange={(e) => void tab.setShowIgnored(e.currentTarget.checked)} />
       <span class="track" aria-hidden="true"></span>
       <span class="sw-label">{t('changes.showIgnoredShort')}</span>
     </label>

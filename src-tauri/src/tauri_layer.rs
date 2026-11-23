@@ -683,8 +683,12 @@ async fn get_snapshot(core: State<'_, AppCore>, tab_id: String) -> Cmd<ApiSnapsh
 }
 
 #[tauri::command]
-async fn refresh(core: State<'_, AppCore>, tab_id: String) -> Cmd<Option<ApiSnapshot>> {
-    core.refresh(&tab_id).await
+async fn refresh(
+    core: State<'_, AppCore>,
+    tab_id: String,
+    include_ignored: Option<bool>,
+) -> Cmd<Option<ApiSnapshot>> {
+    core.refresh(&tab_id, include_ignored).await
 }
 
 #[tauri::command]

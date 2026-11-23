@@ -405,6 +405,17 @@ export class TabState {
     return done === true;
   }
 
+  /** Muestra u oculta los ignorados; al mostrarlos hay que pedírselos a Rust, que no los lista si nadie los mira. */
+  async setShowIgnored(on: boolean): Promise<void> {
+    this.showIgnored = on;
+    try {
+      const s = await this.api.refresh(this.id, on);
+      if (s) this.applySnapshot(s);
+    } catch (e) {
+      this.sessionError = toApiError(e);
+    }
+  }
+
   async refresh(): Promise<void> {
     try {
       const s = await this.api.refresh(this.id);

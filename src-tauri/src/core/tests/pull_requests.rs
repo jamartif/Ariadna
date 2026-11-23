@@ -1204,7 +1204,7 @@ async fn crear_la_pr_publica_antes_la_rama_sin_upstream() {
     p.env.git(&p.repo, &["add", "-A"]);
     p.env.git(&p.repo, &["commit", "-q", "-m", "y"]);
     // El snapshot de la pestaña se tomó antes del checkout: se refresca como haría el vigilante.
-    p.env.core.refresh(&p.tab).await.unwrap();
+    p.env.core.refresh(&p.tab, None).await.unwrap();
 
     let created = p
         .env
@@ -1253,7 +1253,7 @@ async fn si_se_cancela_la_publicacion_no_se_crea_la_pr() {
     p.env.write(&p.repo, "y.txt", b"y\n");
     p.env.git(&p.repo, &["add", "-A"]);
     p.env.git(&p.repo, &["commit", "-q", "-m", "y"]);
-    p.env.core.refresh(&p.tab).await.unwrap();
+    p.env.core.refresh(&p.tab, None).await.unwrap();
     p.env.prompter.reject_all();
 
     let e = p

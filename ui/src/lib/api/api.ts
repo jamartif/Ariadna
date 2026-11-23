@@ -108,7 +108,8 @@ export interface Api extends PullRequestApi, TagApi {
 
   // Pestaña
   getSnapshot(tabId: string): Promise<Snapshot>;
-  refresh(tabId: string): Promise<Snapshot | null>;
+  /** `includeIgnored`: pide (o deja de pedir) los archivos ignorados en los snapshots; omitido = sin cambios. */
+  refresh(tabId: string, includeIgnored?: boolean): Promise<Snapshot | null>;
   stage(tabId: string, paths: GitPath[]): Promise<void>;
   unstage(tabId: string, paths: GitPath[]): Promise<void>;
   stageHunk(tabId: string, path: GitPath, hunk: DiffHunk): Promise<void>;
