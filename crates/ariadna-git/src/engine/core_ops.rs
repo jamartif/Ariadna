@@ -639,6 +639,27 @@ impl GitCliEngine {
         }
     }
 
+    /// Página del historial de `rev` (rama, etiqueta o SHA), sin tocar HEAD ni la copia de trabajo.
+    pub async fn log_page_ref(
+        &self,
+        repo: &Repository,
+        rev: &str,
+        skip: usize,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        revision(rev)?;
+        let capped = limit.clamp(1, MAX_LOG);
+        let mut args = os(&["log", "-n"]);
+        args.push(OsString::from(capped.to_string()));
+        args.push(OsString::from(format!("--skip={}", skip.min(10_000_000))));
+        args.extend(os(&["--no-color", "--no-show-signature", LOG_FORMAT]));
+        args.push(OsString::from("--end-of-options"));
+        args.push(OsString::from(rev));
+        args.push(OsString::from("--"));
+        let out = self.read(repo, &args).await?;
+        Ok(parse_commit_log(&out.stdout))
+    }
+
     async fn log_page_scoped(
         &self,
         repo: &Repository,

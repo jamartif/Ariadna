@@ -17,6 +17,27 @@ async function loadedTab(id: string) {
   return { api, tab };
 }
 
+describe('HistoryController · rama pinchada', () => {
+  it('en «Rama actual» pide el historial de esa rama; en el grafo completo selecciona su punta', async () => {
+    const { tab, api } = await loadedTab('tab-gigante');
+    const h = new HistoryController(tab, 50);
+    h.setScope('current');
+    await waitFor(() => !h.loading && h.commits.length > 0);
+    await h.focusBranch('develop');
+    expect(h.ref).toBe('develop');
+    expect(api.__logScopes().at(-1)).toBe('ref:develop');
+    await h.focusBranch(null);
+    expect(api.__logScopes().at(-1)).toBe('current');
+
+    h.setScope('all');
+    await waitFor(() => !h.loading);
+    const tip = h.commits[3]!;
+    await h.focusBranch('feature/x', tip.sha);
+    expect(h.selected?.sha).toBe(tip.sha);
+    expect(h.reveal?.sha).toBe(tip.sha);
+  });
+});
+
 describe('HistoryController', () => {
   it('carga la primera página, selecciona el primer commit y trae sus archivos', async () => {
     const { tab } = await loadedTab('tab-gigante');

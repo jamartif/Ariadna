@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
+  import { branchesOf } from '$lib/stores/branches.svelte';
   import { intlLocale, t, tn } from '$lib/i18n';
   import type { Commit } from '$lib/api/types';
   import type { TabState } from '$lib/stores/tab.svelte';
@@ -27,6 +28,27 @@
 
   onMount(() => {
     void historyOf(tab).reload();
+  });
+
+  // Rama pinchada en el riel (clic izquierdo, sin checkout): el historial la sigue. La rama de HEAD
+  // equivale a «ninguna». En el grafo completo se lleva la selección a su último commit.
+  const branches = $derived(branchesOf(tab));
+  $effect(() => {
+    const name = branches.selected;
+    const br = name ? branches.selectedBranch : undefined;
+    const isHead = !br || br.isHead || br.name !== name;
+    const target = isHead ? null : name;
+    const oid = br?.oid;
+    // `untrack`: focusBranch lee y escribe estado del historial; solo debe reaccionar a la rama.
+    untrack(() => void historyOf(tab).focusBranch(target, oid));
+  });
+
+  // Desplaza la lista al commit pedido (última punta de la rama pinchada).
+  $effect(() => {
+    const r = h.reveal;
+    if (!r) return;
+    const i = h.commits.findIndex((c) => c.sha === r.sha);
+    if (i >= 0) queueMicrotask(() => list?.scrollToIndex(i));
   });
 
   // Un commit, checkout o merge (nueva revisión) recarga la primera página.
@@ -101,7 +123,7 @@
       onclick={() => h.setScope('current')}
       title={t('history.scopeCurrentHint')}
     >
-      <Icon name="history" size={13} />{t('history.scopeCurrent')}
+      <Icon name="history" size={13} />{h.ref ?? t('history.scopeCurrent')}
     </button>
   </div>
 

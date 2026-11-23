@@ -143,6 +143,19 @@ pub trait GitServing: Send + Sync {
         skip: usize,
         limit: usize,
     ) -> GitResult<Vec<Commit>>;
+    /// Página del historial de una referencia concreta (rama local o remota, etiqueta o SHA) sin
+    /// hacer checkout: lo usa «Rama actual» cuando se ha pinchado otra rama en el riel.
+    async fn log_ref_page(
+        &self,
+        _repo: &Repository,
+        _rev: &str,
+        _skip: usize,
+        _limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        Err(GitError::Io(
+            "el historial por referencia no está soportado por este motor".into(),
+        ))
+    }
     /// Búsqueda en todo el repositorio (no solo en HEAD).
     async fn search_all_log(
         &self,
