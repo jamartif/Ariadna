@@ -44,60 +44,11 @@ function setup(entries: Entry[], activeId = 'a') {
   return props;
 }
 
-describe('TabStrip · ancho ajustable', () => {
-  beforeEach(() => localStorage.clear());
-
-  const rect = (w: number) => ({ width: w, left: 0, right: w, top: 0, bottom: 30, height: 30, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
-  /** La pestaña de la primera entrada, con un ancho simulado (jsdom no mide). */
-  function tab(w = 160): HTMLElement {
-    const el = screen.getAllByTestId('tab-resize')[0]!.closest('.tab') as HTMLElement;
-    vi.spyOn(el, 'getBoundingClientRect').mockReturnValue(rect(w));
-    return el;
-  }
-
-  it('arrastrando el borde se fija el ancho y se recuerda', async () => {
+describe('TabStrip · ancho', () => {
+  it('la pestaña se ajusta al nombre: no hay tirador para cambiar su ancho', () => {
     setup([repo('a'), repo('b')]);
-    const h = screen.getAllByTestId('tab-resize')[0]!;
-    const el = tab(160);
-
-    // jsdom no implementa PointerEvent: se lanza un MouseEvent con las mismas propiedades.
-    const pointer = (type: string, x: number) => new MouseEvent(type, { clientX: x, button: 0, bubbles: true });
-    await fireEvent(h, pointer('pointerdown', 100));
-    await fireEvent(h, pointer('pointermove', 180));
-    await fireEvent(h, pointer('pointerup', 180));
-
-    expect(el.style.width).toBe('240px'); // 160 + 80
-    expect(JSON.parse(localStorage.getItem('ariadna.tabWidths.v1') ?? '{}').a).toBe(240);
-  });
-
-  it('el ancho se limita al máximo y el doble clic vuelve al automático', async () => {
-    setup([repo('a')]);
-    const h = screen.getAllByTestId('tab-resize')[0]!;
-    const el = tab(160);
-
-    const pointer = (type: string, x: number) => new MouseEvent(type, { clientX: x, button: 0, bubbles: true });
-    await fireEvent(h, pointer('pointerdown', 0));
-    await fireEvent(h, pointer('pointermove', 999));
-    await fireEvent(h, pointer('pointerup', 999));
-    expect(el.style.width).toBe('420px');
-
-    await fireEvent.dblClick(h);
-    expect(el.style.width).toBe('');
-    expect(JSON.parse(localStorage.getItem('ariadna.tabWidths.v1') ?? '{}').a).toBeUndefined();
-  });
-
-  it('con el tirador enfocado, las flechas ajustan de 12 en 12 y Supr lo reinicia', async () => {
-    setup([repo('a')]);
-    const h = screen.getAllByTestId('tab-resize')[0]!;
-    const el = tab(160);
-
-    await fireEvent.keyDown(h, { key: 'ArrowRight' });
-    expect(el.style.width).toBe('172px');
-    await fireEvent.keyDown(h, { key: 'ArrowLeft' });
-    await fireEvent.keyDown(h, { key: 'ArrowLeft' });
-    expect(el.style.width).toBe('148px');
-    await fireEvent.keyDown(h, { key: 'Delete' });
-    expect(el.style.width).toBe('');
+    expect(screen.queryAllByTestId('tab-resize')).toHaveLength(0);
+    for (const el of document.querySelectorAll<HTMLElement>('.tab')) expect(el.style.width).toBe('');
   });
 });
 
@@ -238,7 +189,7 @@ describe('tira de repos: separación y recorte de los nombres', () => {
 
     // Y la pestaña no se encoge por debajo de su contenido útil.
     const min = /min-width:\s*(\d+)px/.exec(regla('.tab'));
-    expect(Number(min?.[1])).toBeGreaterThanOrEqual(120);
+    expect(Number(min?.[1])).toBeGreaterThanOrEqual(96);
   });
 });
 

@@ -27,6 +27,8 @@
   let focusedId = $state<string | null>(null);
   /** Pestaña con el menú contextual abierto (`null` = cerrado). */
   let menuFor = $state<string | null>(null);
+  /** Posición (viewport) del menú: `fixed`, porque la pestaña y la tira recortan su contenido. */
+  let menuPos = $state({ x: 0, y: 0 });
   let dragId = $state<string | null>(null);
 
   const ids = $derived(entries.map((e) => e.id));
@@ -159,83 +161,6 @@
     if (tid) focusTab(tid);
   }
 
-  // ---- Ancho de pestaña ajustable arrastrando el borde derecho ------------------------
-  // Ojo: gitleaks marca cualquier constante llamada `*KEY = '<algo>'` como clave de API.
-  const WIDTHS_STORAGE = 'ariadna.tabWidths.v1';
-  const MIN_W = 112;
-  const MAX_W = 420;
-
-  function loadWidths(): Record<string, number> {
-    try {
-      const raw = JSON.parse(localStorage.getItem(WIDTHS_STORAGE) ?? '{}') as Record<string, unknown>;
-      const out: Record<string, number> = {};
-      for (const [k, v] of Object.entries(raw)) {
-        if (typeof v === 'number' && Number.isFinite(v)) out[k] = Math.min(MAX_W, Math.max(MIN_W, Math.round(v)));
-      }
-      return out;
-    } catch {
-      return {};
-    }
-  }
-
-  let widths = $state<Record<string, number>>(loadWidths());
-  let resizing: { id: string; startX: number; startW: number; pointerId: number } | null = null;
-
-  function saveWidths(): void {
-    try {
-      localStorage.setItem(WIDTHS_STORAGE, JSON.stringify(widths));
-    } catch {
-      /* sin sitio: solo se pierde la preferencia */
-    }
-  }
-
-  const clampW = (w: number) => Math.min(MAX_W, Math.max(MIN_W, Math.round(w)));
-
-  function resizeStart(e: PointerEvent, id: string): void {
-    if (e.button !== 0) return;
-    // Sin esto, el arrastre reordenaría la pestaña además de redimensionarla.
-    e.preventDefault();
-    e.stopPropagation();
-    const box = (e.currentTarget as HTMLElement).closest('.tab')?.getBoundingClientRect();
-    resizing = { id, startX: e.clientX, startW: box?.width ?? MIN_W, pointerId: e.pointerId };
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-  }
-
-  function resizeMove(e: PointerEvent): void {
-    if (!resizing) return;
-    widths = { ...widths, [resizing.id]: clampW(resizing.startW + (e.clientX - resizing.startX)) };
-  }
-
-  function resizeEnd(e: PointerEvent): void {
-    if (!resizing) return;
-    (e.currentTarget as HTMLElement).releasePointerCapture?.(resizing.pointerId);
-    resizing = null;
-    saveWidths();
-  }
-
-  /** Doble clic (o Supr con el tirador enfocado): vuelve al ancho automático. */
-  function resizeReset(id: string): void {
-    const { [id]: _drop, ...rest } = widths;
-    widths = rest;
-    saveWidths();
-  }
-
-  function resizeKey(e: KeyboardEvent, id: string): void {
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      e.preventDefault();
-      e.stopPropagation();
-      resizeReset(id);
-      return;
-    }
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    e.preventDefault();
-    e.stopPropagation();
-    const box = (e.currentTarget as HTMLElement).closest('.tab')?.getBoundingClientRect();
-    const base = widths[id] ?? box?.width ?? 160;
-    widths = { ...widths, [id]: clampW(base + (e.key === 'ArrowRight' ? 12 : -12)) };
-    saveWidths();
-  }
-
   // ---- Reordenar arrastrando (pointer events: funciona con la WebView sin DnD HTML5) ----
   let drag: { id: string; startX: number; active: boolean; pointerId: number } | null = null;
   let suppressClick = false;
@@ -297,6 +222,15 @@
   }
 </script>
 
+<!-- Cierra el menú contextual de la pestaña con cualquier clic fuera, Escape o al perder el foco. -->
+<svelte:window
+  onclick={() => (menuFor = null)}
+  onblur={() => (menuFor = null)}
+  onkeydown={(e) => {
+    if (e.key === 'Escape') menuFor = null;
+  }}
+/>
+
 <div class="strip" data-tauri-drag-region>
   <div
     class="scroller"
@@ -316,8 +250,6 @@
         class:missing={entry.kind === 'repo' && entry.info.missing}
         role="presentation"
         style:--hue={entry.kind === 'repo' ? repoHue(entry.info.name) : 0}
-        style:width={widths[entry.id] ? `${widths[entry.id]}px` : undefined}
-        class:fixed={!!widths[entry.id]}
         animate:flip={{ duration: 180 }}
         in:tabIn
         out:tabOut
@@ -345,6 +277,7 @@
           oncontextmenu={(e) => {
             if (entry.kind !== 'repo' || !onalias) return;
             e.preventDefault();
+            menuPos = { x: e.clientX, y: e.clientY };
             menuFor = entry.id;
           }}
         >
@@ -393,7 +326,14 @@
         </button>
         {#if menuFor === entry.id && entry.kind === 'repo'}
           <!-- Menú contextual de la pestaña (clic derecho): el alias es solo presentación. -->
-          <div class="tabmenu" role="menu" aria-label={t('tabs.menu')} data-testid="tab-menu">
+          <div
+            class="tabmenu"
+            role="menu"
+            aria-label={t('tabs.menu')}
+            data-testid="tab-menu"
+            style:left="{menuPos.x}px"
+            style:top="{menuPos.y}px"
+          >
             <button
               type="button"
               role="menuitem"
@@ -408,19 +348,6 @@
             </button>
           </div>
         {/if}
-        <button
-          type="button"
-          class="resize"
-          data-testid="tab-resize"
-          aria-label={t('tabs.resize', { name: entry.kind === 'new' ? t('tabs.newTab') : entry.info.name })}
-          title={t('tabs.resizeHint')}
-          onpointerdown={(e) => resizeStart(e, entry.id)}
-          onpointermove={resizeMove}
-          onpointerup={resizeEnd}
-          onpointercancel={resizeEnd}
-          ondblclick={() => resizeReset(entry.id)}
-          onkeydown={(e) => resizeKey(e, entry.id)}
-        ></button>
       </div>
     {/each}
   </div>
@@ -476,53 +403,14 @@
   .scroller::-webkit-scrollbar-track {
     background: transparent;
   }
-  /* Con ancho fijado a mano, la pestaña deja de encogerse sola. */
-  .tab.fixed {
-    flex: 0 0 auto;
-  }
-  .resize {
-    position: absolute;
-    top: 2px;
-    right: -3px;
-    bottom: 2px;
-    width: 7px;
-    padding: 0;
-    border: 0;
-    border-radius: 3px;
-    background: transparent;
-    cursor: col-resize;
-    touch-action: none;
-    z-index: 2;
-  }
-  .resize::after {
-    content: '';
-    position: absolute;
-    inset: 3px 3px;
-    border-radius: 2px;
-    background: transparent;
-  }
-  .resize:hover::after,
-  .resize:focus-visible::after {
-    background: var(--accent);
-  }
-  .resize:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-  }
-  @media (forced-colors: active) {
-    .resize:hover::after,
-    .resize:focus-visible::after {
-      background: Highlight;
-    }
-  }
   .tab {
     --tone: hsl(var(--hue) 78% 66%);
     position: relative;
     display: flex;
     align-items: center;
     flex: 0 1 auto;
-    /* Nunca por debajo de lo que ocupa su contenido útil (icono + un trozo de nombre + cerrar). */
-    min-width: 132px;
+    /* El ancho sale del nombre (o alias) del repo; solo se acota por arriba y por abajo. */
+    min-width: 96px;
     max-width: 260px;
     /* 28 + el aire del carril (5+5) deja la pestaña centrada sin tocar los bordes. */
     height: 28px;
@@ -716,10 +604,9 @@
   }
   /* Menú contextual de la pestaña (clic derecho). */
   .tabmenu {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    z-index: 30;
+    /* `fixed`: dentro de la pestaña (`overflow: hidden`) el menú quedaba recortado y no se veía. */
+    position: fixed;
+    z-index: 1000;
     min-width: 160px;
     padding: 3px;
     border: 1px solid var(--border);
