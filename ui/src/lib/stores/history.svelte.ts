@@ -1,4 +1,4 @@
-import { toApiError, type ApiError, type Commit, type FileDiff, type LogScope } from '$lib/api/types';
+import { toApiError, type ApiError, type Commit, type FileDiff, type LogScope, type LogScopeRequest } from '$lib/api/types';
 import { emptyGraphState, layoutGraph, maxWidth, type GraphRow, type GraphState } from '$lib/util/graph';
 import { Frontier } from '$lib/util/cursor';
 import type { TabState } from './tab.svelte';
@@ -18,6 +18,10 @@ export class HistoryController {
   query = $state('');
   /** Ámbito del historial: `all` (grafo completo, por defecto) o `current` (solo HEAD). */
   scope = $state<LogScope>('all');
+  /** Rama pinchada en el riel (sin checkout): «Rama actual» recorre esta en vez de HEAD. */
+  ref = $state<string | null>(null);
+  /** Commit al que la lista debe desplazarse (`seq` cambia aunque el SHA se repita). */
+  reveal = $state.raw<{ sha: string; seq: number } | null>(null);
   loading = $state(false);
   loadingMore = $state(false);
   hasMore = $state(true);
@@ -64,10 +68,13 @@ export class HistoryController {
   async reload(): Promise<void> {
     const mine = ++this.gen;
     this.loading = true;
+    // Una página siguiente en vuelo queda descartada (`gen`) y su `finally` ya no la libera: sin
+    // esto `loadingMore` se quedaba en `true` y el historial dejaba de paginar (commits que faltan).
+    this.loadingMore = false;
     this.error = null;
     this.graph = emptyGraphState();
     try {
-      const page = await this.tab.api.logPage(this.tab.id, 0, this.pageSize, this.searching ? this.query.trim() : null, null, this.scope);
+      const page = await this.tab.api.logPage(this.tab.id, 0, this.pageSize, this.searching ? this.query.trim() : null, null, this.requestScope());
       if (mine !== this.gen) return;
       this.commits = page;
       this.frontier.reset();
@@ -99,12 +106,12 @@ export class HistoryController {
       // no crece con la profundidad). Con búsqueda, con el grafo completo (varias puntas) o sin
       // frontera utilizable, se pagina por `skip`.
       const useCursor = !searching && this.scope === 'current' && this.frontier.usable;
-      let page = await this.tab.api.logPage(this.tab.id, this.commits.length, this.pageSize, query, useCursor ? this.frontier.list() : null, this.scope);
+      let page = await this.tab.api.logPage(this.tab.id, this.commits.length, this.pageSize, query, useCursor ? this.frontier.list() : null, this.requestScope());
       if (mine !== this.gen) return;
       let fresh = page.filter((c) => !this.frontier.has(c.sha));
       if (useCursor && fresh.length === 0 && page.length > 0) {
         // Una página de puros repetidos (fechas iguales): el cursor no avanzaría; por `skip` sí.
-        page = await this.tab.api.logPage(this.tab.id, this.commits.length, this.pageSize, query, null, this.scope);
+        page = await this.tab.api.logPage(this.tab.id, this.commits.length, this.pageSize, query, null, this.requestScope());
         if (mine !== this.gen) return;
         fresh = page.filter((c) => !this.frontier.has(c.sha));
       }
@@ -142,6 +149,37 @@ export class HistoryController {
     this.query = q;
     if (this.searchTimer) clearTimeout(this.searchTimer);
     this.searchTimer = setTimeout(() => void this.reload(), 150);
+  }
+
+  /** Ámbito que se pide a Rust: con una rama pinchada, «Rama actual» recorre esa rama. */
+  private requestScope(): LogScopeRequest {
+    return this.scope === 'current' && this.ref ? `ref:${this.ref}` : this.scope;
+  }
+
+  /**
+   * Una rama pinchada en el riel (`null` = ninguna distinta de HEAD). En «Rama actual» el historial
+   * pasa a ser el de esa rama; en el grafo completo se lleva la selección a su último commit.
+   */
+  async focusBranch(name: string | null, tipSha?: string): Promise<void> {
+    const changed = name !== this.ref;
+    this.ref = name;
+    if (this.scope === 'current') {
+      if (!changed) return;
+      this.selected = null;
+      await this.reload();
+      return;
+    }
+    // Solo al pinchar otra rama: un snapshot nuevo no debe devolver la selección al último commit.
+    if (!changed || !name || !tipSha) return;
+    // Grafo completo: el commit puede no estar en las páginas cargadas; se pagina hasta dar con él.
+    for (let i = 0; i < 40 && !this.commits.some((c) => c.sha === tipSha) && this.hasMore; i++) {
+      if (this.loading) return;
+      await this.loadMore();
+    }
+    const tip = this.commits.find((c) => c.sha === tipSha);
+    if (!tip) return;
+    await this.select(tip);
+    this.reveal = { sha: tipSha, seq: (this.reveal?.seq ?? 0) + 1 };
   }
 
   /** Cambia el ámbito del historial (`all` = grafo completo) y recarga desde cero. */
@@ -214,6 +252,8 @@ export class HistoryController {
     this.graph = emptyGraphState();
     this.frontier.reset();
     this.query = '';
+    this.ref = null;
+    this.reveal = null;
     this.loading = false;
     this.loadingMore = false;
     this.hasMore = true;

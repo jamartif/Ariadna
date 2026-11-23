@@ -173,6 +173,16 @@ impl GitServing for GitCliEngine {
         self.log_page_all(repo, skip, limit).await
     }
 
+    async fn log_ref_page(
+        &self,
+        repo: &Repository,
+        rev: &str,
+        skip: usize,
+        limit: usize,
+    ) -> GitResult<Vec<Commit>> {
+        self.log_page_ref(repo, rev, skip, limit).await
+    }
+
     async fn search_all_log(
         &self,
         repo: &Repository,

@@ -256,7 +256,7 @@ export const esScreens = {
   'rail.syncActions': 'Traer, bajar y subir la rama actual',
   'rail.detailTitle': 'Detalle de la rama',
   'rail.back': 'Volver al detalle',
-  'rail.resize': 'Redimensionar el riel de ramas',
+  'rail.resize': 'Redimensionar el riel de ramas (doble clic para restablecer)',
   'rail.clearSelection': 'Quitar la selección',
 
   // Menú contextual del riel (clic derecho o Menú/Mayús+F10)

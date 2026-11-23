@@ -37,7 +37,7 @@ export const en: Record<MessageKey, string> = {
   'tabs.newTab': 'New tab',
   'tabs.menu': 'Tab actions',
   'tabs.alias': 'Set alias…',
-  'tabs.aliasHintShort': 'double-click to set an alias',
+  'tabs.aliasHintShort': 'right-click to set an alias',
   'tabs.aliasTitle': 'Repository alias',
   'tabs.aliasHint': 'Short name for the top bar (24 characters max). Empty = no alias; the name is trimmed instead.',
   'tabs.aliasPath': 'Path: {path}',

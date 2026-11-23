@@ -111,6 +111,8 @@ export type IntegrationState = 'none' | 'merging' | 'rebasing' | 'cherryPicking'
  * repositorio (ramas locales y remotas y etiquetas) en orden topológico: el grafo completo.
  */
 export type LogScope = 'current' | 'all';
+/** Ámbito que viaja a Rust: además de los anteriores, `ref:<nombre>` recorre esa referencia sin checkout. */
+export type LogScopeRequest = LogScope | `ref:${string}`;
 
 export type DiffScope =
   | 'unstaged'

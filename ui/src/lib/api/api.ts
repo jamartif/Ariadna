@@ -32,6 +32,7 @@ import type {
   DiffHunk,
   DiffScope,
   LogScope,
+  LogScopeRequest,
   DoneResult,
   FileDiff,
   StashApplyResult,
@@ -142,7 +143,7 @@ export interface Api extends PullRequestApi, TagApi {
     limit: number,
     query: string | null,
     cursor?: string[] | null,
-    scope?: LogScope
+    scope?: LogScopeRequest
   ): Promise<Commit[]>;
   createBranch(tabId: string, name: string, startPoint: string | null): Promise<void>;
   renameBranch(tabId: string, oldName: string, newName: string): Promise<void>;

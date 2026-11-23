@@ -5,6 +5,35 @@ Todos los cambios relevantes de Ariadna se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto
 usa [versionado semántico](https://semver.org/lang/es/).
 
+## [0.1.0-alpha.15] - 2026-11-23
+
+**Respecto a `v0.1.0-alpha.14`:** logo nuevo, historial completo ordenado por fecha como GitKraken,
+paneles laterales redimensionables y la rama que pinchas en el riel manda en el historial sin hacer
+checkout.
+
+### Añadido
+- **Logo nuevo**: monograma «A» hecho con el hilo de Ariadna y nodos de commit (entrada en anillo,
+  salida dorada, la barra es una rama). Sustituye a la corona. `scripts/icono.py` y `Logo.svelte`
+  comparten el mismo dibujo.
+- **Paneles redimensionables**: el riel de ramas (160–640 px) y el panel de detalle del commit (la
+  vista central ya no se topa en 820 px; el detalle conserva al menos 280 px). Doble clic en el
+  divisor restablece el ancho; el riel se acorta solo si la ventana se queda pequeña.
+- **Clic en una rama del riel** (sin checkout): en «Grafo completo» selecciona y desplaza la lista a
+  su último commit; en «Rama actual» el historial pasa a ser el de esa rama (`scope: "ref:<nombre>"`
+  en `log_page`, `log_ref_page` en el motor).
+
+### Cambiado
+- **Alias del repositorio**: solo con clic derecho en la pestaña (se quita el doble clic). La pestaña
+  muestra únicamente el alias o, sin él, el nombre del repo (ya no la rama).
+
+### Corregido
+- **Historial completo**: se ordena por fecha (`--date-order`) en lugar de `--topo-order`, que
+  agrupaba cada rama entera y dejaba fuera de la primera página commits recientes de otras ramas.
+- **Historial**: `reload()` libera `loadingMore`; una página siguiente descartada lo dejaba atascado y
+  el historial dejaba de paginar.
+- **Cambios en árbol**: la clase `.dir` del texto de ruta chocaba con la fila de carpeta y la
+  ocultaba en densidad compacta.
+
 ## [0.1.0-alpha.14] - 2026-11-20
 
 **Respecto a `v0.1.0-alpha.13`:** identidad propia (icono nuevo), la **pestaña del repositorio** se

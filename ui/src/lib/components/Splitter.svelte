@@ -8,8 +8,10 @@
     direction?: 1 | -1;
     label: string;
     onchange: (v: number) => void;
+    /** Doble clic: vuelve al ancho por defecto. */
+    ondefault?: () => void;
   }
-  let { value, min, max, direction = 1, label, onchange }: Props = $props();
+  let { value, min, max, direction = 1, label, onchange, ondefault }: Props = $props();
 
   let dragging = $state(false);
   let startX = 0;
@@ -57,6 +59,7 @@
   onpointerup={up}
   onpointercancel={up}
   onkeydown={key}
+  ondblclick={() => ondefault?.()}
 >
   <span class="line"></span>
 </div>
@@ -64,8 +67,8 @@
 <style>
   .splitter {
     position: relative;
-    width: 8px;
-    margin: 0 -4px;
+    width: 12px;
+    margin: 0 -6px;
     z-index: 3;
     cursor: col-resize;
     touch-action: none;

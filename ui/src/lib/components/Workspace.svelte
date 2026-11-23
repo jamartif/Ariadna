@@ -50,10 +50,15 @@
    * `BranchDetail` en el panel derecho (modo temporal, no una vista más).
    */
   const KEY = 'ariadna.layout.v2';
-  const MIN_RAIL = 208;
-  const MAX_RAIL = 360;
-  const MIN_MID = 340;
-  const MAX_MID = 820;
+  const MIN_RAIL = 160;
+  const MAX_RAIL = 640;
+  const MIN_MID = 280;
+  /** Tope al cargar lo guardado; el real al arrastrar depende del ancho disponible (`maxMid`). */
+  const MAX_MID = 2400;
+  /** Ancho mínimo que se deja al panel de detalle al agrandar la vista central. */
+  const MIN_DETAIL = 280;
+  const DEFAULT_RAIL = 264;
+  const DEFAULT_MID = 560;
   const NARROW = 840;
 
   function loadLayout(): { rail: number; mid: number; collapsed: boolean } {
@@ -80,7 +85,11 @@
 
   const narrow = $derived(width > 0 && width < NARROW);
   const railCollapsed = $derived(collapsedPref || narrow);
-  const railWidth = $derived(railCollapsed ? 52 : rail);
+  /** Lo máximo que puede ocupar el riel dejando sitio a la vista y al detalle. */
+  const maxRail = $derived(Math.max(MIN_RAIL, Math.min(MAX_RAIL, width > 0 ? width - MIN_MID - MIN_DETAIL : MAX_RAIL)));
+  const railWidth = $derived(railCollapsed ? 52 : Math.min(rail, maxRail));
+  /** Lo máximo que puede ocupar la vista central sin dejar el detalle por debajo de `MIN_DETAIL`. */
+  const maxMid = $derived(Math.max(MIN_MID, width > 0 ? width - railWidth - MIN_DETAIL : MAX_MID));
 
   function persist() {
     try {
@@ -259,8 +268,12 @@
           <Splitter
             value={rail}
             min={MIN_RAIL}
-            max={MAX_RAIL}
+            max={maxRail}
             label={t('rail.resize')}
+            ondefault={() => {
+              rail = DEFAULT_RAIL;
+              persist();
+            }}
             onchange={(v) => {
               rail = v;
               persist();
@@ -339,8 +352,12 @@
           <Splitter
             value={mid}
             min={MIN_MID}
-            max={MAX_MID}
+            max={maxMid}
             label={t('layout.resizeMiddle')}
+            ondefault={() => {
+              mid = DEFAULT_MID;
+              persist();
+            }}
             onchange={(v) => {
               mid = v;
               persist();

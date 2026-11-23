@@ -36,7 +36,7 @@ export const es = {
   'tabs.newTab': 'Nueva pestaña',
   'tabs.menu': 'Acciones de la pestaña',
   'tabs.alias': 'Poner alias…',
-  'tabs.aliasHintShort': 'doble clic para poner alias',
+  'tabs.aliasHintShort': 'clic derecho para poner alias',
   'tabs.aliasTitle': 'Alias del repositorio',
   'tabs.aliasHint': 'Nombre corto para la barra superior (máximo 24 caracteres). Vacío = sin alias; se recorta el nombre.',
   'tabs.aliasPath': 'Ruta: {path}',

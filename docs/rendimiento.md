@@ -148,7 +148,7 @@ contenido esperado (LF/CRLF, con y sin base). **Pánicos encontrados: ninguno.**
 ## Historial con el grafo completo
 
 La vista por defecto recorre **todas las ramas y etiquetas** (`git log --branches --remotes
---tags HEAD --topo-order`). Con `--skip=N` git recorre el grafo desde el principio en cada
+--tags HEAD --date-order`). Con `--skip=N` git recorre el grafo desde el principio en cada
 página, así que en repos muy grandes conviene:
 
 - **`git commit-graph write --reachable`** (o dejar que `git maintenance` lo haga): el

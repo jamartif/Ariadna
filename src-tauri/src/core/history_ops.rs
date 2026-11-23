@@ -26,7 +26,15 @@ impl AppCore {
         // El ámbito **por defecto es el grafo completo**, que es lo que muestra la vista: si el
         // campo falta (cliente antiguo, petición sin ámbito), no se puede degradar en silencio a
         // «solo HEAD» — es justo el fallo que se veía con `git log --oneline HEAD`.
+        // `ref:<nombre>`: historial de esa referencia (rama pinchada en el riel) sin checkout.
+        let rev = scope
+            .as_deref()
+            .map(str::trim)
+            .and_then(|s| s.strip_prefix("ref:"))
+            .filter(|r| !r.is_empty())
+            .map(str::to_owned);
         let all = match scope.as_deref().map(str::trim) {
+            Some(s) if s.starts_with("ref:") => false,
             Some("current") => false,
             Some("all") | Some("") | None => true,
             Some(other) => {
@@ -47,6 +55,10 @@ impl AppCore {
                             e.search_log(&r, q, skip.saturating_add(limit)).await?
                         };
                         Ok(all_commits.into_iter().skip(skip).collect())
+                    }
+                    None if rev.is_some() => {
+                        e.log_ref_page(&r, rev.as_deref().unwrap_or("HEAD"), skip, limit)
+                            .await
                     }
                     None if all => e.log_all_page(&r, skip, limit).await,
                     None => e.log_page(&r, skip, limit).await,

@@ -171,7 +171,7 @@ describe('TabStrip', () => {
       ],
       'a'
     );
-    expect(screen.getByRole('tab', { name: /a main 7 rama main, 7 cambios/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /a 7 rama main, 7 cambios/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /2 conflictos/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /ocupado: Preparando 3 archivos/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /carpeta no encontrada/ })).toBeInTheDocument();
@@ -243,8 +243,7 @@ describe('tira de repos: separación y recorte de los nombres', () => {
 });
 
 /**
- * El alias del repo se abre con doble clic en la pestaña además de con el menú contextual: si solo
- * estuviera escondido en el clic derecho, no se descubre.
+ * El alias del repo se pone con clic derecho en la pestaña (menú contextual); el doble clic no hace nada.
  */
 describe('TabStrip · alias del repositorio', () => {
   const props = (
@@ -261,14 +260,21 @@ describe('TabStrip · alias del repositorio', () => {
     onalias
   });
 
-  it('el doble clic pide el alias del repo de **esa** pestaña', async () => {
+  it('el clic derecho abre el menú y pide el alias del repo de **esa** pestaña', async () => {
     const onalias = vi.fn<(id: string) => void>();
     render(TabStrip, { props: props([repo('a'), repo('b')], onalias) });
-    // La segunda pestaña, no la primera: con `toMatch(/^[ab]$/)` daba lo mismo pedir el alias de
-    // la pestaña equivocada.
-    await userEvent.dblClick(screen.getByRole('tab', { name: /^b/ }));
+    await userEvent.pointer({ keys: '[MouseRight]', target: screen.getByRole('tab', { name: /^b/ }) });
+    await userEvent.click(screen.getByTestId('tab-menu-alias'));
     expect(onalias).toHaveBeenCalledTimes(1);
     expect(onalias).toHaveBeenCalledWith('b');
+  });
+
+  it('el doble clic ya no pide alias, y la pestaña no enseña la rama', async () => {
+    const onalias = vi.fn<(id: string) => void>();
+    render(TabStrip, { props: props([repo('a')], onalias) });
+    await userEvent.dblClick(screen.getByRole('tab', { name: /^a/ }));
+    expect(onalias).not.toHaveBeenCalled();
+    expect(document.querySelector('.branch')).toBeNull();
   });
 
   it('la pista del alias no contamina el nombre accesible', async () => {
@@ -283,10 +289,10 @@ describe('TabStrip · alias del repositorio', () => {
     expect(tab.textContent ?? '').not.toMatch(/alias/i);
   });
 
-  it('el doble clic en la pestaña «nueva» no pide alias', async () => {
+  it('el clic derecho en la pestaña «nueva» no abre el menú de alias', async () => {
     const onalias = vi.fn<(id: string) => void>();
     render(TabStrip, { props: props([repo('a'), { id: 'new:1', kind: 'new' }], onalias, 'new:1') });
-    await userEvent.dblClick(screen.getByRole('tab', { name: /nueva|new/i }));
-    expect(onalias).not.toHaveBeenCalled();
+    await userEvent.pointer({ keys: '[MouseRight]', target: screen.getByRole('tab', { name: /nueva|new/i }) });
+    expect(screen.queryByTestId('tab-menu')).toBeNull();
   });
 });
